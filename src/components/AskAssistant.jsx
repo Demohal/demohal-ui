@@ -13,6 +13,18 @@ export default function AskAssistant() {
     const [showThinking, setShowThinking] = useState(false);
     const [selectedDemo, setSelectedDemo] = useState(null);
 
+    // Read alias from ?alias=... or from the first path segment (/alias)
+    const getAlias = () => {
+      try {
+        const url = new URL(window.location.href);
+        const qp = url.searchParams.get("alias");
+        if (qp) return qp.trim();
+      } catch {}
+      const seg = window.location.pathname.split("/").filter(Boolean)[0];
+      return seg || "";
+    };
+
+
     const sendMessage = async () => {
         if (!input.trim()) return;
         setLastQuestion(input);
@@ -25,9 +37,9 @@ export default function AskAssistant() {
         setInput("");
 
         try {
-            const res = await axios.post("https://demohal-app.onrender.com/demo-hal", {
+            const res = await axios.post(`${import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com"}/demo-hal`, {
                 visitor_id: "local-ui",
-                bot_id: "f88e4e49-d869-4ea5-8dd7-50eceb46e24f",
+                alias: getAlias(),
                 user_question: input,
             });
 
