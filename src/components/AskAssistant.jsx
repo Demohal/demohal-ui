@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import axios from "axios";
 import { PaperAirplaneIcon } from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
+import { PlayIcon } from "@heroicons/react/24/solid";
+import { Tooltip } from "react-tooltip";
 
 export default function AskAssistant() {
     const [submitted, setSubmitted] = useState(false);
@@ -64,22 +66,24 @@ export default function AskAssistant() {
     };
 
     const renderButtons = () => {
-        if (!buttons.length) return null;
-        return (
-            <>
-                <p className="text-base italic mt-2 mb-1 text-gray-700">Recommended Demos</p>
-                <div className={`flex flex-col md:flex-row gap-4 items-center w-full ${buttons.length === 1 ? 'justify-start' : 'justify-center'}`}>
-                    {buttons.map((btn, idx) => (
-                        <button
-                            key={idx}
-                            onClick={() => handleButtonClick(btn)}
-                            className={`rounded-2xl px-3 py-4 w-[234px] h-20 flex items-center justify-center text-md font-semibold text-center border-2 transition cursor-pointer ${btn.disabled ? 'bg-gray-300 border-black text-black order-last' : 'bg-black border-red-500 text-white'}`}
-                        >
-                            {btn.title}
-                        </button>
-                    ))}
-                </div>
-            </>
+    if (!buttons.length) return null;
+    return (
+        <>
+            <p className="text-base italic mt-2 mb-1 text-gray-700 text-left">Recommended Demos</p>
+            <ul className="flex flex-col gap-3 text-left">
+                {buttons.map((btn, idx) => (
+                    <li
+                        key={idx}
+                        className="group flex items-center gap-3 cursor-pointer hover:text-red-700 transition"
+                        onClick={() => handleButtonClick(btn)}
+                        title={btn.description} // basic hover tooltip
+                    >
+                        <PlayIcon className="w-5 h-5 text-red-600 group-hover:text-red-700" />
+                        <span className="text-base font-medium">{btn.title}</span>
+                    </li>
+                ))}
+            </ul>
+        </>
         );
     };
 
