@@ -66,28 +66,28 @@ export default function AskAssistant() {
     };
 
     const renderButtons = () => {
-    if (!buttons.length) return null;
-    return (
-        <>
+        if (!buttons.length) return null;
+        return (
+          <>
             <p className="text-base italic mt-2 mb-1 text-gray-700 text-left">Recommended Demos</p>
-            <ul className="flex flex-col gap-3 text-left">
-                {buttons.map((btn, idx) => (
-                    <li
-                        key={idx}
-                        className="group flex items-center gap-3 cursor-pointer hover:text-red-700 transition"
-                        onClick={() => handleButtonClick(btn)}
-                        title={btn.description} // basic hover tooltip
-                    >
-                        <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center group-hover:bg-red-700">
-                          <PlayIcon className="w-4 h-4 text-white" />
-                        </div>
-                        <span className="text-base font-medium">{btn.title}</span>
-                    </li>
-                ))}
-            </ul>
-        </>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {buttons.map((btn, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleButtonClick(btn)}
+                  title={btn.description}
+                  className="flex items-center gap-3 p-4 rounded-xl shadow border border-gray-300 text-left hover:bg-gray-50"
+                >
+                  <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center">
+                    <PlayIcon className="w-4 h-4 text-white" />
+                  </div>
+                  <span className="text-base font-medium">{btn.title}</span>
+                </button>
+              ))}
+            </div>
+          </>
         );
-    };
+      };
 
     return (
         <div className="w-screen h-screen flex items-center justify-center bg-gray-100">
