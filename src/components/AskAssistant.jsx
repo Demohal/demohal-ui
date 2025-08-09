@@ -78,7 +78,9 @@ export default function AskAssistant() {
                         onClick={() => handleButtonClick(btn)}
                         title={btn.description} // basic hover tooltip
                     >
-                        <PlayIcon className="w-5 h-5 text-red-600 group-hover:text-red-700" />
+                        <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center group-hover:bg-red-700">
+                          <PlayIcon className="w-4 h-4 text-white" />
+                        </div>
                         <span className="text-base font-medium">{btn.title}</span>
                     </li>
                 ))}
