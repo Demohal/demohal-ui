@@ -25,12 +25,19 @@ export default function AskAssistant() {
     if (!showThinking && responseText) {
       setDisplayedText("");
       let i = 0;
+      let skippedFirstChar = false;
       const delayStart = 200;
       const speed = 18;
       const interval = setTimeout(() => {
         const typer = setInterval(() => {
+          if (!skippedFirstChar && responseText.charAt(0) === 'H') {
+          setDisplayedText("H");
+          i++;
+          skippedFirstChar = true;
+        } else {
           setDisplayedText((prev) => prev + responseText.charAt(i));
           i++;
+        }
           if (i >= responseText.length) clearInterval(typer);
         }, speed);
       }, delayStart);
@@ -116,7 +123,7 @@ export default function AskAssistant() {
   return (
     <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-2 sm:p-0">
       <div className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300" style={{ width: "min(720px, 100vw - 16px)", height: "auto", minHeight: "450px", maxHeight: "90vh" }}>
-        <div className="bg-black text-white text-sm flex items-center justify-between px-6 py-3 pt-[env(safe-area-inset-top)]">
+        <div className="bg-black text-white text-sm flex items-center justify-between px-6 py-3 pt-[env(safe-area-inset-top)] h-16">
           <div className="flex items-center gap-4">
             <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
           </div>
@@ -176,11 +183,11 @@ export default function AskAssistant() {
           />
 
           <div className="w-full flex items-center justify-between gap-2">
-            <button className="bg-green-600 text-white px-4 py-2 rounded-full text-sm" onClick={() => setSubmitted(false)}>
+            <button className="bg-green-600 text-white px-4 py-2 rounded-full text-sm pb-1" onClick={() => setSubmitted(false)}>
               Main Menu
             </button>
 
-            <div className="flex gap-2 flex-1 justify-end">
+            <div className="flex gap-2 flex-1 justify-end pb-1">
               <button className="bg-red-600 text-white p-3 rounded-full hover:bg-red-700 active:scale-95" onClick={sendMessage} disabled={loading}>
                 <PaperAirplaneIcon className="w-5 h-5" />
               </button>
