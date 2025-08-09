@@ -25,19 +25,12 @@ export default function AskAssistant() {
     if (!showThinking && responseText) {
       setDisplayedText("");
       let i = 0;
-      let skippedFirstChar = false;
       const delayStart = 200;
       const speed = 18;
       const interval = setTimeout(() => {
         const typer = setInterval(() => {
-          if (!skippedFirstChar && responseText.charAt(0) === 'H') {
-          setDisplayedText("H");
-          i++;
-          skippedFirstChar = true;
-        } else {
           setDisplayedText((prev) => prev + responseText.charAt(i));
           i++;
-        }
           if (i >= responseText.length) clearInterval(typer);
         }, speed);
       }, delayStart);
