@@ -69,7 +69,7 @@ export default function AskAssistant() {
             <>
                 <p className="text-base italic mt-2 mb-1 text-gray-700">Recommended Demos</p>
                 <div className={`flex flex-col md:flex-row gap-4 items-center w-full ${buttons.length === 1 ? 'justify-start' : 'justify-center'}`}>
-                    {buttons.slice(0, 2).map((btn, idx) => (
+                    {buttons.map((btn, idx) => (
                         <button
                             key={idx}
                             onClick={() => handleButtonClick(btn)}
@@ -116,7 +116,7 @@ export default function AskAssistant() {
                                     <p className="text-base italic text-gray-700 text-left">Recommended Demos</p>
                                     {/* Buttons under video */}
                                     <div className={`flex flex-col md:flex-row gap-4 w-full ${buttons.length === 1 ? 'justify-start' : 'justify-between'}`}>
-                                        {buttons.slice(0, 2).map((btn, idx) => (
+                                        {buttons.map((btn, idx) => (
                                             <button
                                                 key={idx}
                                                 onClick={() => setSelectedDemo(btn)}
