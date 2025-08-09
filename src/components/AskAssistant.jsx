@@ -91,7 +91,15 @@ export default function AskAssistant() {
 
     return (
         <div className="w-screen h-screen flex items-center justify-center bg-gray-100">
-            <div className="border rounded-2xl shadow-2xl bg-white flex flex-col overflow-hidden" style={{ width: "500px", height: "700px" }}>
+            <div
+              className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300"
+              style={{
+                width: "min(720px, 100vw - 16px)",
+                height: "auto",
+                minHeight: "450px",
+                maxHeight: "90vh"
+              }}
+            >
                 <div className="bg-black text-white text-sm flex items-center justify-between px-6 py-3">
                     <div className="flex items-center gap-4">
                         <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
