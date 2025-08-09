@@ -1,5 +1,5 @@
 // ...existing imports
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { PaperAirplaneIcon, PlayIcon } from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
@@ -13,22 +13,28 @@ export default function AskAssistant() {
   const [submitted, setSubmitted] = useState(false);
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
-  const [responseText, setResponseText] = useState("Hello. I am here to answer any questions you may have about what we offer or who we are.\nPlease enter your question below to begin.");
+  const [responseText, setResponseText] = useState("Hello. I am here to answer any questions you may have about what we offer or who we are. Please enter your question below to begin.");
   const [displayedText, setDisplayedText] = useState("");
   const [buttons, setButtons] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showThinking, setShowThinking] = useState(false);
   const [selectedDemo, setSelectedDemo] = useState(null);
+  const displayedDemos = useRef(new Set());
 
   useEffect(() => {
     if (!showThinking && responseText) {
+      setDisplayedText("");
       let i = 0;
-      const interval = setInterval(() => {
-        setDisplayedText((prev) => prev + responseText.charAt(i));
-        i++;
-        if (i >= responseText.length) clearInterval(interval);
-      }, 12);
-      return () => clearInterval(interval);
+      const delayStart = 200;
+      const speed = 18;
+      const interval = setTimeout(() => {
+        const typer = setInterval(() => {
+          setDisplayedText((prev) => prev + responseText.charAt(i));
+          i++;
+          if (i >= responseText.length) clearInterval(typer);
+        }, speed);
+      }, delayStart);
+      return () => clearTimeout(interval);
     }
   }, [responseText, showThinking]);
 
@@ -66,14 +72,15 @@ export default function AskAssistant() {
     if (btn.url) {
       setSelectedDemo(btn);
       setSubmitted(true);
+      displayedDemos.current.add(btn.title);
     }
   };
 
   const renderButtons = () => {
     if (!buttons.length) return null;
     const sorted = [...buttons].sort((a, b) => {
-      const aSelected = selectedDemo && a.title === selectedDemo.title;
-      const bSelected = selectedDemo && b.title === selectedDemo.title;
+      const aSelected = displayedDemos.current.has(a.title);
+      const bSelected = displayedDemos.current.has(b.title);
       return aSelected - bSelected;
     });
 
@@ -82,18 +89,22 @@ export default function AskAssistant() {
         <p className="text-base italic mt-2 mb-1 text-gray-700 text-left">Recommended Demos</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {sorted.map((btn, idx) => {
-            const isSelected = selectedDemo && selectedDemo.title === btn.title;
+            const isSelected = displayedDemos.current.has(btn.title);
             return (
               <button
                 key={idx}
                 onClick={() => handleButtonClick(btn)}
-                title={btn.description}
-                className={`flex items-center gap-3 p-4 rounded-xl shadow border-2 text-left transition-all ${isSelected ? 'bg-gray-300 border-black text-white order-last' : 'bg-black border-red-500 text-white hover:bg-gray-900'}`}
+                className={`flex items-center gap-3 p-4 rounded-xl shadow border-2 text-left transition-all group ${isSelected ? 'bg-gray-300 border-black text-white order-last' : 'bg-black border-red-500 text-white hover:bg-gray-900'}`}
               >
                 <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center">
                   <PlayIcon className="w-4 h-4 text-white" />
                 </div>
-                <span className="text-base font-medium max-w-[220px] truncate" title={btn.description}>{btn.title}</span>
+                <div className="relative group">
+                  <span className="text-base font-medium max-w-[220px] truncate block">{btn.title}</span>
+                  <div className="absolute z-10 hidden group-hover:block bg-white border border-gray-300 shadow-lg text-black text-sm p-2 rounded w-[220px] mt-2">
+                    {btn.description}
+                  </div>
+                </div>
               </button>
             );
           })}
