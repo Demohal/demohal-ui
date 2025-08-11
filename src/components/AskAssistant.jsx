@@ -3,7 +3,6 @@ import axios from "axios";
 import { ArrowUpCircleIcon, PlayIcon } from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
 
-// --- Browse panel (fetches all active demos for bot and shows 3-across grid) ---
 function BrowseDemosPanel({ apiBase, botId, onPick }) {
   const [demos, setDemos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -57,21 +56,19 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
 export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
   const [mode, setMode] = useState("ask");
-  const [seedDemo, setSeedDemo] = useState(null); // when recommending based on a picked demo
-  const [selectedDemo, setSelectedDemo] = useState(null); // currently playing demo
+  const [seedDemo, setSeedDemo] = useState(null);
+  const [selectedDemo, setSelectedDemo] = useState(null);
   const [botId] = useState(new URLSearchParams(window.location.search).get("bot") || "f3ab3e92-9855-4c9b-8038-0a9e483218b7");
 
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
   const [displayedText, setDisplayedText] = useState("Hello. I am here to answer any questions you may have about what we offer or who we are. Please enter your question below to begin.");
-  const [buttons, setButtons] = useState([]); // recommended demo buttons
+  const [buttons, setButtons] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showThinking, setShowThinking] = useState(false);
 
-  // --- Tabs routing ---
   const handleTab = (key) => {
     if (key === "start") {
-      // full reset
       setMode("ask");
       setSeedDemo(null);
       setSelectedDemo(null);
@@ -88,10 +85,8 @@ export default function AskAssistant() {
       setMode("browse");
       return;
     }
-    // docs/pricing/meeting TODO
   };
 
-  // --- Ask flow (with recommended demos from backend buttons[]) ---
   const sendMessage = async () => {
     if (!input.trim()) return;
     setMode("ask");
@@ -108,7 +103,7 @@ export default function AskAssistant() {
       if (botId) payload.bot_id = botId;
       const res = await axios.post(`${apiBase}/demo-hal`, payload);
       setDisplayedText(res.data?.response_text || "");
-      setButtons(res.data?.buttons || []); // <— restore recommended demos
+      setButtons(res.data?.buttons || []);
     } catch {
       setDisplayedText("Sorry, something went wrong. Please try again.");
       setButtons([]);
@@ -118,7 +113,6 @@ export default function AskAssistant() {
     }
   };
 
-  // --- Recommend based on a selected demo (from Browse) ---
   const recommendFromDemo = async (demo) => {
     setMode("recommend");
     setSeedDemo(demo);
@@ -143,7 +137,6 @@ export default function AskAssistant() {
     }
   };
 
-  // --- Render helpers ---
   const renderButtons = () => {
     if (!buttons.length) return null;
     return (
@@ -168,7 +161,6 @@ export default function AskAssistant() {
     );
   };
 
-  // --- Tabs config (single-line labels; spread across; scrollable on mobile) ---
   const tabs = [
     { key: "demos", label: "Browse Demos" },
     { key: "docs", label: "Browse Docs" },
@@ -185,19 +177,15 @@ export default function AskAssistant() {
         className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300"
         style={{ width: "min(720px, 100vw - 16px)", height: "auto", minHeight: "450px", maxHeight: "90vh" }}
       >
-        {/* Banner */}
         <div className="bg-black text-white px-4 sm:px-6">
-          {/* top row: logo (left) + breadcrumb (right) */}
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
               <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
             </div>
-            {/* breadcrumb (no prefix), right-justified */}
             <div className="text-xs text-gray-300 truncate max-w-[60%] text-right">
               {mode === "recommend" && seedDemo ? seedDemo.title : selectedDemo ? selectedDemo.title : ""}
             </div>
           </div>
-          {/* bottom row: single-line tabs spread across; mobile-safe (scrolls horizontally) */}
           <div className="pb-3">
             <nav className="flex justify-between gap-1 overflow-x-auto">
               {tabs.map((t) => {
@@ -216,7 +204,6 @@ export default function AskAssistant() {
           </div>
         </div>
 
-        {/* Content */}
         <div className="p-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
           {mode === "finished" ? (
             <div className="flex-1 flex items-center justify-center">
@@ -264,7 +251,6 @@ export default function AskAssistant() {
           )}
         </div>
 
-        {/* Footer input */}
         <div className="px-4 py-3 border-t border-gray-400">
           <div className="relative w-full">
             <textarea
