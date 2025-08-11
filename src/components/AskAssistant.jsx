@@ -162,13 +162,12 @@ export default function AskAssistant() {
   };
 
   const tabs = [
-    { key: "demos", label: "Browse Demos" },
-    { key: "docs", label: "Browse Docs" },
-    { key: "pricing", label: "Price Estimate" },
-    { key: "meeting", label: "Schedule Meeting" },
-    { key: "start", label: "Start Over" },
-    { key: "finished", label: "Finished For Now" },
-  ];
+  { key: "demos", label: "Browse Demos" },
+  { key: "docs", label: "Browse Docs" },
+  { key: "pricing", label: "Price Estimate" },
+  { key: "meeting", label: "Schedule Meeting" },
+  { key: "finished", label: "Finished" },
+];
   const currentTab = mode === "browse" ? "demos" : mode === "finished" ? "finished" : null;
 
   return (
@@ -199,12 +198,13 @@ export default function AskAssistant() {
                     role="tab"
                     aria-selected={active}
                     className={[
-                      "px-4 py-2 text-sm font-medium whitespace-nowrap flex-none transition-colors",
+                      "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
                       "rounded-t-md border border-b-0",
                       active
                         ? "bg-white text-gray-900 border-gray-300 -mb-px"
-                        : "bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-300"
+                        : "bg-gray-600 text-white hover:bg-gray-500 border-gray-500"
                     ].join(" ")}
+
                     style={{ boxShadow: active ? "inset 0 1px 0 #fff" : undefined }}
                   >
                     {t.label}
