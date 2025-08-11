@@ -15,7 +15,6 @@ export default function AskAssistant() {
   const [loading, setLoading] = useState(false);
   const [showThinking, setShowThinking] = useState(false);
 
-  // --- Tabs routing ---
   const handleTab = (key) => {
     if (key === "start") {
       setMode("ask");
@@ -31,7 +30,6 @@ export default function AskAssistant() {
       return;
     }
     if (key === "demos") setMode("browse");
-    // docs/pricing/meeting TODO
   };
 
   const sendMessage = async () => {
@@ -68,11 +66,9 @@ export default function AskAssistant() {
     <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-2 sm:p-0">
       <div
         className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300"
-        style={{ width: "min(980px, 100vw - 16px)", height: "auto", minHeight: "520px", maxHeight: "92vh" }}
+        style={{ width: "min(720px, 100vw - 16px)", height: "auto", minHeight: "450px", maxHeight: "90vh" }}
       >
-        {/* Header */}
         <div className="bg-black text-white px-6">
-          {/* top row: logo (left) + breadcrumb (right) */}
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
               <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
@@ -81,7 +77,6 @@ export default function AskAssistant() {
               {mode === "recommend" && seedDemo ? seedDemo.title : selectedDemo ? selectedDemo.title : ""}
             </div>
           </div>
-          {/* bottom row: tabs */}
           <div className="flex justify-center gap-8 pb-3">
             {menuItems.map((item) => (
               <button
@@ -97,7 +92,6 @@ export default function AskAssistant() {
           </div>
         </div>
 
-        {/* Content */}
         <div className="p-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
           {mode === "finished" ? (
             <div className="flex-1 flex items-center justify-center">
@@ -126,7 +120,6 @@ export default function AskAssistant() {
           )}
         </div>
 
-        {/* Footer */}
         <div className="px-4 py-3 border-t border-gray-400">
           <div className="relative w-full">
             <textarea
