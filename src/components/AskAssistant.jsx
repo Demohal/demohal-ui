@@ -3,7 +3,7 @@ import axios from "axios";
 import { ArrowUpCircleIcon, PlayIcon } from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
 
-function BrowseDemosPanel({ apiBase, botId, onPick }) {
+function BrowseDemosPanel({ apiBase, botId, alias, onPick }) {
   const [demos, setDemos] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -28,16 +28,19 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
     async function run() {
       if (!botId) return;
       setLoading(true);
-      try {
-        const res = await fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`);
-        const data = await res.json();
-        if (!cancel) setDemos(data?.demos || []);
-      } catch {
-        if (!cancel) setDemos([]);
-      } finally {
-        if (!cancel) setLoading(false);
-      }
-    }
+ try {
+    const params = new URLSearchParams();
+    if (botId) params.set("bot_id", botId);
+    if (alias) params.set("alias", alias);
+    const res = await fetch(`${apiBase}/browse-demos?${params.toString()}`);
+    const data = await res.json();
+    if (!cancel) setDemos(Array.isArray(data?.demos) ? data.demos : []);
+  } catch {
+    if (!cancel) setDemos([]);
+  } finally {
+    if (!cancel) setLoading(false);
+  }
+}
     run();
     return () => {
       cancel = true;
@@ -119,11 +122,12 @@ export default function AskAssistant() {
     const outgoing = input;
     setInput("");
     try {
-      const payload = { visitor_id: "local-ui", user_question: outgoing };
-      if (botId) payload.bot_id = botId;
+      const payload = { visitor_id: "local-ui", user_question: outgoing, bot_id: botId };
+      if (alias) payload.alias = alias;
       const res = await axios.post(`${apiBase}/demo-hal`, payload);
-      setDisplayedText(res.data?.response_text || "");
-      setButtons(res.data?.buttons || []);
+      const data = res.data || {};
+      setDisplayedText(data.response_text || "");
+      setButtons(Array.isArray(data.buttons) ? data.buttons : []);
     } catch {
       setDisplayedText("Sorry, something went wrong. Please try again.");
       setButtons([]);
@@ -252,7 +256,8 @@ export default function AskAssistant() {
               <p className="text-gray-600">Thanks for exploring! We’ll design this screen next.</p>
             </div>
           ) : mode === "browse" ? (
-            <BrowseDemosPanel apiBase={apiBase} botId={botId} onPick={recommendFromDemo} />
+            <BrowseDemosPanel apiBase={apiBase} botId={botId} alias={alias} onPick={recommendFromDemo} />
+
           ) : selectedDemo ? (
             <>
               <div className="w-full flex justify-center -mt-2">
