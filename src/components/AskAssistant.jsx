@@ -29,7 +29,11 @@ export default function AskAssistant() {
       setMode("finished");
       return;
     }
-    if (key === "demos") setMode("browse");
+    if (key === "demos") {
+      setMode("browse");
+      // Hook up to browse demos
+      // fetch and display browse demos here
+    }
   };
 
   const sendMessage = async () => {
@@ -54,12 +58,12 @@ export default function AskAssistant() {
   };
 
   const menuItems = [
-    { key: "demos", top: "Browse", bottom: "Demos" },
-    { key: "docs", top: "Browse", bottom: "Docs" },
-    { key: "pricing", top: "Price", bottom: "Estimate" },
-    { key: "meeting", top: "Schedule", bottom: "Meeting" },
-    { key: "start", top: "Start", bottom: "Over" },
-    { key: "finished", top: "Finished", bottom: "For Now" },
+    { key: "demos", label: "Browse Demos" },
+    { key: "docs", label: "Browse Docs" },
+    { key: "pricing", label: "Price Estimate" },
+    { key: "meeting", label: "Schedule Meeting" },
+    { key: "start", label: "Start Over" },
+    { key: "finished", label: "Finished For Now" },
   ];
 
   return (
@@ -77,16 +81,14 @@ export default function AskAssistant() {
               {mode === "recommend" && seedDemo ? seedDemo.title : selectedDemo ? selectedDemo.title : ""}
             </div>
           </div>
-          <div className="flex justify-center gap-8 pb-3">
+          <div className="flex justify-between flex-wrap pb-3">
             {menuItems.map((item) => (
               <button
                 key={item.key}
                 onClick={() => handleTab(item.key)}
-                className="text-white hover:text-red-400 text-center"
-                title={`${item.top} ${item.bottom}`}
+                className="flex-1 min-w-[80px] text-white hover:text-red-400 text-center"
               >
-                <div className="font-semibold text-sm leading-none">{item.top}</div>
-                <div className="text-xs opacity-90">{item.bottom}</div>
+                <div className="font-semibold text-sm leading-none whitespace-nowrap">{item.label}</div>
               </button>
             ))}
           </div>
