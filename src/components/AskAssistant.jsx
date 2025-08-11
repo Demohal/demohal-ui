@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import {
-  PaperAirplaneIcon,
+  ArrowUpCircleIcon,
   PlayIcon,
   PlayCircleIcon,
   BookOpenIcon,
   BanknotesIcon,
   CalendarDaysIcon,
 } from "@heroicons/react/24/solid";
+
 import logo from "../assets/logo.png";
 
 // ---- Top Navigation Bar (now rendered in the FOOTER) ----
@@ -431,40 +432,31 @@ export default function AskAssistant() {
           )}
         </div>
 
-        {/* Footer: textarea + bottom nav + send */}
-        <div className="p-4 pb-[env(safe-area-inset-bottom)] border-t border-gray-400 space-y-3">
+        {/* Input + inline send (ChatGPT-style) */}
+        <div className="relative w-full">
           <textarea
             rows={1}
-            className="w-full border border-gray-400 rounded-lg px-4 py-2 text-base resize-y min-h-[3rem] max-h-[160px]"
+            className="w-full border border-gray-400 rounded-lg px-4 py-2 pr-14 text-base resize-y min-h-[3rem] max-h-[160px]"
             placeholder="Ask your question here"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
             disabled={loading}
           />
-
-          <div className="w-full flex items-center justify-between gap-2">
-            {/* Bottom nav bar (where Main Menu used to be) */}
-            <TopNav
-              caps={caps}
-              current={mode === 'browse' ? 'demos' : mode}
-              onNav={handleNav}
-              placement="footer"
-            />
-
-            {/* Send button */}
-            <div className="flex gap-2 pb-1">
-              <button
-                className="bg-red-600 text-white p-3 rounded-full hover:bg-red-700 active:scale-95"
-                onClick={sendMessage}
-                disabled={loading}
-              >
-                <PaperAirplaneIcon className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
+          <button
+            aria-label="Send"
+            onClick={sendMessage}
+            disabled={loading}
+            className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
+          >
+            <ArrowUpCircleIcon className="w-8 h-8 text-red-600 hover:text-red-700" />
+          </button>
         </div>
-      </div>
-    </div>
-  );
-}
+        
+        {/* Bottom nav bar (where Main Menu used to be) */}
+        <TopNav
+          caps={caps}
+          current={mode === 'browse' ? 'demos' : mode}
+          onNav={handleNav}
+          placement="footer"
+        />
