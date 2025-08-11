@@ -15,6 +15,7 @@ export default function AskAssistant() {
   const [loading, setLoading] = useState(false);
   const [showThinking, setShowThinking] = useState(false);
 
+  // --- Tabs routing ---
   const handleTab = (key) => {
     if (key === "start") {
       setMode("ask");
@@ -23,9 +24,14 @@ export default function AskAssistant() {
       setLastQuestion("");
       setDisplayedText("");
       setButtons([]);
-    } else if (key === "finished") {
-      setMode("finished");
+      return;
     }
+    if (key === "finished") {
+      setMode("finished");
+      return;
+    }
+    if (key === "demos") setMode("browse");
+    // docs/pricing/meeting TODO
   };
 
   const sendMessage = async () => {
@@ -50,38 +56,44 @@ export default function AskAssistant() {
   };
 
   const menuItems = [
-    { top: "Browse", bottom: "Demos" },
-    { top: "Browse", bottom: "Docs" },
-    { top: "Price", bottom: "Estimate" },
-    { top: "Schedule", bottom: "Meeting" },
-    { top: "Start", bottom: "Over" },
-    { top: "Finished", bottom: "For Now" }
+    { key: "demos", top: "Browse", bottom: "Demos" },
+    { key: "docs", top: "Browse", bottom: "Docs" },
+    { key: "pricing", top: "Price", bottom: "Estimate" },
+    { key: "meeting", top: "Schedule", bottom: "Meeting" },
+    { key: "start", top: "Start", bottom: "Over" },
+    { key: "finished", top: "Finished", bottom: "For Now" },
   ];
 
   return (
     <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-2 sm:p-0">
-      <div className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300" style={{ width: "min(980px, 100vw - 16px)", height: "auto", minHeight: "520px", maxHeight: "92vh" }}>
+      <div
+        className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300"
+        style={{ width: "min(980px, 100vw - 16px)", height: "auto", minHeight: "520px", maxHeight: "92vh" }}
+      >
         {/* Header */}
-        <div className="bg-black text-white px-6 pt-[env(safe-area-inset-top)] pb-3">
-          <div className="flex items-center justify-between w-full">
+        <div className="bg-black text-white px-6">
+          {/* top row: logo (left) + breadcrumb (right) */}
+          <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
               <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
             </div>
-            <div className="flex-1 flex justify-center gap-8">
-              {menuItems.map((item, index) => (
-                <button
-                  key={index}
-                  onClick={() => handleTab(item.top.toLowerCase())}
-                  className="text-white hover:text-red-400 text-center"
-                >
-                  <div className="font-semibold text-sm leading-none">{item.top}</div>
-                  <div className="text-xs opacity-90">{item.bottom}</div>
-                </button>
-              ))}
+            <div className="text-xs text-gray-300 truncate max-w-[50%] text-right">
+              {mode === "recommend" && seedDemo ? seedDemo.title : selectedDemo ? selectedDemo.title : ""}
             </div>
           </div>
-          <div className="mt-2 text-center text-xs text-gray-300">
-            Now Showing: {mode === "recommend" && seedDemo ? seedDemo.title : selectedDemo ? selectedDemo.title : ""}
+          {/* bottom row: tabs */}
+          <div className="flex justify-center gap-8 pb-3">
+            {menuItems.map((item) => (
+              <button
+                key={item.key}
+                onClick={() => handleTab(item.key)}
+                className="text-white hover:text-red-400 text-center"
+                title={`${item.top} ${item.bottom}`}
+              >
+                <div className="font-semibold text-sm leading-none">{item.top}</div>
+                <div className="text-xs opacity-90">{item.bottom}</div>
+              </button>
+            ))}
           </div>
         </div>
 
@@ -115,7 +127,7 @@ export default function AskAssistant() {
         </div>
 
         {/* Footer */}
-        <div className="p-4 pb-[env(safe-area-inset-bottom)] border-t border-gray-400">
+        <div className="px-4 py-3 border-t border-gray-400">
           <div className="relative w-full">
             <textarea
               rows={1}
