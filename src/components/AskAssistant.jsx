@@ -199,87 +199,53 @@ export default function AskAssistant() {
         className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300"
         style={{ width: "min(720px, 100vw - 16px)", height: "auto", minHeight: "450px", maxHeight: "90vh" }}
       >
-        <div className="bg-black text-white px-4 sm:px-6">
-          <div className="flex items-center justify-between w-full py-3">
-            <div className="flex items-center gap-3">
-              <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
-            </div>
-              {(() => {
-                const activeTab = (mode === "browse" || mode === "finished") ? (mode === "browse" ? "demos" : "finished") : null;
-                const activeTabLabel = activeTab ? ([
-                  { key: "demos", label: "Browse Demos" },
-                  { key: "docs", label: "Browse Docs" },
-                  { key: "pricing", label: "Price Estimate" },
-                  { key: "meeting", label: "Schedule Meeting" },
-                  { key: "finished", label: "Finished" },
-                ].find(t => t.key === activeTab)?.label) : null;
+<div className="bg-black text-white px-4 sm:px-6">
+  <div className="flex items-center justify-between w-full py-3">
+    <div className="flex items-center gap-3">
+      <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
+    </div>
 
-                const breadcrumbText =
-                  selectedDemo?.title // video screen uses video title
-                    || activeTabLabel   // any tab view uses its label
-                    || "Ask the Assistant"; // default for ask screens
-              
-                return (
-                  <div className="text-sm text-white truncate max-w-[60%] text-right">
-                    {breadcrumbText}
-                  </div>
-                );
-              })()}
-          </div>
-        
-          {/* Tabs: Windows-style look */}
-          <div className="pb-0">
-            <nav
-              className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-              role="tablist"
-            >
-              {tabs.map((t) => {
-                const active = currentTab === t.key;
-                return (
-                  <button
-                    key={t.key}
-                    onClick={() => handleTab(t.key)}
-                    role="tab"
-                    aria-selected={active}
-                    className={[
-                      "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
-                      "rounded-t-md border border-b-0",
-                      active
-                        ? "bg-red-600 text-white border-red-600 -mb-px"
-                        : "bg-gray-600 text-white hover:bg-gray-500 border-gray-500"
-                    ].join(" ")}
-                  >
-                    {t.label}
-                  </button>
-                );
-              })}
-            </nav>
-              {tabs.map((t) => {
-                const active = currentTab === t.key;
-                return (
-                  <button
-                    key={t.key}
-                    onClick={() => handleTab(t.key)}
-                    role="tab"
-                    aria-selected={active}
-                    className={[
-                      "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
-                      "rounded-t-md border border-b-0",
-                     active
-                        ? "bg-red-600 text-white border-red-600 -mb-px"
-                        : "bg-gray-600 text-white hover:bg-gray-500 border-gray-500"
-                    ].join(" ")}
-                    style={{ boxShadow: active ? "inset 0 1px 0 #fff" : undefined }}
-                  >
-                    {t.label}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
-        </div>
+    {/* Breadcrumb (white; same size as tab text) */}
+    <div className="text-sm text-white truncate max-w-[60%] text-right">
+      {mode === "recommend" && seedDemo
+        ? seedDemo.title
+        : selectedDemo
+        ? selectedDemo.title
+        : (!lastQuestion && mode === "ask")
+        ? "Ask the Assistant"
+        : ""}
+    </div>
+  </div>
 
-
+  {/* Tabs */}
+  <div className="pb-0">
+    <nav
+      className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      role="tablist"
+    >
+      {tabs.map((t) => {
+        const active = currentTab === t.key;
+        return (
+          <button
+            key={t.key}
+            onClick={() => handleTab(t.key)}
+            role="tab"
+            aria-selected={active}
+            className={[
+              "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
+              "rounded-t-md border border-b-0",
+              active
+                ? "bg-red-600 text-white border-red-600 -mb-px"
+                : "bg-gray-600 text-white hover:bg-gray-500 border-gray-500"
+            ].join(" ")}
+          >
+            {t.label}
+          </button>
+        );
+      })}
+    </nav>
+  </div>
+</div>
         <div className="p-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
           {mode === "finished" ? (
             <div className="flex-1 flex items-center justify-center">
