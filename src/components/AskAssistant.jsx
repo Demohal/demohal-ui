@@ -3,24 +3,9 @@ import axios from "axios";
 import { ArrowUpCircleIcon, PlayIcon } from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
 
-function BrowseDemosPanel({ apiBase, botId, alias, onPick }) {
+function BrowseDemosPanel({ apiBase, botId, onPick }) {
   const [demos, setDemos] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-  let cancel = false;
-  async function loadCaps() {
-    try {
-      const url = `${apiBase}/bot-capabilities?bot_id=${encodeURIComponent(botId)}`;
-      const res = await fetch(url);
-      if (!res.ok) return;
-      const data = await res.json();
-      if (!cancel) setCaps(data?.capabilities || {});
-    } catch {}
-  }
-  if (botId) loadCaps();
-  return () => { cancel = true; };
-}, [apiBase, botId]);
 
   useEffect(() => {
     let cancel = false;
