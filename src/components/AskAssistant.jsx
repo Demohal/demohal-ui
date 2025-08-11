@@ -432,33 +432,40 @@ export default function AskAssistant() {
           )}
         </div>
 
-        <div className="p-4 pb-[env(safe-area-inset-bottom)] border-t border-gray-400 space-y-3">
-          {/* Input + inline send (ChatGPT-style) */}
-          <div className="relative w-full">
-            <textarea
-              rows={1}
-              className="w-full border border-gray-400 rounded-lg px-4 py-2 pr-14 text-base resize-y min-h-[3rem] max-h-[160px]"
-              placeholder="Ask your question here"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
-              disabled={loading}
+          {/* Footer: textarea + bottom nav */}
+          <div className="p-4 pb-[env(safe-area-inset-bottom)] border-t border-gray-400 space-y-3">
+            {/* Input + inline send (ChatGPT-style) */}
+            <div className="relative w-full">
+              <textarea
+                rows={1}
+                className="w-full border border-gray-400 rounded-lg px-4 py-2 pr-14 text-base resize-y min-h-[3rem] max-h-[160px]"
+                placeholder="Ask your question here"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
+                disabled={loading}
+              />
+              <button
+                aria-label="Send"
+                onClick={sendMessage}
+                disabled={loading}
+                className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
+              >
+                <ArrowUpCircleIcon className="w-8 h-8 text-red-600 hover:text-red-700" />
+              </button>
+            </div>
+  
+            {/* Bottom nav bar (where Main Menu used to be) */}
+            <TopNav
+              caps={caps}
+              current={mode === 'browse' ? 'demos' : mode}
+              onNav={handleNav}
+              placement="footer"
             />
-            <button
-              aria-label="Send"
-              onClick={sendMessage}
-              disabled={loading}
-              className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
-            >
-              <ArrowUpCircleIcon className="w-8 h-8 text-red-600 hover:text-red-700" />
-            </button>
           </div>
-
-          {/* Bottom nav bar (where Main Menu used to be) */}
-          <TopNav
-            caps={caps}
-            current={mode === 'browse' ? 'demos' : mode}
-            onNav={handleNav}
-            placement="footer"
-          />
-        </div>
+  
+        </div>  {/* end card container */}
+      </div>    {/* end center wrapper */}
+    </div>      {/* end w-screen wrapper */}
+  );
+  }
