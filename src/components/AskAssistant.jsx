@@ -215,7 +215,6 @@ export default function AskAssistant() {
             </nav>
           </div>
         </div>
-        </div>
 
         {/* Content */}
         <div className="p-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
