@@ -197,7 +197,7 @@ export default function AskAssistant() {
                     || "Ask the Assistant"; // default for ask screens
               
                 return (
-                  <div className="text-xs text-white truncate max-w-[60%] text-right">
+                  <div className="text-sm text-white truncate max-w-[60%] text-right">
                     {breadcrumbText}
                   </div>
                 );
