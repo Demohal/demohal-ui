@@ -22,7 +22,6 @@ function BrowseDemosPanel({ apiBase, botId, alias, onPick }) {
   return () => { cancel = true; };
 }, [apiBase, botId]);
 
-  
   useEffect(() => {
     let cancel = false;
     async function run() {
@@ -31,8 +30,8 @@ function BrowseDemosPanel({ apiBase, botId, alias, onPick }) {
  try {
     const params = new URLSearchParams();
     if (botId) params.set("bot_id", botId);
-    if (alias) params.set("alias", alias);
     const res = await fetch(`${apiBase}/browse-demos?${params.toString()}`);
+
     const data = await res.json();
     if (!cancel) setDemos(Array.isArray(data?.demos) ? data.demos : []);
   } catch {
@@ -77,11 +76,35 @@ export default function AskAssistant() {
   const [mode, setMode] = useState("ask");
   const [seedDemo, setSeedDemo] = useState(null);
   const [selectedDemo, setSelectedDemo] = useState(null);
-  const qs = new URLSearchParams(window.location.search);
-  const [botId] = useState(qs.get("bot") || qs.get("bot_id") || "f3ab3e92-9855-4c9b-8038-0a9e483218b7");
-  const [alias] = useState(qs.get("alias") || qs.get("a") || ""); // Flask supports alias/a
-  const [caps, setCaps] = useState(null); // backend capability flags
 
+  // Strict: alias is required; fetch bot once; keep bot + botId in state.
+  const qs = new URLSearchParams(window.location.search);
+  const alias = (qs.get("alias") || qs.get("a") || "").trim().toLowerCase();
+  const [bot, setBot] = useState(null);
+  const [botId, setBotId] = useState("");
+  const [fatalError, setFatalError] = useState("");
+
+  useEffect(() => {
+    let cancel = false;
+    async function boot() {
+      if (!alias) { setFatalError("Missing alias in URL."); return; }
+      try {
+        const res = await fetch(`${apiBase}/bot-by-alias?alias=${encodeURIComponent(alias)}`);
+        if (!res.ok) throw new Error("Invalid or inactive alias");
+        const data = await res.json();
+        const b = data?.bot;
+        if (!b?.id) throw new Error("Invalid or inactive alias");
+        if (!cancel) {
+          setBot(b);
+          setBotId(b.id);
+        }
+      } catch {
+        if (!cancel) setFatalError("Invalid or inactive alias.");
+      }
+    }
+    boot();
+    return () => { cancel = true; };
+  }, [apiBase, alias]);
 
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
@@ -122,8 +145,7 @@ export default function AskAssistant() {
     const outgoing = input;
     setInput("");
     try {
-      const payload = { visitor_id: "local-ui", user_question: outgoing, bot_id: botId };
-      if (alias) payload.alias = alias;
+     const payload = { visitor_id: "local-ui", user_question: outgoing, bot_id: botId };
       const res = await axios.post(`${apiBase}/demo-hal`, payload);
       const data = res.data || {};
       setDisplayedText(data.response_text || "");
@@ -186,16 +208,33 @@ export default function AskAssistant() {
   };
 
   const tabs = (() => {
-  const list = [];
-  if (caps?.show_browse_demos) list.push({ key: "demos", label: "Browse Demos" });
-  if (caps?.show_browse_docs) list.push({ key: "docs", label: "Browse Docs" });
-  if (caps?.show_price_estimate) list.push({ key: "pricing", label: "Price Estimate" });
-  if (caps?.show_schedule_meeting) list.push({ key: "meeting", label: "Schedule Meeting" });
-  list.push({ key: "finished", label: "Finished" });
-  return list;
-})();
+    const list = [];
+    if (bot?.show_browse_demos) list.push({ key: "demos", label: "Browse Demos" });
+    if (bot?.show_browse_docs) list.push({ key: "docs", label: "Browse Docs" });
+    if (bot?.show_price_estimate) list.push({ key: "pricing", label: "Price Estimate" });
+    if (bot?.show_schedule_meeting) list.push({ key: "meeting", label: "Schedule Meeting" });
+    list.push({ key: "finished", label: "Finished" });
+    return list;
+  })();
+
 
   const currentTab = mode === "browse" ? "demos" : mode === "finished" ? "finished" : null;
+
+  return (
+      if (fatalError) {
+    return (
+      <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
+        <div className="text-red-600 font-semibold">{fatalError}</div>
+      </div>
+    );
+  }
+  if (!botId) {
+    return (
+      <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
+        <div className="text-gray-700">Loading…</div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-2 sm:p-0">
@@ -256,7 +295,7 @@ export default function AskAssistant() {
               <p className="text-gray-600">Thanks for exploring! We’ll design this screen next.</p>
             </div>
           ) : mode === "browse" ? (
-            <BrowseDemosPanel apiBase={apiBase} botId={botId} alias={alias} onPick={recommendFromDemo} />
+                        <BrowseDemosPanel apiBase={apiBase} botId={botId} onPick={recommendFromDemo} />
 
           ) : selectedDemo ? (
             <>
