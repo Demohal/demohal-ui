@@ -8,6 +8,22 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+  let cancel = false;
+  async function loadCaps() {
+    try {
+      const url = `${apiBase}/bot-capabilities?bot_id=${encodeURIComponent(botId)}`;
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!cancel) setCaps(data?.capabilities || {});
+    } catch {}
+  }
+  if (botId) loadCaps();
+  return () => { cancel = true; };
+}, [apiBase, botId]);
+
+  
+  useEffect(() => {
     let cancel = false;
     async function run() {
       if (!botId) return;
@@ -58,7 +74,11 @@ export default function AskAssistant() {
   const [mode, setMode] = useState("ask");
   const [seedDemo, setSeedDemo] = useState(null);
   const [selectedDemo, setSelectedDemo] = useState(null);
-  const [botId] = useState(new URLSearchParams(window.location.search).get("bot") || "f3ab3e92-9855-4c9b-8038-0a9e483218b7");
+  const qs = new URLSearchParams(window.location.search);
+  const [botId] = useState(qs.get("bot") || qs.get("bot_id") || "f3ab3e92-9855-4c9b-8038-0a9e483218b7");
+  const [alias] = useState(qs.get("alias") || qs.get("a") || ""); // Flask supports alias/a
+  const [caps, setCaps] = useState(null); // backend capability flags
+
 
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
@@ -161,13 +181,16 @@ export default function AskAssistant() {
     );
   };
 
-  const tabs = [
-  { key: "demos", label: "Browse Demos" },
-  { key: "docs", label: "Browse Docs" },
-  { key: "pricing", label: "Price Estimate" },
-  { key: "meeting", label: "Schedule Meeting" },
-  { key: "finished", label: "Finished" },
-];
+  const tabs = (() => {
+  const list = [];
+  if (caps?.show_browse_demos) list.push({ key: "demos", label: "Browse Demos" });
+  if (caps?.show_browse_docs) list.push({ key: "docs", label: "Browse Docs" });
+  if (caps?.show_price_estimate) list.push({ key: "pricing", label: "Price Estimate" });
+  if (caps?.show_schedule_meeting) list.push({ key: "meeting", label: "Schedule Meeting" });
+  list.push({ key: "finished", label: "Finished" });
+  return list;
+})();
+
   const currentTab = mode === "browse" ? "demos" : mode === "finished" ? "finished" : null;
 
   return (
@@ -210,6 +233,27 @@ export default function AskAssistant() {
               className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               role="tablist"
             >
+              {tabs.map((t) => {
+                const active = currentTab === t.key;
+                return (
+                  <button
+                    key={t.key}
+                    onClick={() => handleTab(t.key)}
+                    role="tab"
+                    aria-selected={active}
+                    className={[
+                      "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
+                      "rounded-t-md border border-b-0",
+                      active
+                        ? "bg-red-600 text-white border-red-600 -mb-px"
+                        : "bg-gray-600 text-white hover:bg-gray-500 border-gray-500"
+                    ].join(" ")}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
+            </nav>
               {tabs.map((t) => {
                 const active = currentTab === t.key;
                 return (
