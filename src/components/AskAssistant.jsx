@@ -181,20 +181,35 @@ export default function AskAssistant() {
             <div className="flex items-center gap-3">
               <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
             </div>
-              <div className="text-xs text-white truncate max-w-[60%] text-right">
-                {mode === "recommend" && seedDemo
-                  ? seedDemo.title
-                  : selectedDemo
-                  ? selectedDemo.title
-                  : (mode === "ask" && !lastQuestion)
-                  ? "Ask the Assistant"
-                  : ""}
-              </div>
+              {(() => {
+                const activeTab = (mode === "browse" || mode === "finished") ? (mode === "browse" ? "demos" : "finished") : null;
+                const activeTabLabel = activeTab ? ([
+                  { key: "demos", label: "Browse Demos" },
+                  { key: "docs", label: "Browse Docs" },
+                  { key: "pricing", label: "Price Estimate" },
+                  { key: "meeting", label: "Schedule Meeting" },
+                  { key: "finished", label: "Finished" },
+                ].find(t => t.key === activeTab)?.label) : null;
+
+                const breadcrumbText =
+                  selectedDemo?.title // video screen uses video title
+                    || activeTabLabel   // any tab view uses its label
+                    || "Ask the Assistant"; // default for ask screens
+              
+                return (
+                  <div className="text-xs text-white truncate max-w-[60%] text-right">
+                    {breadcrumbText}
+                  </div>
+                );
+              })()}
           </div>
         
           {/* Tabs: Windows-style look */}
           <div className="pb-0">
-            <nav className="flex gap-0.5 overflow-x-auto border-b border-gray-300" role="tablist">
+            <nav
+              className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              role="tablist"
+            >
               {tabs.map((t) => {
                 const active = currentTab === t.key;
                 return (
@@ -206,11 +221,10 @@ export default function AskAssistant() {
                     className={[
                       "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
                       "rounded-t-md border border-b-0",
-                      active
-                        ? "bg-white text-gray-900 border-gray-300 -mb-px"
+                     active
+                        ? "bg-red-600 text-white border-red-600 -mb-px"
                         : "bg-gray-600 text-white hover:bg-gray-500 border-gray-500"
                     ].join(" ")}
-
                     style={{ boxShadow: active ? "inset 0 1px 0 #fff" : undefined }}
                   >
                     {t.label}
