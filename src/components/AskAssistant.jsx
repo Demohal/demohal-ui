@@ -218,16 +218,18 @@ export default function AskAssistant() {
   })();
 
 
-  const currentTab = mode === "browse" ? "demos" : mode === "finished" ? "finished" : null;
+  const currentTab =
+    mode === "browse" ? "demos" : mode === "finished" ? "finished" : null;
 
-  return (
-      if (fatalError) {
+  // Guard screens must be BEFORE the main return
+  if (fatalError) {
     return (
       <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
         <div className="text-red-600 font-semibold">{fatalError}</div>
       </div>
     );
   }
+  
   if (!botId) {
     return (
       <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
@@ -235,8 +237,9 @@ export default function AskAssistant() {
       </div>
     );
   }
-
+  
   return (
+
     <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-2 sm:p-0">
       <div
         className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300"
