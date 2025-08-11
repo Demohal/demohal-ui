@@ -1,3 +1,4 @@
+// AskAssistant.jsx — Top tabs in header, footer nav removed, Start Over & Finished tabs added
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import {
@@ -8,49 +9,41 @@ import {
   BanknotesIcon,
   CalendarDaysIcon,
 } from "@heroicons/react/24/solid";
-
 import logo from "../assets/logo.png";
 
-// ---- Top Navigation Bar (now rendered in the FOOTER) ----
-function TopNav({ caps, current, onNav, placement = "footer" }) {
+// ---- Tab Navigation in the header ----
+function TabNav({ caps, current, onTab }) {
   const items = [
-    caps?.menu_browse_demos && { key: "demos", top: "Browse", bottom: "Demos", Icon: PlayCircleIcon },
-    caps?.menu_browse_docs && { key: "docs", top: "Browse", bottom: "Documents", Icon: BookOpenIcon },
-    caps?.menu_pricing && { key: "pricing", top: "Price", bottom: "Estimate", Icon: BanknotesIcon },
-    caps?.menu_meetings && { key: "meeting", top: "Schedule", bottom: "Meeting", Icon: CalendarDaysIcon },
+    caps?.menu_browse_demos && { key: "demos", labelTop: "Browse", labelBottom: "Demos" },
+    caps?.menu_browse_docs && { key: "docs", labelTop: "Browse", labelBottom: "Documents" },
+    caps?.menu_pricing && { key: "pricing", labelTop: "Price", labelBottom: "Estimate" },
+    caps?.menu_meetings && { key: "meeting", labelTop: "Schedule", labelBottom: "Meeting" },
+    { key: "start", labelTop: "Start", labelBottom: "Over" },
+    { key: "finished", labelTop: "Finished", labelBottom: "For Now" },
   ].filter(Boolean);
 
   if (!items.length) return null;
 
-  // Footer variant is visually lightweight (no extra bar background)
-  const containerClass = placement === "top" ? "bg-black text-white border-b border-gray-700" : "bg-transparent";
-  const padClass = placement === "top" ? "px-6 py-2" : "";
-
   return (
-    <div className={containerClass}>
-      <div className={`${padClass} overflow-x-auto`}>
-        {/* Single row always; scrolls on small screens */}
-        <nav className="flex gap-2 whitespace-nowrap">
-          {items.map(({ key, top, bottom, Icon }) => {
-            const active = current === key;
-            return (
-              <button
-                key={key}
-                onClick={() => onNav(key)}
-                className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 min-h-[44px] ${
-                  active ? "border-red-500 bg-gray-900 text-white" : "border-gray-700 bg-black text-white hover:bg-gray-900"
-                } focus:outline-none focus:ring-2 focus:ring-red-500`}
-              >
-                <Icon className="w-5 h-5 text-red-500 shrink-0" />
-                <span className="leading-tight text-left">
-                  <span className="block text-sm font-semibold">{top}</span>
-                  <span className="block text-xs opacity-90 -mt-0.5">{bottom}</span>
-                </span>
-              </button>
-            );
-          })}
-        </nav>
-      </div>
+    <div className="flex gap-2 items-center overflow-x-auto">
+      {items.map(({ key, labelTop, labelBottom }) => {
+        const active = current === key;
+        return (
+          <button
+            key={key}
+            onClick={() => onTab(key)}
+            className={`inline-flex items-center rounded-xl border px-3 py-2 min-h-[44px] ${
+              active ? "border-red-500 bg-gray-900 text-white" : "border-gray-700 bg-black text-white hover:bg-gray-900"
+            } focus:outline-none focus:ring-2 focus:ring-red-500`}
+            title={`${labelTop} ${labelBottom}`}
+          >
+            <span className="leading-tight text-left">
+              <span className="block text-sm font-semibold">{labelTop}</span>
+              <span className="block text-xs opacity-90 -mt-0.5">{labelBottom}</span>
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -121,12 +114,12 @@ export default function AskAssistant() {
   const aliasParam = query.get("alias");
   const botParam = query.get("bot");
 
-  // Modes: ask | browse | recommend
+  // Modes: ask | browse | recommend | finished
   const [mode, setMode] = useState("ask");
   const [seedDemo, setSeedDemo] = useState(null);
   const [resolvedBotId, setResolvedBotId] = useState(botParam || null);
 
-  // Capability + Menu flags (Hydrated from backend). Defaults = hidden until fetched.
+  // Capability + Menu flags
   const [caps, setCaps] = useState({
     has_demos: false,
     has_docs: false,
@@ -153,7 +146,7 @@ export default function AskAssistant() {
   const displayedDemos = useRef(new Set());
 
   // Typing effect timing constants
-  const TYPING_DELAY_START = 350; // ms (slower, more natural)
+  const TYPING_DELAY_START = 350; // ms
   const TYPING_SPEED = 35;        // ms per char
 
   // Fetch menu flags from backend if available
@@ -169,7 +162,6 @@ export default function AskAssistant() {
           ...prev,
           has_demos: cap.has_demos ?? prev.has_demos,
           has_docs: cap.has_docs ?? prev.has_docs,
-          // Map DB -> UI menu visibility
           menu_browse_demos: cap.show_browse_demos ?? prev.menu_browse_demos,
           menu_browse_docs: cap.show_browse_docs ?? prev.menu_browse_docs,
           menu_pricing: cap.show_price_estimate ?? prev.menu_pricing,
@@ -183,13 +175,10 @@ export default function AskAssistant() {
 
   // Slow & robust typing effect
   useEffect(() => {
-    // Skip if we're still “thinking” or nothing to show
     if (showThinking || !responseText) return;
-
     setDisplayedText("");
     setIsTyping(true);
-
-    let i = 0; // we’ll render slice(0, i)
+    let i = 0;
     const starter = setTimeout(() => {
       const typer = setInterval(() => {
         i += 1;
@@ -197,7 +186,6 @@ export default function AskAssistant() {
         if (i >= responseText.length) {
           clearInterval(typer);
           setIsTyping(false);
-          // After typing completes, delay 5s then show any pending buttons
           if (pendingButtons && pendingButtons.length) {
             setTimeout(() => {
               setButtons(pendingButtons);
@@ -207,12 +195,30 @@ export default function AskAssistant() {
         }
       }, TYPING_SPEED);
     }, TYPING_DELAY_START);
-
     return () => {
       setIsTyping(false);
       clearTimeout(starter);
     };
   }, [responseText, showThinking, pendingButtons]);
+
+  const startOver = () => {
+    setMode("ask");
+    setSeedDemo(null);
+    setResolvedBotId(botParam || null);
+    setSubmitted(false);
+    setInput("");
+    setLastQuestion("");
+    setResponseText(
+      "Hello. I am here to answer any questions you may have about what we offer or who we are. Please enter your question below to begin."
+    );
+    setDisplayedText("");
+    setButtons([]);
+    setPendingButtons(null);
+    setLoading(false);
+    setShowThinking(false);
+    setIsTyping(false);
+    setSelectedDemo(null);
+  };
 
   const sendMessage = async () => {
     if (!input.trim()) return;
@@ -237,7 +243,6 @@ export default function AskAssistant() {
       if (resolved_bot_id && !resolvedBotId) setResolvedBotId(resolved_bot_id);
       setShowThinking(false);
       setResponseText(response_text || "");
-      // Defer showing buttons until 5s after typing completes
       setPendingButtons((btns || []).map(b => ({ title: b.title, description: b.description, url: b.url })));
     } catch (e) {
       setShowThinking(false);
@@ -249,7 +254,6 @@ export default function AskAssistant() {
     }
   };
 
-  // Updated to move send button into text area block and change icon to an up arrow in a circle
   const recommendFromDemo = async (demo) => {
     setSeedDemo(demo);
     setMode("recommend");
@@ -272,7 +276,6 @@ export default function AskAssistant() {
         description: d.description,
         url: d.url,
       }));
-      // Defer showing buttons until 5s after typing completes; cap to 6 for 3x2 grid
       setPendingButtons(asButtons.slice(0, 6));
     } catch (e) {
       console.error("Error fetching related demos:", e);
@@ -285,31 +288,20 @@ export default function AskAssistant() {
     }
   };
 
+  const handleTab = (key) => {
+    if (key === "demos") return setMode("browse");
+    if (key === "docs") return;        // TODO
+    if (key === "pricing") return;     // TODO
+    if (key === "meeting") return;     // TODO
+    if (key === "start") return startOver();
+    if (key === "finished") return setMode("finished");
+  };
+
   const handleButtonClick = (btn) => {
     if (btn.url) {
       setSelectedDemo(btn);
       setSubmitted(true);
       displayedDemos.current.add(btn.title);
-    }
-  };
-
-  const handleNav = (key) => {
-    if (key === "demos") {
-      setMode("browse");
-      setSeedDemo(null);
-      return;
-    }
-    if (key === "docs") {
-      // TODO: documents browser view
-      return;
-    }
-    if (key === "pricing") {
-      // TODO: pricing flow
-      return;
-    }
-    if (key === "meeting") {
-      // TODO: schedule meeting flow
-      return;
     }
   };
 
@@ -362,21 +354,29 @@ export default function AskAssistant() {
     <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-2 sm:p-0">
       <div
         className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300"
-        style={{ width: "min(720px, 100vw - 16px)", height: "auto", minHeight: "450px", maxHeight: "90vh" }}
+        style={{ width: "min(980px, 100vw - 16px)", height: "auto", minHeight: "520px", maxHeight: "92vh" }}
       >
-        {/* Header */}
-        <div className="bg-black text-white text-sm flex items-center justify-between px-6 py-3 pt-[env(safe-area-inset-top)] h-16">
-          <div className="flex items-center gap-4">
+        {/* Header with Tabs */}
+        <div className="bg-black text-white text-sm flex items-center justify-between px-4 sm:px-6 py-3 pt-[env(safe-area-inset-top)] min-h-[64px]">
+          <div className="flex items-center gap-4 min-w-[180px]">
             <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
+            <span className="hidden sm:inline text-white/80">{resolvedBotId ? "Assistant" : "Ask the Assistant"}</span>
           </div>
-          <span className="text-white">
-            {mode === "recommend" && seedDemo ? `Related to: ${seedDemo.title}` : selectedDemo ? selectedDemo.title : "Ask the Assistant"}
-          </span>
+          <div className="flex-1 flex justify-end sm:justify-center px-2">
+            <TabNav caps={caps} current={mode === 'browse' ? 'demos' : mode} onTab={handleTab} />
+          </div>
+          <div className="hidden sm:block min-w-[120px] text-right pr-1">
+            {mode === "recommend" && seedDemo ? `Related: ${seedDemo.title}` : selectedDemo ? selectedDemo.title : ""}
+          </div>
         </div>
 
         {/* Content */}
         <div className="p-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
-          {mode === "browse" ? (
+          {mode === "finished" ? (
+            <div className="flex-1 flex items-center justify-center">
+              <p className="text-gray-600">Thanks for exploring! We’ll design this screen next.</p>
+            </div>
+          ) : mode === "browse" ? (
             <BrowseDemosPanel apiBase={apiBase} botId={resolvedBotId || botParam} onPick={recommendFromDemo} />
           ) : selectedDemo ? (
             // === Video View ===
@@ -430,9 +430,8 @@ export default function AskAssistant() {
           )}
         </div>
 
-        {/* Footer: textarea + bottom nav */}
-        <div className="p-4 pb-[env(safe-area-inset-bottom)] border-t border-gray-400 space-y-3">
-          {/* Input + inline send (ChatGPT-style) */}
+        {/* Footer: textarea only (nav removed) */}
+        <div className="p-4 pb-[env(safe-area-inset-bottom)] border-t border-gray-400">
           <div className="relative w-full">
             <textarea
               rows={1}
@@ -452,14 +451,6 @@ export default function AskAssistant() {
               <ArrowUpCircleIcon className="w-8 h-8 text-red-600 hover:text-red-700" />
             </button>
           </div>
-
-          {/* Bottom nav bar (where Main Menu used to be) */}
-          <TopNav
-            caps={caps}
-            current={mode === 'browse' ? 'demos' : mode}
-            onNav={handleNav}
-            placement="footer"
-          />
         </div>
       </div>
     </div>
