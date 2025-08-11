@@ -1,15 +1,11 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState } from "react";
 import axios from "axios";
-import {
-  ArrowUpCircleIcon,
-  PlayIcon
-} from "@heroicons/react/24/solid";
+import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
 
 export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
   const [mode, setMode] = useState("ask");
-  const [caps] = useState({});
   const [seedDemo, setSeedDemo] = useState(null);
   const [selectedDemo, setSelectedDemo] = useState(null);
   const [input, setInput] = useState("");
@@ -53,33 +49,38 @@ export default function AskAssistant() {
     }
   };
 
+  const menuItems = [
+    { top: "Browse", bottom: "Demos" },
+    { top: "Browse", bottom: "Docs" },
+    { top: "Price", bottom: "Estimate" },
+    { top: "Schedule", bottom: "Meeting" },
+    { top: "Start", bottom: "Over" },
+    { top: "Finished", bottom: "For Now" }
+  ];
+
   return (
     <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-2 sm:p-0">
       <div className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300" style={{ width: "min(980px, 100vw - 16px)", height: "auto", minHeight: "520px", maxHeight: "92vh" }}>
         {/* Header */}
-        <div className="bg-black text-white text-sm px-6 pt-[env(safe-area-inset-top)] pb-2">
-          <div className="flex items-center justify-between w-full mb-1">
-            <div className="flex items-center gap-3 min-w-[180px]">
+        <div className="bg-black text-white px-6 pt-[env(safe-area-inset-top)] pb-3">
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-3">
               <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
             </div>
-            <div className="flex-1 flex justify-end sm:justify-center">
-              <div className="flex flex-wrap justify-center gap-4">
-                {["Browse Demos", "Browse Docs", "Price Estimate", "Schedule Meeting", "Start Over", "Finished For Now"].map((label, index) => (
-                  <button
-                    key={index}
-                    onClick={() => handleTab(label.toLowerCase().replace(/ /g, "_"))}
-                    className="text-white hover:text-red-400 text-sm leading-tight text-center"
-                  >
-                    <div className="leading-tight">
-                      <div className="font-semibold text-sm">{label.split(" ")[0]}</div>
-                      <div className="text-xs opacity-90 -mt-0.5">{label.split(" ")[1] || ""}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
+            <div className="flex-1 flex justify-center gap-8">
+              {menuItems.map((item, index) => (
+                <button
+                  key={index}
+                  onClick={() => handleTab(item.top.toLowerCase())}
+                  className="text-white hover:text-red-400 text-center"
+                >
+                  <div className="font-semibold text-sm leading-none">{item.top}</div>
+                  <div className="text-xs opacity-90">{item.bottom}</div>
+                </button>
+              ))}
             </div>
           </div>
-          <div className="text-center text-xs text-gray-300">
+          <div className="mt-2 text-center text-xs text-gray-300">
             Now Showing: {mode === "recommend" && seedDemo ? seedDemo.title : selectedDemo ? selectedDemo.title : ""}
           </div>
         </div>
