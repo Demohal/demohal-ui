@@ -186,15 +186,17 @@ export default function AskAssistant() {
               {mode === "recommend" && seedDemo ? seedDemo.title : selectedDemo ? selectedDemo.title : ""}
             </div>
           </div>
-          <div className="pb-3">
-            <nav className="flex justify-between gap-1 overflow-x-auto">
+          <div className="pb-0">
+            <nav className="flex gap-1 overflow-x-auto border-b border-neutral-700/80">
               {tabs.map((t) => {
                 const active = currentTab === t.key;
                 return (
                   <button
                     key={t.key}
                     onClick={() => handleTab(t.key)}
-                    className={`flex-1 px-3 py-2 text-sm font-medium whitespace-nowrap text-center transition-colors ${active ? "text-red-400" : "text-white hover:text-red-400"}`}
+                    className={`${active
+                      ? "-mb-px bg-white text-black border border-gray-300 rounded-t-md"
+                      : "bg-neutral-900/70 text-gray-200 hover:bg-neutral-800 hover:text-white border border-neutral-700 rounded-t-md"} px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors flex-none`}
                   >
                     {t.label}
                   </button>
@@ -202,7 +204,6 @@ export default function AskAssistant() {
               })}
             </nav>
           </div>
-        </div>
 
         <div className="p-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
           {mode === "finished" ? (
