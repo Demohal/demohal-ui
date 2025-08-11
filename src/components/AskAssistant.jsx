@@ -1,4 +1,3 @@
-// ...existing imports
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import {
@@ -11,70 +10,45 @@ import {
 } from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
 
-// ---- Capabilities Action Bar (always one row) ----
-function CapabilitiesNav({ caps, onNav }) {
+// ---- Top Navigation Bar (now rendered in the FOOTER) ----
+function TopNav({ caps, current, onNav, placement = "footer" }) {
   const items = [
-    caps?.menu_browse_demos && {
-      key: "demos",
-      top: "Browse",
-      bottom: "Demos",
-      Icon: PlayCircleIcon,
-    },
-    caps?.menu_browse_docs && {
-      key: "docs",
-      top: "Browse",
-      bottom: "Documents",
-      Icon: BookOpenIcon,
-    },
-    caps?.menu_pricing && {
-      key: "pricing",
-      top: "Price",
-      bottom: "Estimate",
-      Icon: BanknotesIcon,
-    },
-    caps?.menu_meetings && {
-      key: "meeting",
-      top: "Schedule",
-      bottom: "Meeting",
-      Icon: CalendarDaysIcon,
-    },
+    caps?.menu_browse_demos && { key: "demos", top: "Browse", bottom: "Demos", Icon: PlayCircleIcon },
+    caps?.menu_browse_docs && { key: "docs", top: "Browse", bottom: "Documents", Icon: BookOpenIcon },
+    caps?.menu_pricing && { key: "pricing", top: "Price", bottom: "Estimate", Icon: BanknotesIcon },
+    caps?.menu_meetings && { key: "meeting", top: "Schedule", bottom: "Meeting", Icon: CalendarDaysIcon },
   ].filter(Boolean);
 
   if (!items.length) return null;
 
-  return (
-    <div className="w-full">
-      {/* xs: keep single row with horizontal scroll; sm+: force 4 columns in one row */}
-      <div className="sm:hidden flex gap-2 overflow-x-auto">
-        {items.map(({ key, top, bottom, Icon }) => (
-          <button
-            key={key}
-            onClick={() => onNav(key)}
-            className="snap-start inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-black text-white px-3 py-2 min-h-[48px] min-w-[150px] hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500"
-          >
-            <Icon className="w-5 h-5 text-red-500 shrink-0" />
-            <span className="leading-tight text-left">
-              <span className="block text-sm font-semibold">{top}</span>
-              <span className="block text-xs opacity-90 -mt-0.5">{bottom}</span>
-            </span>
-          </button>
-        ))}
-      </div>
+  // Footer variant is visually lightweight (no extra bar background)
+  const containerClass = placement === "top" ? "bg-black text-white border-b border-gray-700" : "bg-transparent";
+  const padClass = placement === "top" ? "px-6 py-2" : "";
 
-      <div className="hidden sm:grid grid-cols-4 gap-2">
-        {items.map(({ key, top, bottom, Icon }) => (
-          <button
-            key={key}
-            onClick={() => onNav(key)}
-            className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-black text-white px-3 py-2 min-h-[48px] hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500"
-          >
-            <Icon className="w-5 h-5 text-red-500 shrink-0" />
-            <span className="leading-tight text-left">
-              <span className="block text-sm font-semibold">{top}</span>
-              <span className="block text-xs opacity-90 -mt-0.5">{bottom}</span>
-            </span>
-          </button>
-        ))}
+  return (
+    <div className={containerClass}>
+      <div className={`${padClass} overflow-x-auto`}>
+        {/* Single row always; scrolls on small screens */}
+        <nav className="flex gap-2 whitespace-nowrap">
+          {items.map(({ key, top, bottom, Icon }) => {
+            const active = current === key;
+            return (
+              <button
+                key={key}
+                onClick={() => onNav(key)}
+                className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 min-h-[44px] ${
+                  active ? "border-red-500 bg-gray-900 text-white" : "border-gray-700 bg-black text-white hover:bg-gray-900"
+                } focus:outline-none focus:ring-2 focus:ring-red-500`}
+              >
+                <Icon className="w-5 h-5 text-red-500 shrink-0" />
+                <span className="leading-tight text-left">
+                  <span className="block text-sm font-semibold">{top}</span>
+                  <span className="block text-xs opacity-90 -mt-0.5">{bottom}</span>
+                </span>
+              </button>
+            );
+          })}
+        </nav>
       </div>
     </div>
   );
@@ -120,7 +94,7 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
             <button
               key={d.id}
               onClick={() => onPick(d)}
-              className="p-3 rounded-xl border-2 border-red-500 bg-black text-white text-left hover:bg-gray-900 transition-colors"
+              className="relative p-3 rounded-xl border-2 border-red-500 bg-black text-white text-left hover:bg-gray-900 transition-colors overflow-hidden"
               title={d.description}
             >
               <div className="flex items-center gap-2 mb-1">
@@ -151,33 +125,17 @@ export default function AskAssistant() {
   const [seedDemo, setSeedDemo] = useState(null);
   const [resolvedBotId, setResolvedBotId] = useState(botParam || null);
 
-  // Menu flags (fetched later). Defaults show Demos only so feature works immediately.
+  // Capability + Menu flags (Hydrated from backend). Defaults = hidden until fetched.
   const [caps, setCaps] = useState({
-    has_demos: true,
+    has_demos: false,
     has_docs: false,
-    has_pricing: false,
-    has_meetings: false,
-    menu_browse_demos: true,
+    menu_browse_demos: false,
     menu_browse_docs: false,
     menu_pricing: false,
     menu_meetings: false,
   });
 
-  // Try to fetch capabilities if backend route exists; ignore failure gracefully.
-  useEffect(() => {
-    if (!resolvedBotId) return;
-    (async () => {
-      try {
-        const res = await fetch(`${apiBase}/bot-capabilities?bot_id=${encodeURIComponent(resolvedBotId)}`);
-        if (!res.ok) return; // endpoint may not exist yet
-        const data = await res.json();
-        if (data?.capabilities) setCaps((prev) => ({ ...prev, ...data.capabilities }));
-      } catch (_) {
-        /* no-op */
-      }
-    })();
-  }, [apiBase, resolvedBotId]);
-
+  // Typing animation control + pending buttons
   const [submitted, setSubmitted] = useState(false);
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
@@ -186,28 +144,74 @@ export default function AskAssistant() {
   );
   const [displayedText, setDisplayedText] = useState("");
   const [buttons, setButtons] = useState([]);
+  const [pendingButtons, setPendingButtons] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showThinking, setShowThinking] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
   const [selectedDemo, setSelectedDemo] = useState(null);
   const displayedDemos = useRef(new Set());
 
-  // Typing effect
+  // Typing effect timing constants
+  const TYPING_DELAY_START = 350; // ms (slower, more natural)
+  const TYPING_SPEED = 35;        // ms per char
+
+  // Fetch menu flags from backend if available
   useEffect(() => {
-    if (!showThinking && responseText) {
-      setDisplayedText("");
-      let i = 0;
-      const delayStart = 200;
-      const speed = 18;
-      const starter = setTimeout(() => {
-        const typer = setInterval(() => {
-          setDisplayedText((prev) => prev + responseText.charAt(i));
-          i++;
-          if (i >= responseText.length) clearInterval(typer);
-        }, speed);
-      }, delayStart);
-      return () => clearTimeout(starter);
-    }
-  }, [responseText, showThinking]);
+    if (!resolvedBotId) return;
+    (async () => {
+      try {
+        const res = await fetch(`${apiBase}/bot-capabilities?bot_id=${encodeURIComponent(resolvedBotId)}`);
+        if (!res.ok) return; // endpoint may not exist yet
+        const data = await res.json();
+        const cap = data?.capabilities || {};
+        setCaps((prev) => ({
+          ...prev,
+          has_demos: cap.has_demos ?? prev.has_demos,
+          has_docs: cap.has_docs ?? prev.has_docs,
+          // Map DB -> UI menu visibility
+          menu_browse_demos: cap.show_browse_demos ?? prev.menu_browse_demos,
+          menu_browse_docs: cap.show_browse_docs ?? prev.menu_browse_docs,
+          menu_pricing: cap.show_price_estimate ?? prev.menu_pricing,
+          menu_meetings: cap.show_schedule_meeting ?? prev.menu_meetings,
+        }));
+      } catch {
+        /* ignore if endpoint not present */
+      }
+    })();
+  }, [apiBase, resolvedBotId]);
+
+  // Slow & robust typing effect
+  useEffect(() => {
+    // Skip if we're still “thinking” or nothing to show
+    if (showThinking || !responseText) return;
+    
+    setDisplayedText("");
+    setIsTyping(true);
+  
+    let i = 0; // we’ll render slice(0, i)
+    const starter = setTimeout(() => {
+      const typer = setInterval(() => {
+        i += 1;
+        setDisplayedText(responseText.slice(0, i));
+        if (i >= responseText.length) {
+          clearInterval(typer);
+          setIsTyping(false);
+          // After typing completes, delay 5s then show any pending buttons
+          if (pendingButtons && pendingButtons.length) {
+            setTimeout(() => {
+              setButtons(pendingButtons);
+              setPendingButtons(null);
+            }, 5000);
+          }
+        }
+      }, TYPING_SPEED);
+    }, TYPING_DELAY_START);
+  
+    return () => {
+      setIsTyping(false);
+      clearTimeout(starter);
+    };
+  }, [responseText, showThinking, pendingButtons]);
 
   const sendMessage = async () => {
     if (!input.trim()) return;
@@ -218,58 +222,68 @@ export default function AskAssistant() {
     setResponseText("");
     setDisplayedText("");
     setButtons([]);
+    setPendingButtons(null);
     setLoading(true);
     setShowThinking(true);
+    const outgoing = input; // capture before clearing
     setInput("");
 
     try {
-      const payload = { visitor_id: "local-ui", user_question: input };
-      if (aliasParam) payload.alias = aliasParam;
-      else if (botParam) payload.bot_id = botParam;
+      const payload = { visitor_id: "local-ui", user_question: outgoing };
+      if (aliasParam) payload.alias = aliasParam; else if (botParam) payload.bot_id = botParam;
       const res = await axios.post(`${apiBase}/demo-hal`, payload);
-
-      const { response_text, buttons, resolved_bot_id } = res.data;
+      const { response_text, buttons: btns, resolved_bot_id } = res.data;
       if (resolved_bot_id && !resolvedBotId) setResolvedBotId(resolved_bot_id);
       setShowThinking(false);
-      setResponseText(response_text);
-      setButtons(buttons || []);
-    } catch {
+      setResponseText(response_text || "");
+      // Defer showing buttons until 5s after typing completes
+      setPendingButtons((btns || []).map(b => ({ title: b.title, description: b.description, url: b.url })));
+    } catch (e) {
       setShowThinking(false);
       setResponseText("Sorry, something went wrong. Please try again.");
       setButtons([]);
+      setPendingButtons(null);
     } finally {
       setLoading(false);
     }
   };
 
-  // Seed-based demo recommendations from a chosen demo (no video frame)
+  // Updated to move send button into text area block and change icon to an up arrow in a circle
   const recommendFromDemo = async (demo) => {
-    setSeedDemo(demo);
-    setMode("recommend");
-    setLastQuestion("");
-    setSelectedDemo(null);
-    setResponseText("");
-    setDisplayedText("");
-    setButtons([]);
-    setLoading(true);
-    setShowThinking(true);
-    try {
-      const prompt = `Recommend demos related to "${demo.title}" and explain briefly why they match.`;
-      const payload = { visitor_id: "local-ui", user_question: prompt };
-      if (aliasParam) payload.alias = aliasParam;
-      else if (botParam) payload.bot_id = botParam;
-      const res = await axios.post(`${apiBase}/demo-hal`, payload);
-      const { response_text, buttons } = res.data;
-      setShowThinking(false);
-      setResponseText(response_text || "Here are related demos:");
-      setButtons(buttons || []);
-    } catch (e) {
-      setShowThinking(false);
-      setResponseText("Sorry — I had trouble understanding your question. Please try again.");
+      setSeedDemo(demo);
+      setMode("recommend");
+      setLastQuestion("");
+      setSelectedDemo(null);
+      setResponseText("");
+      setDisplayedText("");
       setButtons([]);
-    } finally {
-      setLoading(false);
-    }
+      setLoading(true);
+      setShowThinking(true);
+      try {
+        const url = `${apiBase}/related-demos?bot_id=${encodeURIComponent(resolvedBotId || botParam)}&demo_id=${encodeURIComponent(demo.id)}&limit=12`;
+        const res = await fetch(url);
+        const data = await res.json();
+        setShowThinking(false);
+        setResponseText("Here are complimentary demos:");
+        const asButtons = (data?.related || []).map((d) => ({
+          title: d.title,
+          description: d.description,
+          url: d.url,
+        }));
+        const typingDelayStart = 400;
+        const typingSpeed = 40;
+        const estimatedTypingTime = responseText.length * typingSpeed + typingDelayStart;
+        setTimeout(() => {
+          setButtons(asButtons.slice(0, 6));
+        }, estimatedTypingTime + 5000);
+      } catch (e) {
+        console.error("Error fetching related demos:", e);
+        setShowThinking(false);
+        setResponseText("Sorry — I had trouble understanding your question. Please try again.");
+        setButtons([]);
+      } finally {
+        setLoading(false);
+      }
   };
 
   const handleButtonClick = (btn) => {
@@ -287,11 +301,11 @@ export default function AskAssistant() {
       return;
     }
     if (key === "docs") {
-      // TODO: swap to documents browser view
+      // TODO: documents browser view
       return;
     }
     if (key === "pricing") {
-      // TODO: kick off pricing flow
+      // TODO: pricing flow
       return;
     }
     if (key === "meeting") {
@@ -331,7 +345,7 @@ export default function AskAssistant() {
                 <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center">
                   <PlayIcon className="w-4 h-4 text-white" />
                 </div>
-                <div className="relative group">
+                <div className="relative group max-w-full">
                   <span className="text-base font-medium max-w-[220px] truncate block">{btn.title}</span>
                   <div className="absolute z-10 hidden group-hover:block bg-white border border-gray-300 shadow-lg text-black text-sm p-2 rounded w-[220px] mt-2">
                     {btn.description}
@@ -351,6 +365,7 @@ export default function AskAssistant() {
         className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300"
         style={{ width: "min(720px, 100vw - 16px)", height: "auto", minHeight: "450px", maxHeight: "90vh" }}
       >
+        {/* Header */}
         <div className="bg-black text-white text-sm flex items-center justify-between px-6 py-3 pt-[env(safe-area-inset-top)] h-16">
           <div className="flex items-center gap-4">
             <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
@@ -360,6 +375,7 @@ export default function AskAssistant() {
           </span>
         </div>
 
+        {/* Content */}
         <div className="p-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
           {mode === "browse" ? (
             <BrowseDemosPanel apiBase={apiBase} botId={resolvedBotId || botParam} onPick={recommendFromDemo} />
@@ -402,8 +418,12 @@ export default function AskAssistant() {
                   <p className="text-gray-500 font-bold animate-pulse">Thinking...</p>
                 ) : (
                   <>
-                    <p className="text-black text-base font-bold whitespace-pre-line">{displayedText}</p>
-                    {mode === "recommend" ? renderButtons(true, "Related Demos") : renderButtons(false, "Recommended Demos")}
+                    {lastQuestion ? (
+                      <p className="text-black text-base font-bold whitespace-pre-line">{displayedText}</p>
+                    ) : null}
+                    {mode === "recommend"
+                      ? renderButtons(true, "Related Demos")
+                      : renderButtons(false, "Recommended Demos")}
                   </>
                 )}
               </div>
@@ -411,7 +431,7 @@ export default function AskAssistant() {
           )}
         </div>
 
-        {/* Footer */}
+        {/* Footer: textarea + bottom nav + send */}
         <div className="p-4 pb-[env(safe-area-inset-bottom)] border-t border-gray-400 space-y-3">
           <textarea
             rows={1}
@@ -424,11 +444,16 @@ export default function AskAssistant() {
           />
 
           <div className="w-full flex items-center justify-between gap-2">
-            {/* Left: Dynamic capability buttons (replaces Main Menu) */}
-            <CapabilitiesNav caps={caps} onNav={handleNav} />
+            {/* Bottom nav bar (where Main Menu used to be) */}
+            <TopNav
+              caps={caps}
+              current={mode === 'browse' ? 'demos' : mode}
+              onNav={handleNav}
+              placement="footer"
+            />
 
-            {/* Right: Send button */}
-            <div className="flex gap-2 flex-1 justify-end pb-1">
+            {/* Send button */}
+            <div className="flex gap-2 pb-1">
               <button
                 className="bg-red-600 text-white p-3 rounded-full hover:bg-red-700 active:scale-95"
                 onClick={sendMessage}
