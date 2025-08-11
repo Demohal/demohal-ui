@@ -181,9 +181,15 @@ export default function AskAssistant() {
             <div className="flex items-center gap-3">
               <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
             </div>
-            <div className="text-xs text-gray-300 truncate max-w-[60%] text-right">
-              {mode === "recommend" && seedDemo ? seedDemo.title : selectedDemo ? selectedDemo.title : ""}
-            </div>
+              <div className="text-xs text-white truncate max-w-[60%] text-right">
+                {mode === "recommend" && seedDemo
+                  ? seedDemo.title
+                  : selectedDemo
+                  ? selectedDemo.title
+                  : (mode === "ask" && !lastQuestion)
+                  ? "Ask the Assistant"
+                  : ""}
+              </div>
           </div>
         
           {/* Tabs: Windows-style look */}
@@ -254,7 +260,9 @@ export default function AskAssistant() {
                   <p className="text-gray-500 font-bold animate-pulse">Thinking...</p>
                 ) : (
                   <>
-                    <p className="text-black text-base font-bold whitespace-pre-line">{displayedText}</p>
+                    {(lastQuestion || mode !== "ask") ? (
+                      <p className="text-black text-base font-bold whitespace-pre-line">{displayedText}</p>
+                    ) : null}
                     {renderButtons()}
                   </>
                 )}
