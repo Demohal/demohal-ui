@@ -1,19 +1,25 @@
-// AskAssistant.jsx — 2025-08-12 v9
+// AskAssistant.jsx — 2025-08-12 v10
 // - Strict alias bootstrap via /bot-by-alias (active-only), then use bot.id everywhere
-// - 3D tabs (red active), scrollbar-hidden, 25% shorter
+// - Tabs with subtle 3D effect (active red); horizontal scroll hidden
 // - Breadcrumb: video title on player; “Browse All Demos” on browse; “Ask the Assistant” otherwise
 // - Reduced banner→question spacing by ~50%
 // - Recommended tiles: title-only, wrap text, in-tile hover overlay (confined), 3-across
-// - Browse Demos panel: help text, same tile style + in-grid tooltips
+// - Browse Demos panel: thumbnails + search/type filter/sort + in-card description overlay
 
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
 
+// --- BrowseDemosPanel (Thumbnails + Filters) ---
 function BrowseDemosPanel({ apiBase, botId, onPick }) {
   const [demos, setDemos] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // UI state for filters
+  const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState("All");
+  const [sortKey, setSortKey] = useState("newest"); // 'newest' | 'title'
 
   useEffect(() => {
     let cancel = false;
@@ -38,33 +44,133 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
     };
   }, [apiBase, botId]);
 
-  if (loading) return <p className="text-gray-500">Loading demos…</p>;
-  if (!demos.length) return <p className="text-gray-500">No demos available.</p>;
+  // Distinct types for filter chips
+  const types = ["All", ...Array.from(new Set(demos.map((d) => d.type).filter(Boolean)))];
+
+  // Filter + sort
+  const filtered = demos
+    .filter((d) => (typeFilter === "All" ? true : d.type === typeFilter))
+    .filter((d) => {
+      if (!query.trim()) return true;
+      const q = query.toLowerCase();
+      return (
+        (d.title || "").toLowerCase().includes(q) ||
+        (d.description || "").toLowerCase().includes(q)
+      );
+    })
+    .sort((a, b) => {
+      if (sortKey === "title") return (a.title || "").localeCompare(b.title || "");
+      return new Date(b.created_at || 0) - new Date(a.created_at || 0); // newest first
+    });
+
+  // Derive a YouTube thumbnail when possible; else gradient
+  const getThumb = (url) => {
+    if (!url) return null;
+    try {
+      const u = new URL(url);
+      if (u.hostname.includes("youtu.be")) {
+        const id = u.pathname.slice(1);
+        return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : null;
+      }
+      if (u.hostname.includes("youtube.com")) {
+        const id = u.searchParams.get("v");
+        return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : null;
+      }
+    } catch {}
+    return null;
+  };
+
+  if (loading) return <p className="text-gray-500 text-left">Loading demos…</p>;
+  if (!demos.length) return <p className="text-gray-500 text-left">No demos available.</p>;
 
   return (
     <div className="text-left">
-      {/* Help copy for first browse-demos screen */}
+      {/* Help copy */}
       <p className="italic mb-3">
         Here are all demos in our library. Just click on the one you want to view.
       </p>
 
-      {/* Button grid with tooltips confined to the grid */}
-      <div className="relative grid grid-cols-1 md:grid-cols-3 gap-3 overflow-hidden">
-        {demos.map((d) => (
-          <button
-            key={d.id}
-            onClick={() => onPick(d)}
-            className="group relative p-3 rounded-xl border-2 border-red-500 bg-black text-white hover:bg-gray-900 text-left whitespace-normal break-words"
-            title={d.title}
+      {/* Filter Bar */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-3">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search demos…"
+          className="w-full md:w-1/2 border border-gray-300 rounded-lg px-3 py-2"
+        />
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Type chips */}
+          <div className="flex flex-wrap gap-2">
+            {types.map((t) => {
+              const active = t === typeFilter;
+              return (
+                <button
+                  key={t}
+                  onClick={() => setTypeFilter(t)}
+                  className={[
+                    "px-3 py-1 rounded-full text-sm border transition-colors",
+                    active
+                      ? "bg-black text-white border-black"
+                      : "bg-white text-black border-gray-300 hover:bg-gray-100",
+                  ].join(" ")}
+                >
+                  {t}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Sort */}
+          <select
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value)}
+            className="border border-gray-300 rounded-lg px-2 py-1 text-sm"
+            title="Sort demos"
           >
-            <div className="font-medium text-sm leading-snug">{d.title}</div>
-            {d.description ? (
-              <div className="pointer-events-none absolute inset-0 z-10 hidden group-hover:flex items-center justify-center rounded-xl bg-black/90 p-3 text-xs leading-snug text-white text-left whitespace-normal break-words">
-                {d.description}
+            <option value="newest">Newest</option>
+            <option value="title">Title A–Z</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Card Grid (3 across) */}
+      <div className="relative grid grid-cols-1 md:grid-cols-3 gap-3 overflow-hidden">
+        {filtered.map((d) => {
+          const thumb = getThumb(d.url);
+          return (
+            <button
+              key={d.id}
+              onClick={() => onPick(d)}
+              className="group relative text-left bg-white border border-gray-300 rounded-xl overflow-hidden hover:shadow-md transition-shadow"
+              title={d.title}
+            >
+              {/* Thumbnail */}
+              <div className="w-full" style={{ aspectRatio: "16 / 9" }}>
+                {thumb ? (
+                  <img src={thumb} alt={d.title} className="w-full h-full object-cover" loading="lazy" />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-gray-200 to-gray-300" />
+                )}
               </div>
-            ) : null}
-          </button>
-        ))}
+
+              {/* Title */}
+              <div className="p-3">
+                <div className="font-medium text-sm leading-snug whitespace-normal break-words">
+                  {d.title}
+                </div>
+              </div>
+
+              {/* In-card description overlay (confined to card) */}
+              {d.description ? (
+                <div className="pointer-events-none absolute inset-0 z-10 hidden group-hover:flex items-end">
+                  <div className="w-full bg-black/75 text-white text-xs leading-snug p-3 whitespace-normal break-words">
+                    {d.description}
+                  </div>
+                </div>
+              ) : null}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -135,7 +241,7 @@ export default function AskAssistant() {
       setButtons([]);
       return;
     }
-    // Other tabs are placeholders for future panels
+    // Other tabs can be wired later
   };
 
   const sendMessage = async () => {
@@ -384,7 +490,7 @@ export default function AskAssistant() {
         </div>
 
         {/* Input */}
-        <div className="px-4 py-3 border-top border-gray-400 border-t">
+        <div className="px-4 py-3 border-t border-gray-400">
           <div className="relative w-full">
             <textarea
               rows={1}
