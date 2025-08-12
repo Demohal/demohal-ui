@@ -1,11 +1,12 @@
-// AskAssistant.jsx - 2025-08-12 v11.1
-// - Strict alias bootstrap via /bot-by-alias (active-only), then use bot.id everywhere
+// AskAssistant.jsx - 2025-08-12 v11.4
+// - Alias bootstrap via /bot-by-alias (active-only), then use bot.id everywhere
 // - Tabs with subtle 3D effect (active red); horizontal scroll hidden
 // - Breadcrumb: video title on player; "Browse All Demos" on browse; "Ask the Assistant" otherwise
-// - Reduced banner→question spacing by ~50%
-// - Recommended tiles: title-only, wrap text, in-tile hover overlay (confined), 3-across
-// - Browse Demos panel: search only, no thumbnails, card grid (not <button>)
-//   Tooltip may extend beyond a card but is clipped by the grid container
+// - Reduced banner->question spacing by ~50%
+// - Recommended tiles: title-only, wrap text, tooltip above card (white, 2-col width desktop)
+// - Browse Demos panel: title-only search, no thumbnails, card grid
+//   Cards have light gray background; bold black titles centered both ways
+//   Tooltip above card (white), fades in on hover; grid container clips overflow
 
 import React, { useState, useEffect } from "react";
 import axios from "axios";
@@ -44,10 +45,7 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
   const filtered = demos.filter((d) => {
     if (!query.trim()) return true;
     const q = query.toLowerCase();
-    return (
-      (d.title || "").toLowerCase().includes(q) ||
-      (d.description || "").toLowerCase().includes(q)
-    );
+    return (d.title || "").toLowerCase().includes(q); // TITLE-ONLY search
   });
 
   if (loading) return <p className="text-gray-500 text-left">Loading demos…</p>;
@@ -60,12 +58,12 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
         Here are all demos in our library. Just click on the one you want to view.
       </p>
 
-      {/* Search (full width, no chips/sort) */}
+      {/* Search (full width) */}
       <div className="mb-3">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search demos…"
+          placeholder="Search demos by title…"
           className="w-full border border-gray-300 rounded-lg px-3 py-2"
         />
       </div>
@@ -79,14 +77,15 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
             tabIndex={0}
             onClick={() => onPick(d)}
             onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onPick(d)}
-            className="group relative p-3 rounded-xl border border-gray-300 bg-white text-black hover:shadow-md transition-shadow cursor-pointer whitespace-normal break-words"
+            className="group relative px-3 py-4 rounded-xl border border-gray-300 bg-gray-100 hover:bg-gray-200 text-black hover:shadow-md transition-colors transition-shadow cursor-pointer whitespace-normal break-words flex items-center justify-center text-center"
             title={d.title}
           >
-            <div className="font-medium text-sm leading-snug">{d.title}</div>
+            <div className="font-bold text-sm leading-snug text-black">{d.title}</div>
 
-            {/* Tooltip: can extend beyond the card, but clipped by grid (parent overflow-hidden) */}
+            {/* Tooltip: above card; always in DOM; fades in on hover.
+               - Mobile: full width; Desktop: 2 card widths (md:w-[200%]) */}
             {d.description ? (
-              <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-20 hidden group-hover:block rounded-lg bg-black/90 text-white text-xs leading-snug p-3 shadow-xl max-w-[min(38rem,calc(100%-1rem))]">
+              <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-150 rounded-xl bg-white text-black text-xs leading-snug p-3 shadow-xl border border-gray-300 w-full md:w-[200%]">
                 {d.description}
               </div>
             ) : null}
@@ -100,7 +99,7 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
 export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-  // Modes: "ask" (default), "browse" (all demos), "recommend" (related tiles after a pick), "finished"
+  // Modes: "ask" (default), "browse", "recommend", "finished"
   const [mode, setMode] = useState("ask");
   const [seedDemo, setSeedDemo] = useState(null);
   const [selectedDemo, setSelectedDemo] = useState(null);
@@ -140,7 +139,7 @@ export default function AskAssistant() {
   }, [apiBase, alias]);
 
   const [input, setInput] = useState("");
-  const [lastQuestion, setLastQuestion] = useState("");
+  the lastQuestion, setLastQuestion] = useState("");
   const [displayedText, setDisplayedText] = useState(
     "Hello. I am here to answer any questions you may have about what we offer or who we are. Please enter your question below to begin."
   );
@@ -239,6 +238,7 @@ export default function AskAssistant() {
       <>
         <p className="text-base italic text-black mt-2 mb-1">Recommended Demos</p>
 
+        {/* Grid is clipping boundary for tooltips */}
         <div className="relative grid grid-cols-1 md:grid-cols-3 gap-3 text-left overflow-hidden">
           {ordered.map((b, idx) => {
             const isSelected =
@@ -258,8 +258,10 @@ export default function AskAssistant() {
                 title={b.title}
               >
                 <div className="font-medium text-sm leading-snug">{b.title}</div>
+
+                {/* Tooltip above each tile (white). Mobile full width; desktop 2-card width */}
                 {b.description ? (
-                  <div className="pointer-events-none absolute inset-0 z-10 hidden group-hover:flex items-center justify-center rounded-xl bg-black/90 p-3 text-xs leading-snug text-white text-left whitespace-normal break-words">
+                  <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-150 rounded-xl bg-white text-black text-xs leading-snug p-3 shadow-xl border border-gray-300 w-full md:w-[200%]">
                     {b.description}
                   </div>
                 ) : null}
