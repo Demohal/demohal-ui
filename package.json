@@ -32,4 +32,10 @@
     "vite": "^7.1.0",
     "react-tooltip": "^5.20.0"
   }
+  {
+  "scripts": {
+    "lint": "eslint src --ext .js,.jsx",
+    "format": "prettier -w .",
+    "check": "npm run lint && vite build"
+  }
 }
