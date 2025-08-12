@@ -1,12 +1,11 @@
-// AskAssistant.jsx - 2025-08-12 v11.4
+// AskAssistant.jsx - 2025-08-12 v11.4.1
 // - Alias bootstrap via /bot-by-alias (active-only), then use bot.id everywhere
 // - Tabs with subtle 3D effect (active red); horizontal scroll hidden
 // - Breadcrumb: video title on player; "Browse All Demos" on browse; "Ask the Assistant" otherwise
-// - Reduced banner->question spacing by ~50%
-// - Recommended tiles: title-only, wrap text, tooltip above card (white, 2-col width desktop)
-// - Browse Demos panel: title-only search, no thumbnails, card grid
-//   Cards have light gray background; bold black titles centered both ways
-//   Tooltip above card (white), fades in on hover; grid container clips overflow
+// - Reduced banner->question spacing
+// - Recommended tiles: title-only, in-card hover overlay tooltip (white, 2-col width on md+)
+// - Browse Demos panel: title-only search, light-gray cards, bold centered titles,
+//   tooltip above card (white), grid container clips overflow
 
 import React, { useState, useEffect } from "react";
 import axios from "axios";
@@ -42,10 +41,11 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
     };
   }, [apiBase, botId]);
 
+  // Title-only, case-insensitive
   const filtered = demos.filter((d) => {
     if (!query.trim()) return true;
     const q = query.toLowerCase();
-    return (d.title || "").toLowerCase().includes(q); // TITLE-ONLY search
+    return (d.title || "").toLowerCase().includes(q);
   });
 
   if (loading) return <p className="text-gray-500 text-left">Loading demos…</p>;
@@ -53,12 +53,10 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
 
   return (
     <div className="text-left">
-      {/* Help copy */}
       <p className="italic mb-3">
         Here are all demos in our library. Just click on the one you want to view.
       </p>
 
-      {/* Search (full width) */}
       <div className="mb-3">
         <input
           value={query}
@@ -68,7 +66,7 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
         />
       </div>
 
-      {/* Card Grid (3 across) — grid is the CLIP boundary for tooltips */}
+      {/* Grid is the clipping boundary for tooltips */}
       <div className="relative grid grid-cols-1 md:grid-cols-3 gap-3 overflow-hidden">
         {filtered.map((d) => (
           <div
@@ -82,8 +80,8 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
           >
             <div className="font-bold text-sm leading-snug text-black">{d.title}</div>
 
-            {/* Tooltip: above card; always in DOM; fades in on hover.
-               - Mobile: full width; Desktop: 2 card widths (md:w-[200%]) */}
+            {/* Tooltip: always in DOM; fades in on hover.
+                Mobile: full width; Desktop: 2 card widths */}
             {d.description ? (
               <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-150 rounded-xl bg-white text-black text-xs leading-snug p-3 shadow-xl border border-gray-300 w-full md:w-[200%]">
                 {d.description}
@@ -139,7 +137,7 @@ export default function AskAssistant() {
   }, [apiBase, alias]);
 
   const [input, setInput] = useState("");
-  the lastQuestion, setLastQuestion] = useState("");
+  const [lastQuestion, setLastQuestion] = useState("");
   const [displayedText, setDisplayedText] = useState(
     "Hello. I am here to answer any questions you may have about what we offer or who we are. Please enter your question below to begin."
   );
@@ -211,7 +209,7 @@ export default function AskAssistant() {
       }));
       setButtons(items);
     } catch {
-      setDisplayedText("Sorry — I had trouble understanding your question. Please try again.");
+      setDisplayedText("Sorry - I had trouble understanding your question. Please try again.");
       setButtons([]);
     } finally {
       setLoading(false);
@@ -354,7 +352,7 @@ export default function AskAssistant() {
           </div>
         </div>
 
-        {/* Content wrapper — top padding reduced by ~50% */}
+        {/* Content wrapper — top padding reduced */}
         <div className="px-6 pt-3 pb-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
           {mode === "finished" ? (
             <div className="flex-1 flex items-center justify-center">
@@ -378,15 +376,12 @@ export default function AskAssistant() {
             </div>
           ) : (
             <div className="w-full flex-1 flex flex-col">
-              {/* Welcome text only on first load */}
               {!lastQuestion ? (
                 <p className="text-xl font-bold leading-snug text-left whitespace-pre-line">{displayedText}</p>
               ) : null}
 
-              {/* Question mirror — closer to banner */}
               {lastQuestion && <p className="text-base text-black italic mt-1">“{lastQuestion}”</p>}
 
-              {/* Response text: one line below the question mirror */}
               <div className="text-left mt-2">
                 {showThinking ? (
                   <p className="text-gray-500 font-bold animate-pulse">Thinking...</p>
@@ -395,7 +390,6 @@ export default function AskAssistant() {
                     {(lastQuestion || mode !== "ask") && (
                       <p className="text-black text-base font-bold whitespace-pre-line">{displayedText}</p>
                     )}
-                    {/* Recommended tiles with help line */}
                     {renderButtons()}
                   </>
                 )}
