@@ -1,3 +1,11 @@
+// AskAssistant.jsx — 2025-08-12 v9
+// - Strict alias bootstrap via /bot-by-alias (active-only), then use bot.id everywhere
+// - 3D tabs (red active), scrollbar-hidden, 25% shorter
+// - Breadcrumb: video title on player; “Browse All Demos” on browse; “Ask the Assistant” otherwise
+// - Reduced banner→question spacing by ~50%
+// - Recommended tiles: title-only, wrap text, in-tile hover overlay (confined), 3-across
+// - Browse Demos panel: help text, same tile style + in-grid tooltips
+
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
@@ -14,7 +22,7 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
       setLoading(true);
       try {
         const params = new URLSearchParams();
-        if (botId) params.set("bot_id", botId);
+        params.set("bot_id", botId);
         const res = await fetch(`${apiBase}/browse-demos?${params.toString()}`);
         const data = await res.json();
         if (!cancel) setDemos(Array.isArray(data?.demos) ? data.demos : []);
@@ -36,18 +44,20 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
   return (
     <div className="text-left">
       {/* Help copy for first browse-demos screen */}
-      <p className="italic mb-3">Here are all demos in our library. Just click on the one you want to view.</p>
+      <p className="italic mb-3">
+        Here are all demos in our library. Just click on the one you want to view.
+      </p>
 
-      {/* Button grid, with tooltips confined to the grid */}
+      {/* Button grid with tooltips confined to the grid */}
       <div className="relative grid grid-cols-1 md:grid-cols-3 gap-3 overflow-hidden">
         {demos.map((d) => (
           <button
             key={d.id}
             onClick={() => onPick(d)}
             className="group relative p-3 rounded-xl border-2 border-red-500 bg-black text-white hover:bg-gray-900 text-left whitespace-normal break-words"
+            title={d.title}
           >
             <div className="font-medium text-sm leading-snug">{d.title}</div>
-            {/* Hover tooltip (confined to tile & grid) */}
             {d.description ? (
               <div className="pointer-events-none absolute inset-0 z-10 hidden group-hover:flex items-center justify-center rounded-xl bg-black/90 p-3 text-xs leading-snug text-white text-left whitespace-normal break-words">
                 {d.description}
@@ -62,13 +72,15 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
 
 export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
+
+  // Modes: "ask" (default), "browse" (all demos), "recommend" (related tiles after a pick), "finished"
   const [mode, setMode] = useState("ask");
   const [seedDemo, setSeedDemo] = useState(null);
   const [selectedDemo, setSelectedDemo] = useState(null);
 
-  // Strict: alias is required; fetch bot once; keep bot + botId in state.
+  // Bootstrap strictly by alias once; then use bot.id everywhere
   const qs = new URLSearchParams(window.location.search);
-  const alias = (qs.get("alias") || qs.get("a") || "").trim().toLowerCase();
+  const alias = (qs.get("alias") || qs.get("a") || "").trim(); // keep case; backend is case-insensitive
   const [bot, setBot] = useState(null);
   const [botId, setBotId] = useState("");
   const [fatalError, setFatalError] = useState("");
@@ -76,7 +88,10 @@ export default function AskAssistant() {
   useEffect(() => {
     let cancel = false;
     async function boot() {
-      if (!alias) { setFatalError("Missing alias in URL."); return; }
+      if (!alias) {
+        setFatalError("Missing alias in URL.");
+        return;
+      }
       try {
         const res = await fetch(`${apiBase}/bot-by-alias?alias=${encodeURIComponent(alias)}`);
         if (!res.ok) throw new Error("Invalid or inactive alias");
@@ -92,34 +107,35 @@ export default function AskAssistant() {
       }
     }
     boot();
-    return () => { cancel = true; };
+    return () => {
+      cancel = true;
+    };
   }, [apiBase, alias]);
 
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
-  const [displayedText, setDisplayedText] = useState("Hello. I am here to answer any questions you may have about what we offer or who we are. Please enter your question below to begin.");
+  const [displayedText, setDisplayedText] = useState(
+    "Hello. I am here to answer any questions you may have about what we offer or who we are. Please enter your question below to begin."
+  );
   const [buttons, setButtons] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showThinking, setShowThinking] = useState(false);
 
   const handleTab = (key) => {
-    if (key === "start") {
-      setMode("ask");
-      setSeedDemo(null);
-      setSelectedDemo(null);
-      setLastQuestion("");
-      setDisplayedText("");
-      setButtons([]);
-      return;
-    }
     if (key === "finished") {
       setMode("finished");
       return;
     }
     if (key === "demos") {
       setMode("browse");
+      setSelectedDemo(null);
+      setSeedDemo(null);
+      setLastQuestion("");
+      setDisplayedText("");
+      setButtons([]);
       return;
     }
+    // Other tabs are placeholders for future panels
   };
 
   const sendMessage = async () => {
@@ -158,10 +174,16 @@ export default function AskAssistant() {
     setLoading(true);
     setShowThinking(true);
     try {
-      const url = `${apiBase}/related-demos?bot_id=${encodeURIComponent(botId || "")}&demo_id=${encodeURIComponent(demo.id)}&limit=12`;
+      const url = `${apiBase}/related-demos?bot_id=${encodeURIComponent(
+        botId || ""
+      )}&demo_id=${encodeURIComponent(demo.id)}&limit=12`;
       const res = await fetch(url);
       const data = await res.json();
-      const items = (data?.related || []).map((d) => ({ title: d.title, description: d.description, url: d.url }));
+      const items = (data?.related || []).map((d) => ({
+        title: d.title,
+        description: d.description,
+        url: d.url,
+      }));
       setButtons(items);
     } catch {
       setDisplayedText("Sorry — I had trouble understanding your question. Please try again.");
@@ -179,7 +201,8 @@ export default function AskAssistant() {
     const ordered = [...buttons];
     if (selectedDemo) {
       const i = ordered.findIndex(
-        (x) => (x.url && selectedDemo.url && x.url === selectedDemo.url) || x.title === selectedDemo.title
+        (x) =>
+          (x.url && selectedDemo.url && x.url === selectedDemo.url) || x.title === selectedDemo.title
       );
       if (i >= 0) {
         const [picked] = ordered.splice(i, 1);
@@ -209,6 +232,7 @@ export default function AskAssistant() {
                     ? "bg-gray-200 text-black border-black"
                     : "bg-black text-white border-red-500 hover:bg-gray-900",
                 ].join(" ")}
+                title={b.title}
               >
                 <div className="font-medium text-sm leading-snug">{b.title}</div>
                 {/* Tooltip overlay (confined to the tile & grid) */}
@@ -235,8 +259,7 @@ export default function AskAssistant() {
     return list;
   })();
 
-  const currentTab =
-    mode === "browse" ? "demos" : mode === "finished" ? "finished" : null;
+  const currentTab = mode === "browse" ? "demos" : mode === "finished" ? "finished" : null;
 
   // Guard screens must be BEFORE the main return
   if (fatalError) {
@@ -267,6 +290,7 @@ export default function AskAssistant() {
         className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300"
         style={{ width: "min(720px, 100vw - 16px)", height: "auto", minHeight: "450px", maxHeight: "90vh" }}
       >
+        {/* Banner */}
         <div className="bg-black text-white px-4 sm:px-6">
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
@@ -274,42 +298,42 @@ export default function AskAssistant() {
             </div>
 
             {/* Breadcrumb */}
-            <div className="text-sm text-white truncate max-w-[60%] text-right">
-              {breadcrumbText}
-            </div>
+            <div className="text-sm text-white truncate max-w-[60%] text-right">{breadcrumbText}</div>
           </div>
 
           {/* Tabs with subtle 3D effect */}
           <div className="pb-0">
-            <nav
-              className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-              role="tablist"
-            >
-              {tabs.map((t) => {
-                const active = currentTab === t.key;
-                return (
-                  <button
-                    key={t.key}
-                    onClick={() => handleTab(t.key)}
-                    role="tab"
-                    aria-selected={active}
-                    className={[
-                      "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
-                      "rounded-t-md border border-b-0",
-                      active
-                        ? "bg-gradient-to-b from-red-500 to-red-700 text-white border-red-700 -mb-px shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_2px_0_rgba(0,0,0,0.15)]"
-                        : "bg-gradient-to-b from-gray-600 to-gray-700 text-white border-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]",
-                    ].join(" ")}
-                  >
-                    {t.label}
-                  </button>
-                );
-              })}
-            </nav>
+            {tabs.length > 0 && (
+              <nav
+                className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                role="tablist"
+              >
+                {tabs.map((t) => {
+                  const active = currentTab === t.key;
+                  return (
+                    <button
+                      key={t.key}
+                      onClick={() => handleTab(t.key)}
+                      role="tab"
+                      aria-selected={active}
+                      className={[
+                        "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
+                        "rounded-t-md border border-b-0",
+                        active
+                          ? "bg-gradient-to-b from-red-500 to-red-700 text-white border-red-700 -mb-px shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_2px_0_rgba(0,0,0,0.15)]"
+                          : "bg-gradient-to-b from-gray-600 to-gray-700 text-white border-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]",
+                      ].join(" ")}
+                    >
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </nav>
+            )}
           </div>
         </div>
 
-        {/* Content wrapper — top padding reduced by 50% */}
+        {/* Content wrapper — top padding reduced by ~50% */}
         <div className="px-6 pt-3 pb-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
           {mode === "finished" ? (
             <div className="flex-1 flex items-center justify-center">
@@ -339,9 +363,7 @@ export default function AskAssistant() {
               ) : null}
 
               {/* Question mirror — closer to banner */}
-              {lastQuestion && (
-                <p className="text-base text-black italic mt-1">“{lastQuestion}”</p>
-              )}
+              {lastQuestion && <p className="text-base text-black italic mt-1">“{lastQuestion}”</p>}
 
               {/* Response text: one line below the question mirror */}
               <div className="text-left mt-2">
@@ -362,7 +384,7 @@ export default function AskAssistant() {
         </div>
 
         {/* Input */}
-        <div className="px-4 py-3 border-t border-gray-400">
+        <div className="px-4 py-3 border-top border-gray-400 border-t">
           <div className="relative w-full">
             <textarea
               rows={1}
