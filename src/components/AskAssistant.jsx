@@ -1,5 +1,6 @@
 // AskAssistant.jsx — 2025-08-12 v10
 // - Strict alias bootstrap via /bot-by-alias (active-only), then use bot.id everywhere
+
 // - Tabs with subtle 3D effect (active red); horizontal scroll hidden
 // - Breadcrumb: video title on player; “Browse All Demos” on browse; “Ask the Assistant” otherwise
 // - Reduced banner→question spacing by ~50%
