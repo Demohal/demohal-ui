@@ -1,11 +1,10 @@
-// AskAssistant.jsx - 2025-08-12 v11.4.1
+// AskAssistant.jsx - 2025-08-12 v11.5
 // - Alias bootstrap via /bot-by-alias (active-only), then use bot.id everywhere
 // - Tabs with subtle 3D effect (active red); horizontal scroll hidden
 // - Breadcrumb: video title on player; "Browse All Demos" on browse; "Ask the Assistant" otherwise
-// - Reduced banner->question spacing
-// - Recommended tiles: title-only, in-card hover overlay tooltip (white, 2-col width on md+)
-// - Browse Demos panel: title-only search, light-gray cards, bold centered titles,
-//   tooltip above card (white), grid container clips overflow
+// - Video: increased top spacing under banner
+// - Recommended tiles: always light gray, no reordering/selection styles, left-justified help line
+// - Browse Demos panel: title-only search, light-gray cards, white tooltips (2-col width on md+)
 
 import React, { useState, useEffect } from "react";
 import axios from "axios";
@@ -217,55 +216,35 @@ export default function AskAssistant() {
     }
   };
 
+  // Recommended demo tiles (always light gray, no reordering)
   const renderButtons = () => {
     if (!buttons.length) return null;
 
-    const ordered = [...buttons];
-    if (selectedDemo) {
-      const i = ordered.findIndex(
-        (x) =>
-          (x.url && selectedDemo.url && x.url === selectedDemo.url) || x.title === selectedDemo.title
-      );
-      if (i >= 0) {
-        const [picked] = ordered.splice(i, 1);
-        ordered.push(picked);
-      }
-    }
+    const ordered = buttons; // no reordering
 
     return (
       <>
-        <p className="text-base italic text-black mt-2 mb-1">Recommended Demos</p>
+        <p className="text-base italic text-black mt-2 mb-1 text-left">Recommended Demos</p>
 
         {/* Grid is clipping boundary for tooltips */}
         <div className="relative grid grid-cols-1 md:grid-cols-3 gap-3 text-left overflow-hidden">
-          {ordered.map((b, idx) => {
-            const isSelected =
-              !!selectedDemo &&
-              ((b.url && selectedDemo.url && b.url === selectedDemo.url) || b.title === selectedDemo.title);
+          {ordered.map((b, idx) => (
+            <button
+              key={`${b.title}-${idx}`}
+              onClick={() => setSelectedDemo(b)}
+              className="group relative p-3 rounded-xl border-2 border-gray-300 bg-gray-100 text-black hover:bg-gray-200 transition-colors whitespace-normal break-words text-left"
+              title={b.title}
+            >
+              <div className="font-medium text-sm leading-snug">{b.title}</div>
 
-            return (
-              <button
-                key={`${b.title}-${idx}`}
-                onClick={() => setSelectedDemo(b)}
-                className={[
-                  "group relative p-3 rounded-xl border-2 text-left transition-colors whitespace-normal break-words",
-                  isSelected
-                    ? "bg-gray-200 text-black border-black"
-                    : "bg-black text-white border-red-500 hover:bg-gray-900",
-                ].join(" ")}
-                title={b.title}
-              >
-                <div className="font-medium text-sm leading-snug">{b.title}</div>
-
-                {/* Tooltip above each tile (white). Mobile full width; desktop 2-card width */}
-                {b.description ? (
-                  <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-150 rounded-xl bg-white text-black text-xs leading-snug p-3 shadow-xl border border-gray-300 w-full md:w-[200%]">
-                    {b.description}
-                  </div>
-                ) : null}
-              </button>
-            );
-          })}
+              {/* Tooltip above each tile (white). Mobile full width; desktop 2-card width */}
+              {b.description ? (
+                <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-150 rounded-xl bg-white text-black text-xs leading-snug p-3 shadow-xl border border-gray-300 w-full md:w-[200%]">
+                  {b.description}
+                </div>
+              ) : null}
+            </button>
+          ))}
         </div>
       </>
     );
@@ -317,7 +296,9 @@ export default function AskAssistant() {
             <div className="flex items-center gap-3">
               <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
             </div>
-            <div className="text-sm text-white truncate max-w-[60%] text-right">{breadcrumbText}</div>
+            <div className="text-base sm:text-lg font-semibold text-white truncate max-w-[60%] text-right">
+              {breadcrumbText}
+            </div>
           </div>
 
           {/* Tabs with subtle 3D effect */}
@@ -352,17 +333,17 @@ export default function AskAssistant() {
           </div>
         </div>
 
-        {/* Content wrapper — top padding reduced */}
+        {/* Content wrapper */}
         <div className="px-6 pt-3 pb-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
           {mode === "finished" ? (
             <div className="flex-1 flex items-center justify-center">
-              <p className="text-gray-600">Thanks for exploring! We’ll design this screen next.</p>
+              <p className="text-gray-600">Thanks for exploring! We will design this screen next.</p>
             </div>
           ) : mode === "browse" ? (
             <BrowseDemosPanel apiBase={apiBase} botId={botId} onPick={recommendFromDemo} />
           ) : selectedDemo ? (
             <div className="w-full flex flex-col">
-              <div className="w-full flex justify-center -mt-2">
+              <div className="w-full flex justify-center mt-3">
                 <iframe
                   style={{ width: "100%", aspectRatio: "471 / 272" }}
                   src={selectedDemo.url || selectedDemo.value}
@@ -376,12 +357,15 @@ export default function AskAssistant() {
             </div>
           ) : (
             <div className="w-full flex-1 flex flex-col">
+              {/* Welcome text only on first load */}
               {!lastQuestion ? (
                 <p className="text-xl font-bold leading-snug text-left whitespace-pre-line">{displayedText}</p>
               ) : null}
 
-              {lastQuestion && <p className="text-base text-black italic mt-1">“{lastQuestion}”</p>}
+              {/* Question mirror */}
+              {lastQuestion && <p className="text-base text-black italic mt-1 text-left">“{lastQuestion}”</p>}
 
+              {/* Response text and recommended tiles */}
               <div className="text-left mt-2">
                 {showThinking ? (
                   <p className="text-gray-500 font-bold animate-pulse">Thinking...</p>
