@@ -1,4 +1,13 @@
 // src/components/AskAssistant.jsx
+// UI rules:
+// - Strict alias bootstrap via /bot-by-alias (active-only), then use bot.id everywhere
+// - Tabs with subtle 3D effect (active red); horizontal scroll hidden
+// - Breadcrumb: video title on player; "Browse All Demos" on browse; "Ask the Assistant" otherwise
+// - Reduced banner->content spacing
+// - Recommended tiles: light gray, centered title, UNIFORM height, max two lines, fill cell width
+// - Tooltips: white, use DESCRIPTION only, width ~ two cells, clipped to grid, left/center/right aligned by column
+// - Browse Demos: search-only, card grid (same tile/tooltip behavior)
+
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
@@ -6,46 +15,54 @@ import logo from "../assets/logo.png";
 
 /* --------------------------- Tooltip helpers --------------------------- */
 
-/**
- * Return tooltip alignment classes for a 3-column grid:
- * - left-most: align to left edge of grid
- * - center: center over the button
- * - right-most: align to right edge of grid
- * On small screens (1-col), we just center it.
- */
+/** Alignment classes for a 3-col grid (md+). 1-col on mobile centers. */
 function tooltipAlignClasses(idx) {
-  // Mobile: center
   const mobile = "left-1/2 -translate-x-1/2";
-  // Desktop (md+): 3 columns
   const col = idx % 3;
-  if (col === 0) {
-    return `${mobile} md:left-0 md:translate-x-0`;
-  } else if (col === 2) {
-    return `${mobile} md:right-0 md:left-auto md:translate-x-0`;
-  }
+  if (col === 0) return `${mobile} md:left-0 md:translate-x-0`;
+  if (col === 2) return `${mobile} md:right-0 md:left-auto md:translate-x-0`;
   return `${mobile}`; // center
 }
 
-/* A light-gray demo card with centered title and a white tooltip. */
+/* A light-gray demo card: full width, uniform height, centered title, white tooltip using DESCRIPTION. */
 function DemoButton({ item, idx, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="group relative rounded-xl border border-gray-300 bg-gray-100 text-black p-3 text-center transition-shadow hover:shadow-md"
-      title={item.title || ""}
+      // IMPORTANT: no title= attribute to avoid native browser tooltip using the TITLE
+      className={[
+        "group relative w-full h-20", // uniform height ~80px
+        "flex items-center justify-center text-center",
+        "rounded-xl border border-gray-300",
+        "bg-gray-100 text-black hover:bg-gray-200",
+        "px-3 transition-shadow hover:shadow-md",
+      ].join(" ")}
     >
-      <div className="font-semibold text-sm leading-snug break-words">{item.title || "Demo"}</div>
+      {/* clamp to two lines without Tailwind plugin */}
+      <span
+        className="font-semibold text-sm leading-snug w-full"
+        style={{
+          display: "-webkit-box",
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden",
+          wordBreak: "break-word",
+        }}
+      >
+        {item.title || "Demo"}
+      </span>
 
-      {/* White tooltip, width approx two cards (200% of button), clipped by grid container */}
+      {/* White tooltip using DESCRIPTION only */}
       {item.description ? (
         <div
           className={[
             "pointer-events-none absolute z-30 hidden group-hover:block",
             "bottom-full mb-2",
             tooltipAlignClasses(idx),
-            // Size: two cards wide on md+, full width (but clipped) on mobile
+            // width ~ two cards on desktop, clipped by grid container
             "w-[95vw] max-w-[95vw] md:w-[200%] md:max-w-[200%]",
-            "rounded-lg border border-gray-300 bg-white text-black px-3 py-2 text-xs leading-snug shadow-xl",
+            "rounded-lg border border-gray-300 bg-white text-black",
+            "px-3 py-2 text-xs leading-snug shadow-xl",
           ].join(" ")}
         >
           {item.description}
@@ -100,7 +117,9 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
 
   return (
     <div className="text-left">
-      <p className="italic mb-3">Here are all demos in our library. Just click on the one you want to view.</p>
+      <p className="italic mb-3">
+        Here are all demos in our library. Just click on the one you want to view.
+      </p>
       <div className="mb-3">
         <input
           value={q}
@@ -138,6 +157,7 @@ export default function AskAssistant() {
   const alias = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     return (qs.get("alias") || qs.get("a") || "").trim();
+    // Note: alias is required; absence shows fatal guard below.
   }, []);
   const [bot, setBot] = useState(null);
   const [botId, setBotId] = useState("");
@@ -206,7 +226,7 @@ export default function AskAssistant() {
       return;
     }
     if (key === "meeting") {
-      // your meeting hook here if needed
+      // hook meeting flow here if needed
       return;
     }
   };
@@ -227,7 +247,6 @@ export default function AskAssistant() {
       const payload = { visitor_id: "local-ui", user_question: outgoing, bot_id: botId };
       const res = await axios.post(`${apiBase}/demo-hal`, payload);
       const data = res.data || {};
-      // Render response verbatim. No thanks; no echo of the question.
       setResponseText(data.response_text || "");
       setButtons(Array.isArray(data.buttons) ? data.buttons : []);
     } catch {
@@ -238,7 +257,7 @@ export default function AskAssistant() {
     }
   }
 
-  /* --------------------------- Derived labels -------------------------- */
+  /* -------------------------- Breadcrumb text -------------------------- */
 
   const breadcrumb = selectedDemo
     ? (selectedDemo.title || "Selected Demo")
@@ -283,7 +302,7 @@ export default function AskAssistant() {
             </div>
           </div>
 
-          {/* Tabs with subtle 3D effect; horizontally scrollable without scrollbar */}
+          {/* Tabs with subtle 3D effect */}
           {tabs.length > 0 && (
             <nav
               className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -313,7 +332,7 @@ export default function AskAssistant() {
           )}
         </div>
 
-        {/* Content area; top padding reduced to pull content closer to banner */}
+        {/* Content */}
         <div className="px-6 pt-3 pb-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
           {mode === "finished" ? (
             <div className="flex-1 flex items-center justify-center">
@@ -324,7 +343,6 @@ export default function AskAssistant() {
               apiBase={apiBase}
               botId={botId}
               onPick={(demo) => {
-                // Use the selected browse demo to fetch related or just play it
                 setSelectedDemo({
                   title: demo.title,
                   url: demo.url,
@@ -334,7 +352,7 @@ export default function AskAssistant() {
             />
           ) : selectedDemo ? (
             <div className="w-full flex flex-col">
-              {/* Video frame; small top margin to avoid touching banner, plus bottom margin so tooltips do not tuck under iframe */}
+              {/* Video frame: spacing so it does not touch banner; margin below so tooltips do not tuck under iframe */}
               <div className="w-full flex justify-center mt-2 mb-3">
                 <iframe
                   style={{ width: "100%", aspectRatio: "471 / 272" }}
@@ -346,11 +364,11 @@ export default function AskAssistant() {
                 />
               </div>
 
-              {/* Recommended Demos line and grid */}
+              {/* Recommended Demos */}
               {buttons?.length ? (
                 <>
                   <p className="text-base italic text-left mb-1">Recommended Demos</p>
-                  <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3 text-left">
+                  <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
                     {buttons.map((b, idx) => (
                       <div key={`${b.title}-${idx}`} className="relative">
                         <DemoButton
@@ -380,11 +398,11 @@ export default function AskAssistant() {
                 )}
               </div>
 
-              {/* Recommended section under the prose */}
+              {/* Recommended under the prose */}
               {buttons?.length ? (
                 <>
                   <p className="text-base italic text-left mt-3 mb-1">Recommended Demos</p>
-                  <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3 text-left">
+                  <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
                     {buttons.map((b, idx) => (
                       <div key={`${b.title}-${idx}`} className="relative">
                         <DemoButton
