@@ -12,19 +12,18 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
     async function run() {
       if (!botId) return;
       setLoading(true);
- try {
-    const params = new URLSearchParams();
-    if (botId) params.set("bot_id", botId);
-    const res = await fetch(`${apiBase}/browse-demos?${params.toString()}`);
-
-    const data = await res.json();
-    if (!cancel) setDemos(Array.isArray(data?.demos) ? data.demos : []);
-  } catch {
-    if (!cancel) setDemos([]);
-  } finally {
-    if (!cancel) setLoading(false);
-  }
-}
+      try {
+        const params = new URLSearchParams();
+        if (botId) params.set("bot_id", botId);
+        const res = await fetch(`${apiBase}/browse-demos?${params.toString()}`);
+        const data = await res.json();
+        if (!cancel) setDemos(Array.isArray(data?.demos) ? data.demos : []);
+      } catch {
+        if (!cancel) setDemos([]);
+      } finally {
+        if (!cancel) setLoading(false);
+      }
+    }
     run();
     return () => {
       cancel = true;
@@ -35,23 +34,33 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
   if (!demos.length) return <p className="text-gray-500">No demos available.</p>;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-left">
-      {demos.map((d) => (
-        <button
-          key={d.id}
-          onClick={() => onPick(d)}
-          className="p-3 rounded-xl border-2 border-red-500 bg-black text-white hover:bg-gray-900 text-left truncate"
-          title={d.description || d.title}
-        >
-          <div className="font-medium text-sm truncate">{d.title}</div>
-        </button>
-      ))}
+    <div className="text-left">
+      {/* Help copy for first browse-demos screen */}
+      <p className="italic mb-3">Here are all demos in our library. Just click on the one you want to view.</p>
+
+      {/* Button grid, with tooltips confined to the grid */}
+      <div className="relative grid grid-cols-1 md:grid-cols-3 gap-3 overflow-hidden">
+        {demos.map((d) => (
+          <button
+            key={d.id}
+            onClick={() => onPick(d)}
+            className="group relative p-3 rounded-xl border-2 border-red-500 bg-black text-white hover:bg-gray-900 text-left whitespace-normal break-words"
+          >
+            <div className="font-medium text-sm leading-snug">{d.title}</div>
+            {/* Hover tooltip (confined to tile & grid) */}
+            {d.description ? (
+              <div className="pointer-events-none absolute inset-0 z-10 hidden group-hover:flex items-center justify-center rounded-xl bg-black/90 p-3 text-xs leading-snug text-white text-left whitespace-normal break-words">
+                {d.description}
+              </div>
+            ) : null}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
 
 export default function AskAssistant() {
-
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
   const [mode, setMode] = useState("ask");
   const [seedDemo, setSeedDemo] = useState(null);
@@ -125,7 +134,7 @@ export default function AskAssistant() {
     const outgoing = input;
     setInput("");
     try {
-     const payload = { visitor_id: "local-ui", user_question: outgoing, bot_id: botId };
+      const payload = { visitor_id: "local-ui", user_question: outgoing, bot_id: botId };
       const res = await axios.post(`${apiBase}/demo-hal`, payload);
       const data = res.data || {};
       setDisplayedText(data.response_text || "");
@@ -183,8 +192,8 @@ export default function AskAssistant() {
         {/* Help line above tiles */}
         <p className="text-base italic text-black mt-2 mb-1">Recommended Demos</p>
 
-        {/* 3-across grid (no play icon; title only; description as hover) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-left">
+        {/* 3-across grid; custom tooltips live inside each tile */}
+        <div className="relative grid grid-cols-1 md:grid-cols-3 gap-3 text-left overflow-hidden">
           {ordered.map((b, idx) => {
             const isSelected =
               !!selectedDemo &&
@@ -195,14 +204,19 @@ export default function AskAssistant() {
                 key={`${b.title}-${idx}`}
                 onClick={() => setSelectedDemo(b)}
                 className={[
-                  "p-3 rounded-xl border-2 text-left truncate transition-colors",
+                  "group relative p-3 rounded-xl border-2 text-left transition-colors whitespace-normal break-words",
                   isSelected
                     ? "bg-gray-200 text-black border-black"
-                    : "bg-black text-white border-red-500 hover:bg-gray-900"
+                    : "bg-black text-white border-red-500 hover:bg-gray-900",
                 ].join(" ")}
-                title={b.description || b.title}
               >
-                <div className="font-medium text-sm truncate">{b.title}</div>
+                <div className="font-medium text-sm leading-snug">{b.title}</div>
+                {/* Tooltip overlay (confined to the tile & grid) */}
+                {b.description ? (
+                  <div className="pointer-events-none absolute inset-0 z-10 hidden group-hover:flex items-center justify-center rounded-xl bg-black/90 p-3 text-xs leading-snug text-white text-left whitespace-normal break-words">
+                    {b.description}
+                  </div>
+                ) : null}
               </button>
             );
           })}
@@ -210,7 +224,6 @@ export default function AskAssistant() {
       </>
     );
   };
-
 
   const tabs = (() => {
     const list = [];
@@ -221,7 +234,6 @@ export default function AskAssistant() {
     list.push({ key: "finished", label: "Finished" });
     return list;
   })();
-
 
   const currentTab =
     mode === "browse" ? "demos" : mode === "finished" ? "finished" : null;
@@ -234,7 +246,7 @@ export default function AskAssistant() {
       </div>
     );
   }
-  
+
   if (!botId) {
     return (
       <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
@@ -242,107 +254,114 @@ export default function AskAssistant() {
       </div>
     );
   }
-  
-  return (
 
+  const breadcrumbText = selectedDemo
+    ? selectedDemo.title
+    : mode === "browse"
+    ? "Browse All Demos"
+    : "Ask the Assistant";
+
+  return (
     <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-2 sm:p-0">
       <div
         className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300"
         style={{ width: "min(720px, 100vw - 16px)", height: "auto", minHeight: "450px", maxHeight: "90vh" }}
       >
-    <div className="bg-black text-white px-4 sm:px-6">
-      <div className="flex items-center justify-between w-full py-3">
-        <div className="flex items-center gap-3">
-          <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
-        </div>
-    
-        {/* Breadcrumb */}
-        <div className="text-sm text-white truncate max-w-[60%] text-right">
-          {selectedDemo ? selectedDemo.title : "Ask the Assistant"}
-        </div>
-      </div>
-    
-      {/* Tabs */}
-      <div className="pb-0">
-        <nav
-          className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          role="tablist"
-        >
-          {tabs.map((t) => {
-            const active = currentTab === t.key;
-            return (
-              <button
-                key={t.key}
-                onClick={() => handleTab(t.key)}
-                role="tab"
-                aria-selected={active}
-                className={[
-                  "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
-                  "rounded-t-md border border-b-0",
-                  active
-                    ? "bg-red-600 text-white border-red-600 -mb-px"
-                    : "bg-gray-600 text-white hover:bg-gray-500 border-gray-500",
-                ].join(" ")}
-              >
-                {t.label}
-              </button>
-            );
-          })}
-        </nav>
-      </div>
-    </div>
+        <div className="bg-black text-white px-4 sm:px-6">
+          <div className="flex items-center justify-between w-full py-3">
+            <div className="flex items-center gap-3">
+              <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
+            </div>
 
-    <div className="p-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
-      {mode === "finished" ? (
-        <div className="flex-1 flex items-center justify-center">
-          <p className="text-gray-600">Thanks for exploring! We’ll design this screen next.</p>
-        </div>
-      ) : mode === "browse" ? (
-        <BrowseDemosPanel apiBase={apiBase} botId={botId} onPick={recommendFromDemo} />
-      ) : selectedDemo ? (
-        <div className="w-full flex flex-col">
-          <div className="w-full flex justify-center -mt-2">
-            <iframe
-              style={{ width: "100%", aspectRatio: "471 / 272" }}
-              src={selectedDemo.url || selectedDemo.value}
-              title={selectedDemo.title}
-              className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
+            {/* Breadcrumb */}
+            <div className="text-sm text-white truncate max-w-[60%] text-right">
+              {breadcrumbText}
+            </div>
           </div>
-          {renderButtons()}
+
+          {/* Tabs with subtle 3D effect */}
+          <div className="pb-0">
+            <nav
+              className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              role="tablist"
+            >
+              {tabs.map((t) => {
+                const active = currentTab === t.key;
+                return (
+                  <button
+                    key={t.key}
+                    onClick={() => handleTab(t.key)}
+                    role="tab"
+                    aria-selected={active}
+                    className={[
+                      "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
+                      "rounded-t-md border border-b-0",
+                      active
+                        ? "bg-gradient-to-b from-red-500 to-red-700 text-white border-red-700 -mb-px shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_2px_0_rgba(0,0,0,0.15)]"
+                        : "bg-gradient-to-b from-gray-600 to-gray-700 text-white border-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]",
+                    ].join(" ")}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
         </div>
-      ) : (
-        <div className="w-full flex-1 flex flex-col">
-          {/* Welcome text only on first load */}
-          {!lastQuestion ? (
-            <p className="text-xl font-bold leading-snug text-left whitespace-pre-line">{displayedText}</p>
-          ) : null}
-    
-          {/* Question mirror: one line below the banner */}
-          {lastQuestion && (
-            <p className="text-base text-black italic mt-2">“{lastQuestion}”</p>
-          )}
-    
-          {/* Response text: one line below the question mirror */}
-          <div className="text-left mt-2">
-            {showThinking ? (
-              <p className="text-gray-500 font-bold animate-pulse">Thinking...</p>
-            ) : (
-              <>
-                {(lastQuestion || mode !== "ask") && (
-                  <p className="text-black text-base font-bold whitespace-pre-line">{displayedText}</p>
+
+        {/* Content wrapper — top padding reduced by 50% */}
+        <div className="px-6 pt-3 pb-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
+          {mode === "finished" ? (
+            <div className="flex-1 flex items-center justify-center">
+              <p className="text-gray-600">Thanks for exploring! We’ll design this screen next.</p>
+            </div>
+          ) : mode === "browse" ? (
+            <BrowseDemosPanel apiBase={apiBase} botId={botId} onPick={recommendFromDemo} />
+          ) : selectedDemo ? (
+            <div className="w-full flex flex-col">
+              <div className="w-full flex justify-center -mt-2">
+                <iframe
+                  style={{ width: "100%", aspectRatio: "471 / 272" }}
+                  src={selectedDemo.url || selectedDemo.value}
+                  title={selectedDemo.title}
+                  className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+              {renderButtons()}
+            </div>
+          ) : (
+            <div className="w-full flex-1 flex flex-col">
+              {/* Welcome text only on first load */}
+              {!lastQuestion ? (
+                <p className="text-xl font-bold leading-snug text-left whitespace-pre-line">{displayedText}</p>
+              ) : null}
+
+              {/* Question mirror — closer to banner */}
+              {lastQuestion && (
+                <p className="text-base text-black italic mt-1">“{lastQuestion}”</p>
+              )}
+
+              {/* Response text: one line below the question mirror */}
+              <div className="text-left mt-2">
+                {showThinking ? (
+                  <p className="text-gray-500 font-bold animate-pulse">Thinking...</p>
+                ) : (
+                  <>
+                    {(lastQuestion || mode !== "ask") && (
+                      <p className="text-black text-base font-bold whitespace-pre-line">{displayedText}</p>
+                    )}
+                    {/* Recommended tiles with help line */}
+                    {renderButtons()}
+                  </>
                 )}
-                {/* Recommended tiles with help line */}
-                {renderButtons()}
-              </>
-            )}
-          </div>
+              </div>
+            </div>
+          )}
         </div>
-      )}
-    </div>
 
+        {/* Input */}
         <div className="px-4 py-3 border-t border-gray-400">
           <div className="relative w-full">
             <textarea
