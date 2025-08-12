@@ -305,6 +305,7 @@ export default function AskAssistant() {
     </nav>
   </div>
 </div>
+</div>
         <div className="p-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
           {mode === "finished" ? (
             <div className="flex-1 flex items-center justify-center">
