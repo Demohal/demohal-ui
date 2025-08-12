@@ -34,7 +34,7 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
   if (loading) return <p className="text-gray-500">Loading demos…</p>;
   if (!demos.length) return <p className="text-gray-500">No demos available.</p>;
 
-    return (
+  return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-left">
       {demos.map((d) => (
         <button
@@ -51,6 +51,7 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
 }
 
 export default function AskAssistant() {
+
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
   const [mode, setMode] = useState("ask");
   const [seedDemo, setSeedDemo] = useState(null);
