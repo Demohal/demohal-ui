@@ -35,26 +35,19 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
   if (!demos.length) return <p className="text-gray-500">No demos available.</p>;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-left">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-left">
       {demos.map((d) => (
         <button
           key={d.id}
           onClick={() => onPick(d)}
-          className="flex items-center gap-3 p-3 rounded-xl border-2 border-red-500 bg-black text-white hover:bg-gray-900 text-left"
-          title={d.description}
+          className="p-3 rounded-xl border-2 border-red-500 bg-black text-white hover:bg-gray-900 text-left truncate"
+          title={d.description || d.title}
         >
-          <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center">
-            <PlayIcon className="w-4 h-4 text-white" />
-          </div>
-          <div className="truncate">
-            <div className="font-medium text-sm truncate">{d.title}</div>
-            <div className="text-xs text-gray-300 truncate">{d.description}</div>
-          </div>
+          <div className="font-medium text-sm truncate">{d.title}</div>
         </button>
       ))}
     </div>
   );
-}
 
 export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
@@ -170,27 +163,52 @@ export default function AskAssistant() {
 
   const renderButtons = () => {
     if (!buttons.length) return null;
+
+    // Move the currently selected demo (if any) to the end of the list
+    const ordered = [...buttons];
+    if (selectedDemo) {
+      const i = ordered.findIndex(
+        (x) => (x.url && selectedDemo.url && x.url === selectedDemo.url) || x.title === selectedDemo.title
+      );
+      if (i >= 0) {
+        const [picked] = ordered.splice(i, 1);
+        ordered.push(picked);
+      }
+    }
+
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-left mt-2">
-        {buttons.map((b, idx) => (
-          <button
-            key={`${b.title}-${idx}`}
-            onClick={() => setSelectedDemo(b)}
-            className="flex items-center gap-3 p-3 rounded-xl border-2 border-red-500 bg-black text-white hover:bg-gray-900 text-left"
-            title={b.description}
-          >
-            <div className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center">
-              <PlayIcon className="w-4 h-4 text-white" />
-            </div>
-            <div className="truncate">
-              <div className="font-medium text-sm truncate">{b.title}</div>
-              <div className="text-xs text-gray-300 truncate">{b.description}</div>
-            </div>
-          </button>
-        ))}
-      </div>
+      <>
+        {/* Help line above tiles */}
+        <p className="text-base italic text-black mt-2 mb-1">Recommended Demos</p>
+
+        {/* 3-across grid (no play icon; title only; description as hover) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-left">
+          {ordered.map((b, idx) => {
+            const isSelected =
+              !!selectedDemo &&
+              ((b.url && selectedDemo.url && b.url === selectedDemo.url) || b.title === selectedDemo.title);
+
+            return (
+              <button
+                key={`${b.title}-${idx}`}
+                onClick={() => setSelectedDemo(b)}
+                className={[
+                  "p-3 rounded-xl border-2 text-left truncate transition-colors",
+                  isSelected
+                    ? "bg-gray-200 text-black border-black"
+                    : "bg-black text-white border-red-500 hover:bg-gray-900"
+                ].join(" ")}
+                title={b.description || b.title}
+              >
+                <div className="font-medium text-sm truncate">{b.title}</div>
+              </button>
+            );
+          })}
+        </div>
+      </>
     );
   };
+
 
   const tabs = (() => {
     const list = [];
@@ -237,15 +255,23 @@ export default function AskAssistant() {
     </div>
 
     {/* Breadcrumb (white; same size as tab text) */}
-    <div className="text-sm text-white truncate max-w-[60%] text-right">
-      {mode === "recommend" && seedDemo
-        ? seedDemo.title
-        : selectedDemo
+    {(() => {
+      // Only the video screen shows the selected video title; otherwise show Ask the Assistant,
+      // except for tabbed screens like Browse/Finished which use their tab label.
+      const labelMap = Object.fromEntries(tabs.map(t => [t.key, t.label]));
+      const tabKey = mode === "browse" ? "demos" : mode === "finished" ? "finished" : null;
+      const text = selectedDemo?.title
         ? selectedDemo.title
-        : (!lastQuestion && mode === "ask")
-        ? "Ask the Assistant"
-        : ""}
-    </div>
+        : tabKey
+        ? (labelMap[tabKey] || "")
+        : "Ask the Assistant";
+      return (
+        <div className="text-sm text-white truncate max-w-[60%] text-right">
+          {text}
+        </div>
+      );
+    })()}
+
   </div>
 
   {/* Tabs */}
@@ -300,18 +326,19 @@ export default function AskAssistant() {
               {renderButtons()}
             </>
           ) : (
-            <div className="w-full space-y-4 flex-1 flex flex-col">
+            <div className="w-full flex-1 flex flex-col">
+              {/* Welcome text only on first load */}
               {!lastQuestion ? (
-                <p className="text-xl font-bold leading-snug text-left mt-auto mb-auto whitespace-pre-line">{displayedText}</p>
+                <p className="text-xl font-bold leading-snug text-left whitespace-pre-line">{displayedText}</p>
               ) : null}
 
+              {/* Question mirror: one line below the banner */}
               {lastQuestion && (
-                <div className="w-full text-left pt-2">
-                  <p className="text-base text-black italic">“{lastQuestion}”</p>
-                </div>
+                <p className="text-base text-black italic mt-2">“{lastQuestion}”</p>
               )}
 
-              <div className="p-1 text-left">
+              {/* Response text: one line below the question mirror */}
+              <div className="text-left mt-2">
                 {showThinking ? (
                   <p className="text-gray-500 font-bold animate-pulse">Thinking...</p>
                 ) : (
@@ -319,13 +346,14 @@ export default function AskAssistant() {
                     {(lastQuestion || mode !== "ask") ? (
                       <p className="text-black text-base font-bold whitespace-pre-line">{displayedText}</p>
                     ) : null}
+                    {/* Recommended tiles with help line */}
                     {renderButtons()}
                   </>
                 )}
               </div>
             </div>
           )}
-        </div>
+
 
         <div className="px-4 py-3 border-t border-gray-400">
           <div className="relative w-full">
