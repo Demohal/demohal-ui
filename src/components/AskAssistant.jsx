@@ -1,16 +1,47 @@
-// AskAssistant.jsx - 2025-08-12 v11.7
-// - Alias bootstrap via /bot-by-alias (active-only), then use bot.id everywhere
+// AskAssistant.jsx - 2025-08-12 v11.9
+// - Strict alias bootstrap via /bot-by-alias (active-only), then use bot.id everywhere
 // - Tabs with subtle 3D effect (active red); horizontal scroll hidden
 // - Breadcrumb: larger when showing a video title; "Browse All Demos" on browse; "Ask the Assistant" otherwise
-// - Video: extra top spacing under banner
+// - Video: exact-size wrapper (black bg), clipped corners, and reduced spacing under banner
 // - Browse Demos panel: title-only search, light-gray cards, bold centered titles
-// - Tooltips: identical on ALL screens — appear BELOW the button, white bg, centered,
-//             width = min(200% of card, 44rem, viewport - 2rem)
+// - Tooltips (ALL screens): appear BELOW the button, white bg, constrained width, aligned by column on md+
+//
+//   Tooltip width rule: w = min(200% of card, 44rem, viewport - 2rem)
+//   Tooltip alignment on md+ (3-col grid):
+//     - left column  -> left aligned to the grid row
+//     - middle       -> centered
+//     - right column -> right aligned to the grid row
 
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
+
+// Helper: build tooltip position classes for a grid index (0-based)
+function getTooltipPosClasses(idx) {
+  const col = idx % 3; // md:grid-cols-3
+  // Base (mobile): centered under the card, full card width, constrained by viewport
+  // md+: width is 200% (two cells), position varies by column
+  if (col === 0) {
+    // left-most: anchor to left edge on md+
+    return [
+      "left-1/2 -translate-x-1/2",     // mobile center
+      "md:left-0 md:translate-x-0",     // md+ left align
+    ].join(" ");
+  }
+  if (col === 1) {
+    // center: centered on md+
+    return [
+      "left-1/2 -translate-x-1/2",      // mobile center
+      "md:left-1/2 md:-translate-x-1/2",// md+ centered
+    ].join(" ");
+  }
+  // right-most: anchor to right edge on md+
+  return [
+    "left-1/2 -translate-x-1/2",        // mobile center
+    "md:right-0 md:left-auto md:translate-x-0", // md+ right align
+  ].join(" ");
+}
 
 // --- BrowseDemosPanel (Search-only, Title Cards, Unified tooltips) ---
 function BrowseDemosPanel({ apiBase, botId, onPick }) {
@@ -68,30 +99,37 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
 
       {/* Grid is the clipping boundary for tooltips */}
       <div className="relative grid grid-cols-1 md:grid-cols-3 gap-3 overflow-hidden">
-        {filtered.map((d) => (
-          <div
-            key={d.id}
-            role="button"
-            tabIndex={0}
-            onClick={() => onPick(d)}
-            onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onPick(d)}
-            className="group relative px-3 py-4 rounded-xl border border-gray-300 bg-gray-100 hover:bg-gray-200 text-black hover:shadow-md transition-colors transition-shadow cursor-pointer whitespace-normal break-words flex items-center justify-center text-center"
-            title={d.title}
-          >
-            <div className="font-bold text-sm leading-snug text-black text-center">{d.title}</div>
+        {filtered.map((d, idx) => {
+          const pos = getTooltipPosClasses(idx);
+          return (
+            <div
+              key={d.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => onPick(d)}
+              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onPick(d)}
+              className="group relative px-3 py-4 rounded-xl border border-gray-300 bg-gray-100 hover:bg-gray-200 text-black hover:shadow-md transition-colors transition-shadow cursor-pointer whitespace-normal break-words flex items-center justify-center text-center"
+              title={d.title}
+            >
+              <div className="font-bold text-sm leading-snug text-black text-center">{d.title}</div>
 
-            {/* Unified tooltip: BELOW card, white, centered.
-                Width = min(200% of card, 44rem, viewport - 2rem) */}
-            {d.description ? (
-              <div
-                className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150 rounded-xl bg-white text-black text-xs leading-snug p-3 shadow-xl border border-gray-300"
-                style={{ width: "min(200%, 44rem, calc(100vw - 2rem))" }}
-              >
-                {d.description}
-              </div>
-            ) : null}
-          </div>
-        ))}
+              {/* Unified tooltip: BELOW card, white, constrained and aligned by column */}
+              {d.description ? (
+                <div
+                  className={[
+                    "pointer-events-none absolute top-full mt-2 z-50 opacity-0 group-hover:opacity-100",
+                    "transition-opacity duration-150 rounded-xl bg-white text-black text-xs leading-snug p-3",
+                    "shadow-xl border border-gray-300",
+                    "w-full md:w-[200%] max-w-[calc(100vw-2rem)] md:max-w-[44rem]",
+                    pos,
+                  ].join(" ")}
+                >
+                  {d.description}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -232,27 +270,34 @@ export default function AskAssistant() {
 
         {/* Grid is clipping boundary for tooltips; raise z-index above video */}
         <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-3 text-left overflow-hidden">
-          {ordered.map((b, idx) => (
-            <button
-              key={`${b.title}-${idx}`}
-              onClick={() => setSelectedDemo(b)}
-              className="group relative p-3 rounded-xl border-2 border-gray-300 bg-gray-100 text-black hover:bg-gray-200 transition-colors whitespace-normal break-words flex items-center justify-center text-center"
-              title={b.title}
-            >
-              <div className="font-medium text-sm leading-snug text-center">{b.title}</div>
+          {ordered.map((b, idx) => {
+            const pos = getTooltipPosClasses(idx);
+            return (
+              <button
+                key={`${b.title}-${idx}`}
+                onClick={() => setSelectedDemo(b)}
+                className="group relative p-3 rounded-xl border-2 border-gray-300 bg-gray-100 text-black hover:bg-gray-200 transition-colors whitespace-normal break-words flex items-center justify-center text-center"
+                title={b.title}
+              >
+                <div className="font-medium text-sm leading-snug text-center">{b.title}</div>
 
-              {/* Unified tooltip: BELOW tile, white, centered.
-                  Width = min(200% of tile, 44rem, viewport - 2rem) */}
-              {b.description ? (
-                <div
-                  className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150 rounded-xl bg-white text-black text-xs leading-snug p-3 shadow-xl border border-gray-300"
-                  style={{ width: "min(200%, 44rem, calc(100vw - 2rem))" }}
-                >
-                  {b.description}
-                </div>
-              ) : null}
-            </button>
-          ))}
+                {/* Unified tooltip: BELOW tile, white, constrained and aligned by column */}
+                {b.description ? (
+                  <div
+                    className={[
+                      "pointer-events-none absolute top-full mt-2 z-50 opacity-0 group-hover:opacity-100",
+                      "transition-opacity duration-150 rounded-xl bg-white text-black text-xs leading-snug p-3",
+                      "shadow-xl border border-gray-300",
+                      "w-full md:w-[200%] max-w-[calc(100vw-2rem)] md:max-w-[44rem]",
+                      pos,
+                    ].join(" ")}
+                  >
+                    {b.description}
+                  </div>
+                ) : null}
+              </button>
+            );
+          })}
         </div>
       </>
     );
@@ -351,17 +396,22 @@ export default function AskAssistant() {
             <BrowseDemosPanel apiBase={apiBase} botId={botId} onPick={recommendFromDemo} />
           ) : selectedDemo ? (
             <div className="w-full flex flex-col">
-              {/* Lower video a bit; tooltips are z-10 above */}
-              <div className="relative z-0 w-full flex justify-center mt-4">
-                <iframe
-                  style={{ width: "100%", aspectRatio: "471 / 272" }}
-                  src={selectedDemo.url || selectedDemo.value}
-                  title={selectedDemo.title}
-                  className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
+              {/* Video wrapper: exact-size, black bg, clipped, with HALF spacing under banner */}
+              <div className="mt-2">
+                <div className="w-full rounded-xl overflow-hidden shadow-[0_4px_12px_0_rgba(107,114,128,0.3)] bg-black">
+                  {/* Aspect ratio container (matches ~471x272 => 57.75%) */}
+                  <div className="relative" style={{ paddingTop: "57.75%" }}>
+                    <iframe
+                      src={selectedDemo.url || selectedDemo.value}
+                      title={selectedDemo.title}
+                      className="absolute inset-0 w-full h-full border-0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  </div>
+                </div>
               </div>
+
               {renderButtons()}
             </div>
           ) : (
