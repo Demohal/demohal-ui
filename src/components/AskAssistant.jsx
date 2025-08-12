@@ -1,17 +1,18 @@
-// AskAssistant.jsx - 2025-08-12 v11.6
+// AskAssistant.jsx - 2025-08-12 v11.7
 // - Alias bootstrap via /bot-by-alias (active-only), then use bot.id everywhere
 // - Tabs with subtle 3D effect (active red); horizontal scroll hidden
 // - Breadcrumb: larger when showing a video title; "Browse All Demos" on browse; "Ask the Assistant" otherwise
 // - Video: extra top spacing under banner
-// - Browse Demos panel: title-only search, light-gray cards, bold centered titles, white tooltip (2-col width on md+)
-// - Recommended tiles: always light gray, titles centered; tooltip appears BELOW the tile on video screen to avoid iframe overlap
+// - Browse Demos panel: title-only search, light-gray cards, bold centered titles
+// - Tooltips: identical on ALL screens — appear BELOW the button, white bg, centered,
+//             width = min(200% of card, 44rem, viewport - 2rem)
 
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
 
-// --- BrowseDemosPanel (Search-only, Title Cards, Grid-clipped tooltips) ---
+// --- BrowseDemosPanel (Search-only, Title Cards, Unified tooltips) ---
 function BrowseDemosPanel({ apiBase, botId, onPick }) {
   const [demos, setDemos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -79,10 +80,13 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
           >
             <div className="font-bold text-sm leading-snug text-black text-center">{d.title}</div>
 
-            {/* Tooltip: always in DOM; fades in on hover.
-                Mobile: full width; Desktop: 2 card widths (clipped by grid) */}
+            {/* Unified tooltip: BELOW card, white, centered.
+                Width = min(200% of card, 44rem, viewport - 2rem) */}
             {d.description ? (
-              <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150 rounded-xl bg-white text-black text-xs leading-snug p-3 shadow-xl border border-gray-300 w-full md:w-[200%]">
+              <div
+                className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150 rounded-xl bg-white text-black text-xs leading-snug p-3 shadow-xl border border-gray-300"
+                style={{ width: "min(200%, 44rem, calc(100vw - 2rem))" }}
+              >
                 {d.description}
               </div>
             ) : null}
@@ -216,18 +220,17 @@ export default function AskAssistant() {
     }
   };
 
-  // Recommended demo tiles (always light gray, centered titles, no reordering)
+  // Recommended demo tiles (always light gray, centered titles, unified tooltips, no reordering)
   const renderButtons = () => {
     if (!buttons.length) return null;
 
     const ordered = buttons; // no reordering
-    const tooltipPosClass = selectedDemo ? "top-full mt-2" : "bottom-full mb-2"; // avoid tucking under video
 
     return (
       <>
         <p className="text-base italic text-black mt-2 mb-1 text-left">Recommended Demos</p>
 
-        {/* Grid is clipping boundary for tooltips; raise z-index over video */}
+        {/* Grid is clipping boundary for tooltips; raise z-index above video */}
         <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-3 text-left overflow-hidden">
           {ordered.map((b, idx) => (
             <button
@@ -238,16 +241,12 @@ export default function AskAssistant() {
             >
               <div className="font-medium text-sm leading-snug text-center">{b.title}</div>
 
-              {/* Tooltip: white, clipped by grid; mobile full width, md+: 2-card width
-                  Position: below on video screen; above otherwise */}
+              {/* Unified tooltip: BELOW tile, white, centered.
+                  Width = min(200% of tile, 44rem, viewport - 2rem) */}
               {b.description ? (
                 <div
-                  className={[
-                    "pointer-events-none absolute left-1/2 -translate-x-1/2 z-50 opacity-0 group-hover:opacity-100",
-                    "transition-opacity duration-150 rounded-xl bg-white text-black text-xs leading-snug p-3",
-                    "shadow-xl border border-gray-300 w-full md:w-[200%]",
-                    tooltipPosClass, // top/bottom placement
-                  ].join(" ")}
+                  className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-150 rounded-xl bg-white text-black text-xs leading-snug p-3 shadow-xl border border-gray-300"
+                  style={{ width: "min(200%, 44rem, calc(100vw - 2rem))" }}
                 >
                   {b.description}
                 </div>
@@ -352,7 +351,7 @@ export default function AskAssistant() {
             <BrowseDemosPanel apiBase={apiBase} botId={botId} onPick={recommendFromDemo} />
           ) : selectedDemo ? (
             <div className="w-full flex flex-col">
-              {/* Lower video a bit & keep it under tooltip z-order */}
+              {/* Lower video a bit; tooltips are z-10 above */}
               <div className="relative z-0 w-full flex justify-center mt-4">
                 <iframe
                   style={{ width: "100%", aspectRatio: "471 / 272" }}
