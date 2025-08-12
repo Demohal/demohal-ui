@@ -394,7 +394,7 @@ export default function AskAssistant() {
                 {loading ? (
                   <p className="text-gray-500 font-semibold animate-pulse">Thinking...</p>
                 ) : (
-                  <p className="text-black text-base whitespace-pre-line">{responseText}</p>
+                  <p className="text-black text-base font-bold whitespace-pre-line">{responseText}</p>
                 )}
               </div>
 
