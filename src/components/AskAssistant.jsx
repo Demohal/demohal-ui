@@ -250,113 +250,98 @@ export default function AskAssistant() {
         className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300"
         style={{ width: "min(720px, 100vw - 16px)", height: "auto", minHeight: "450px", maxHeight: "90vh" }}
       >
-<div className="bg-black text-white px-4 sm:px-6">
-  <div className="flex items-center justify-between w-full py-3">
-    <div className="flex items-center gap-3">
-      <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
+    <div className="bg-black text-white px-4 sm:px-6">
+      <div className="flex items-center justify-between w-full py-3">
+        <div className="flex items-center gap-3">
+          <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
+        </div>
+    
+        {/* Breadcrumb */}
+        <div className="text-sm text-white truncate max-w-[60%] text-right">
+          {selectedDemo ? selectedDemo.title : "Ask the Assistant"}
+        </div>
+      </div>
+    
+      {/* Tabs */}
+      <div className="pb-0">
+        <nav
+          className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          role="tablist"
+        >
+          {tabs.map((t) => {
+            const active = currentTab === t.key;
+            return (
+              <button
+                key={t.key}
+                onClick={() => handleTab(t.key)}
+                role="tab"
+                aria-selected={active}
+                className={[
+                  "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
+                  "rounded-t-md border border-b-0",
+                  active
+                    ? "bg-red-600 text-white border-red-600 -mb-px"
+                    : "bg-gray-600 text-white hover:bg-gray-500 border-gray-500",
+                ].join(" ")}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
     </div>
 
-    {/* Breadcrumb (white; same size as tab text) */}
-    {(() => {
-      // Only the video screen shows the selected video title; otherwise show Ask the Assistant,
-      // except for tabbed screens like Browse/Finished which use their tab label.
-      const labelMap = Object.fromEntries(tabs.map(t => [t.key, t.label]));
-      const tabKey = mode === "browse" ? "demos" : mode === "finished" ? "finished" : null;
-      const text = selectedDemo?.title
-        ? selectedDemo.title
-        : tabKey
-        ? (labelMap[tabKey] || "")
-        : "Ask the Assistant";
-      return (
-        <div className="text-sm text-white truncate max-w-[60%] text-right">
-          {text}
+    <div className="p-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
+      {mode === "finished" ? (
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-gray-600">Thanks for exploring! We’ll design this screen next.</p>
         </div>
-      );
-    })()}
-
-  </div>
-
-  {/* Tabs */}
-  <div className="pb-0">
-    <nav
-      className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      role="tablist"
-    >
-      {tabs.map((t) => {
-        const active = currentTab === t.key;
-        return (
-          <button
-            key={t.key}
-            onClick={() => handleTab(t.key)}
-            role="tab"
-            aria-selected={active}
-            className={[
-              "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
-              "rounded-t-md border border-b-0",
-              active
-                ? "bg-red-600 text-white border-red-600 -mb-px"
-                : "bg-gray-600 text-white hover:bg-gray-500 border-gray-500"
-            ].join(" ")}
-          >
-            {t.label}
-          </button>
-        );
-      })}
-    </nav>
-  </div>
-</div>
-</div>
-        <div className="p-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
-          {mode === "finished" ? (
-            <div className="flex-1 flex items-center justify-center">
-              <p className="text-gray-600">Thanks for exploring! We’ll design this screen next.</p>
-            </div>
-          ) : mode === "browse" ? (
-                        <BrowseDemosPanel apiBase={apiBase} botId={botId} onPick={recommendFromDemo} />
-
-          ) : selectedDemo ? (
-            <>
-              <div className="w-full flex justify-center -mt-2">
-                <iframe
-                  style={{ width: "100%", aspectRatio: "471 / 272" }}
-                  src={selectedDemo.url || selectedDemo.value}
-                  title={selectedDemo.title}
-                  className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              </div>
-              {renderButtons()}
-            </>
-          ) : (
-            <div className="w-full flex-1 flex flex-col">
-              {/* Welcome text only on first load */}
-              {!lastQuestion ? (
-                <p className="text-xl font-bold leading-snug text-left whitespace-pre-line">{displayedText}</p>
-              ) : null}
-
-              {/* Question mirror: one line below the banner */}
-              {lastQuestion && (
-                <p className="text-base text-black italic mt-2">“{lastQuestion}”</p>
-              )}
-
-              {/* Response text: one line below the question mirror */}
-              <div className="text-left mt-2">
-                {showThinking ? (
-                  <p className="text-gray-500 font-bold animate-pulse">Thinking...</p>
-                ) : (
-                  <>
-                    {(lastQuestion || mode !== "ask") ? (
-                      <p className="text-black text-base font-bold whitespace-pre-line">{displayedText}</p>
-                    ) : null}
-                    {/* Recommended tiles with help line */}
-                    {renderButtons()}
-                  </>
-                )}
-              </div>
-            </div>
+      ) : mode === "browse" ? (
+        <BrowseDemosPanel apiBase={apiBase} botId={botId} onPick={recommendFromDemo} />
+      ) : selectedDemo ? (
+        <div className="w-full flex flex-col">
+          <div className="w-full flex justify-center -mt-2">
+            <iframe
+              style={{ width: "100%", aspectRatio: "471 / 272" }}
+              src={selectedDemo.url || selectedDemo.value}
+              title={selectedDemo.title}
+              className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+          {renderButtons()}
+        </div>
+      ) : (
+        <div className="w-full flex-1 flex flex-col">
+          {/* Welcome text only on first load */}
+          {!lastQuestion ? (
+            <p className="text-xl font-bold leading-snug text-left whitespace-pre-line">{displayedText}</p>
+          ) : null}
+    
+          {/* Question mirror: one line below the banner */}
+          {lastQuestion && (
+            <p className="text-base text-black italic mt-2">“{lastQuestion}”</p>
           )}
-
+    
+          {/* Response text: one line below the question mirror */}
+          <div className="text-left mt-2">
+            {showThinking ? (
+              <p className="text-gray-500 font-bold animate-pulse">Thinking...</p>
+            ) : (
+              <>
+                {(lastQuestion || mode !== "ask") && (
+                  <p className="text-black text-base font-bold whitespace-pre-line">{displayedText}</p>
+                )}
+                {/* Recommended tiles with help line */}
+                {renderButtons()}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
 
         <div className="px-4 py-3 border-t border-gray-400">
           <div className="relative w-full">
