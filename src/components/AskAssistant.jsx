@@ -348,7 +348,8 @@ export default function AskAssistant() {
     }
   }
 
-  async function setSelectedDemoAndLoadRelated(demoLike) {
+  // ✅ FIX: do not fetch immediately after setSelectedDemo; let the effect run
+  function setSelectedDemoAndLoadRelated(demoLike) {
     const next = {
       id: lookupDemoId(demoLike),
       title: demoLike.title || "",
@@ -357,9 +358,7 @@ export default function AskAssistant() {
     };
     setSelectedDemo(next);
     setMode("ask"); // video layout lives in "ask" mode
-    if (botId) {
-      await fetchRelatedForSelected(next);
-    }
+    // Fetch is handled by the effect that watches botId + selectedDemo
   }
 
   const breadcrumb = selectedDemo
