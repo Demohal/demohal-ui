@@ -1,4 +1,5 @@
-// src/components/AskAssistant.jsx
+// AskAssistant.jsx — unified recommendations, robust parsing, sticky video, aligned tooltips
+
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
@@ -6,6 +7,7 @@ import logo from "../assets/logo.png";
 
 /* --------------------------- Tooltip helpers --------------------------- */
 function tooltipAlignClasses(idx) {
+  // Mobile: center; Desktop: left/center/right by column
   const mobile = "left-1/2 -translate-x-1/2";
   const col = idx % 3;
   if (col === 0) return `${mobile} md:left-0 md:translate-x-0`;
@@ -13,6 +15,7 @@ function tooltipAlignClasses(idx) {
   return `${mobile}`;
 }
 
+/* A single, uniform demo button used everywhere (Ask, Video, Browse). */
 function DemoButton({ item, idx, onClick }) {
   return (
     <button
@@ -26,6 +29,7 @@ function DemoButton({ item, idx, onClick }) {
       ].join(" ")}
       title={item.title}
     >
+      {/* Centered title, max two lines; uniform sizing */}
       <span
         className="font-semibold text-sm leading-snug w-full"
         style={{
@@ -39,6 +43,7 @@ function DemoButton({ item, idx, onClick }) {
         {item.title || "Demo"}
       </span>
 
+      {/* White tooltip, two grid-cells wide on md+, aligned by column; clipped by grid container */}
       {item.description ? (
         <div
           className={[
@@ -101,9 +106,12 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
 
   return (
     <div className="text-left">
+      {/* Help copy */}
       <p className="italic mb-3">
         Here are all demos in our library. Just click on the one you want to view.
       </p>
+
+      {/* Search-only */}
       <div className="mb-3">
         <input
           value={q}
@@ -113,6 +121,7 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
         />
       </div>
 
+      {/* Title-only cards; tooltips confined by this grid container */}
       <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
         {filtered.map((d, idx) => (
           <div key={d.id || d.url || d.title} className="relative">
@@ -132,10 +141,12 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
 export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-  const [mode, setMode] = useState("ask"); // "ask" | "browse" | "finished"
+  // "ask" | "browse" | "finished"
+  const [mode, setMode] = useState("ask");
   const [selectedDemo, setSelectedDemo] = useState(null); // {id,title,url,description}
   const [allDemos, setAllDemos] = useState([]); // cache for fallbacks
   const [buttons, setButtons] = useState([]); // recs (ask flow OR video related)
+
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
   const [responseText, setResponseText] = useState(
@@ -143,7 +154,7 @@ export default function AskAssistant() {
   );
   const [loading, setLoading] = useState(false);
 
-  // Bot bootstrap by alias
+  /* Bot bootstrap by alias */
   const alias = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     return (qs.get("alias") || qs.get("a") || "").trim();
@@ -178,7 +189,7 @@ export default function AskAssistant() {
     };
   }, [alias, apiBase]);
 
-  // Load all demos for fallback usage
+  /* Preload demos for fallbacks / id lookup */
   async function ensureAllDemosLoaded(currentBotId) {
     if (!currentBotId) return [];
     if (allDemos.length) return allDemos;
@@ -207,17 +218,14 @@ export default function AskAssistant() {
     };
   }, [apiBase, botId]); // eslint-disable-line
 
-  // If the user selected a demo before botId finished loading,
-  // fetch related as soon as both are available.
+  /* If a demo was selected before botId arrived, kick related once both are ready */
   useEffect(() => {
     if (!selectedDemo || !botId) return;
-    console.debug("[related-demos] late-trigger", { botId, selectedDemo });
     fetchRelatedForSelected(selectedDemo);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [botId, selectedDemo]);
 
-
-  // Tabs
+  /* Tabs built from bot toggles */
   const tabs = useMemo(() => {
     const list = [];
     if (bot?.show_browse_demos) list.push({ key: "demos", label: "Browse Demos" });
@@ -239,6 +247,7 @@ export default function AskAssistant() {
     }
   };
 
+  /* Ask flow */
   async function sendMessage() {
     if (!input.trim() || !botId) return;
     const outgoing = input.trim();
@@ -253,9 +262,28 @@ export default function AskAssistant() {
       const payload = { visitor_id: "local-ui", user_question: outgoing, bot_id: botId };
       const res = await axios.post(`${apiBase}/demo-hal`, payload);
       const data = res.data || {};
+
+      // Log surfaced server-side errors (still 200)
+      if (data.error_code || data.error) {
+        console.error("API error:", data.error_code || data.error, data.error_message || "");
+      }
+
       setResponseText(data.response_text || "");
-      setButtons(Array.isArray(data.buttons) ? data.buttons : []);
-    } catch {
+
+      // Tolerate either shape and normalize
+      const rawBtns = Array.isArray(data.buttons)
+        ? data.buttons
+        : (Array.isArray(data.demos) ? data.demos : []);
+      const normalized = rawBtns.map((b) => ({
+        id: b.id ?? b.demo_id ?? "",
+        title: b.title ?? b.name ?? "",
+        url: b.url ?? b.value ?? "",
+        description: b.description ?? "",
+      }));
+      console.debug("[ask] buttons:", normalized);
+      setButtons(normalized);
+    } catch (e) {
+      console.error("demo-hal failed:", e);
       setResponseText("Sorry, something went wrong. Please try again.");
       setButtons([]);
     } finally {
@@ -277,7 +305,7 @@ export default function AskAssistant() {
       return;
     }
 
-    // Make sure we have allDemos so fallback will always work
+    // Ensure we have all demos for strong fallback
     const demosCache = await ensureAllDemosLoaded(botId);
 
     const id = lookupDemoId(sel);
@@ -291,18 +319,18 @@ export default function AskAssistant() {
       params.set("demo_title", sel.title);
     }
     params.set("limit", "12");
-    params.set("threshold", "0.40"); // tight
-
-    console.debug("[related-demos] params", Object.fromEntries(params));
+    params.set("threshold", "0.40"); // tighter match
 
     try {
       const res = await fetch(`${apiBase}/related-demos?${params.toString()}`);
       const data = await res.json();
-      console.debug("[related-demos] response", data);
+      if (data.error_code || data.error) {
+        console.error("related-demos error:", data.error_code || data.error);
+      }
 
       let related = Array.isArray(data?.related) ? data.related : [];
       if (!related.length) {
-        // Client fallback: other demos in this bot (exclude the selected)
+        // Client fallback: other demos (exclude selected)
         const others = demosCache.filter((d) => (id ? d.id !== id : d.url !== sel.url));
         related = others.map((d) => ({
           title: d.title,
@@ -328,11 +356,9 @@ export default function AskAssistant() {
       description: demoLike.description || "",
     };
     setSelectedDemo(next);
-    setMode("ask"); // video layout in this screen
+    setMode("ask"); // video layout lives in "ask" mode
     if (botId) {
       await fetchRelatedForSelected(next);
-    } else {
-      console.debug("[related-demos] deferred until botId available", next);
     }
   }
 
@@ -369,12 +395,12 @@ export default function AskAssistant() {
             <div className="flex items-center gap-3">
               <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
             </div>
-            <div className="text-base sm:text-lg font-semibold text-white truncate max-w-[60%] text-right">
+            <div className="text-lg sm:text-xl font-semibold text-white truncate max-w-[60%] text-right">
               {breadcrumb}
             </div>
           </div>
 
-          {/** Tabs */}
+          {/* Tabs */}
           <nav
             className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             role="tablist"
@@ -416,7 +442,7 @@ export default function AskAssistant() {
             />
           ) : selectedDemo ? (
             <div className="w-full flex-1 flex flex-col">
-              {/* Sticky video frame */}
+              {/* Sticky video frame; small top/bottom padding so it does not collide with banner */}
               <div className="sticky top-0 z-10 bg-white pt-2 pb-3">
                 <iframe
                   style={{ width: "100%", aspectRatio: "471 / 272" }}
@@ -454,7 +480,7 @@ export default function AskAssistant() {
             </div>
           ) : (
             <div className="w-full flex-1 flex flex-col">
-              {/* Question mirror */}
+              {/* Question mirror (shown above response) */}
               {!lastQuestion ? null : (
                 <p className="text-base text-black italic">"{lastQuestion}"</p>
               )}
@@ -468,7 +494,7 @@ export default function AskAssistant() {
                 )}
               </div>
 
-              {/* Ask-flow recommended demos */}
+              {/* Ask-flow recommendations */}
               {buttons?.length ? (
                 <>
                   <p className="text-base italic text-left mt-3 mb-1">Recommended Demos</p>
