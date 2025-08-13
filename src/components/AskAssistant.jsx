@@ -1,44 +1,31 @@
 // src/components/AskAssistant.jsx
-// UI rules:
-// - Strict alias bootstrap via /bot-by-alias (active-only), then use bot.id everywhere
-// - Tabs with subtle 3D effect (active red); horizontal scroll hidden
-// - Breadcrumb: video title on player; "Browse All Demos" on browse; "Ask the Assistant" otherwise
-// - Reduced banner->content spacing
-// - Recommended tiles: light gray, centered title, UNIFORM height, max two lines, fill cell width
-// - Tooltips: white, use DESCRIPTION only, width ~ two cells, clipped to grid, left/center/right aligned by column
-// - Browse Demos: search-only, card grid (same tile/tooltip behavior)
-
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
 
 /* --------------------------- Tooltip helpers --------------------------- */
-
-/** Alignment classes for a 3-col grid (md+). 1-col on mobile centers. */
 function tooltipAlignClasses(idx) {
   const mobile = "left-1/2 -translate-x-1/2";
   const col = idx % 3;
   if (col === 0) return `${mobile} md:left-0 md:translate-x-0`;
   if (col === 2) return `${mobile} md:right-0 md:left-auto md:translate-x-0`;
-  return `${mobile}`; // center
+  return `${mobile}`;
 }
 
-/* A light-gray demo card: full width, uniform height, centered title, white tooltip using DESCRIPTION. */
+/* A dark-gray demo card like the tabs: full width, uniform height, centered title, white tooltip using DESCRIPTION. */
 function DemoButton({ item, idx, onClick }) {
   return (
     <button
       onClick={onClick}
-      // IMPORTANT: no title= attribute to avoid native browser tooltip using the TITLE
       className={[
-        "group relative w-full h-20", // uniform height ~80px
+        "group relative w-full h-20", // uniform height
         "flex items-center justify-center text-center",
-        "rounded-xl border border-gray-300",
-        "bg-gray-100 text-black hover:bg-gray-200",
+        "rounded-xl border border-gray-700",
+        "bg-gradient-to-b from-gray-600 to-gray-700 text-white hover:from-gray-500 hover:to-gray-600",
         "px-3 transition-shadow hover:shadow-md",
       ].join(" ")}
     >
-      {/* clamp to two lines without Tailwind plugin */}
       <span
         className="font-semibold text-sm leading-snug w-full"
         style={{
@@ -52,14 +39,13 @@ function DemoButton({ item, idx, onClick }) {
         {item.title || "Demo"}
       </span>
 
-      {/* White tooltip using DESCRIPTION only */}
       {item.description ? (
         <div
           className={[
             "pointer-events-none absolute z-30 hidden group-hover:block",
             "bottom-full mb-2",
             tooltipAlignClasses(idx),
-            // width ~ two cards on desktop, clipped by grid container
+            // 2-cards wide on md+, clipped by the grid container
             "w-[95vw] max-w-[95vw] md:w-[200%] md:max-w-[200%]",
             "rounded-lg border border-gray-300 bg-white text-black",
             "px-3 py-2 text-xs leading-snug shadow-xl",
@@ -73,7 +59,6 @@ function DemoButton({ item, idx, onClick }) {
 }
 
 /* ------------------------ Browse Demos (search) ------------------------ */
-
 function BrowseDemosPanel({ apiBase, botId, onPick }) {
   const [demos, setDemos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -129,7 +114,7 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
         />
       </div>
 
-      {/* The grid container clips tooltips */}
+      {/* Grid container clips tooltips */}
       <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
         {filtered.map((d, idx) => (
           <div key={d.id} className="relative">
@@ -146,18 +131,16 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
 }
 
 /* ----------------------------- Main Screen ----------------------------- */
-
 export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-  // Modes: "ask", "browse", "finished"
   const [mode, setMode] = useState("ask");
+  const [selectedDemo, setSelectedDemo] = useState(null);
 
-  // Bot bootstrap
+  // Bot bootstrap by alias
   const alias = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     return (qs.get("alias") || qs.get("a") || "").trim();
-    // Note: alias is required; absence shows fatal guard below.
   }, []);
   const [bot, setBot] = useState(null);
   const [botId, setBotId] = useState("");
@@ -198,11 +181,7 @@ export default function AskAssistant() {
   const [buttons, setButtons] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Selected demo to play
-  const [selectedDemo, setSelectedDemo] = useState(null);
-
-  /* ------------------------------ Tabs -------------------------------- */
-
+  // Tabs
   const tabs = useMemo(() => {
     const list = [];
     if (bot?.show_browse_demos) list.push({ key: "demos", label: "Browse Demos" });
@@ -225,13 +204,7 @@ export default function AskAssistant() {
       setSelectedDemo(null);
       return;
     }
-    if (key === "meeting") {
-      // hook meeting flow here if needed
-      return;
-    }
   };
-
-  /* -------------------------- Send to backend -------------------------- */
 
   async function sendMessage() {
     if (!input.trim() || !botId) return;
@@ -257,16 +230,13 @@ export default function AskAssistant() {
     }
   }
 
-  /* -------------------------- Breadcrumb text -------------------------- */
-
   const breadcrumb = selectedDemo
     ? (selectedDemo.title || "Selected Demo")
     : mode === "browse"
     ? "Browse All Demos"
     : "Ask the Assistant";
 
-  /* ------------------------------ Guards ------------------------------- */
-
+  // Guards
   if (fatal) {
     return (
       <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
@@ -282,8 +252,6 @@ export default function AskAssistant() {
     );
   }
 
-  /* ------------------------------ Render ------------------------------- */
-
   return (
     <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-2 sm:p-0">
       <div
@@ -296,13 +264,12 @@ export default function AskAssistant() {
             <div className="flex items-center gap-3">
               <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
             </div>
-            {/* Bigger breadcrumb on the right */}
             <div className="text-base sm:text-lg font-semibold text-white truncate max-w-[60%] text-right">
               {breadcrumb}
             </div>
           </div>
 
-          {/* Tabs with subtle 3D effect */}
+          {/* Tabs like before */}
           {tabs.length > 0 && (
             <nav
               className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -332,7 +299,7 @@ export default function AskAssistant() {
           )}
         </div>
 
-        {/* Content */}
+        {/* Content (scrolls). On video screen the video is sticky so it stays visible. */}
         <div className="px-6 pt-3 pb-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
           {mode === "finished" ? (
             <div className="flex-1 flex items-center justify-center">
@@ -343,17 +310,19 @@ export default function AskAssistant() {
               apiBase={apiBase}
               botId={botId}
               onPick={(demo) => {
+                // Jump to video viewer
                 setSelectedDemo({
                   title: demo.title,
                   url: demo.url,
                   description: demo.description,
                 });
+                setMode("ask"); // switch out of browse to show the player screen
               }}
             />
           ) : selectedDemo ? (
-            <div className="w-full flex flex-col">
-              {/* Video frame: spacing so it does not touch banner; margin below so tooltips do not tuck under iframe */}
-              <div className="w-full flex justify-center mt-2 mb-3">
+            <div className="w-full flex-1 flex flex-col">
+              {/* Sticky video frame so it always remains visible at the top while list scrolls */}
+              <div className="sticky top-0 z-10 bg-white pt-2 pb-3">
                 <iframe
                   style={{ width: "100%", aspectRatio: "471 / 272" }}
                   src={selectedDemo.url || selectedDemo.value}
@@ -374,7 +343,13 @@ export default function AskAssistant() {
                         <DemoButton
                           item={{ title: b.title || b.label, description: b.description }}
                           idx={idx}
-                          onClick={() => setSelectedDemo(b)}
+                          onClick={() =>
+                            setSelectedDemo({
+                              title: b.title || b.label,
+                              url: b.url || b.value,
+                              description: b.description,
+                            })
+                          }
                         />
                       </div>
                     ))}
@@ -389,7 +364,7 @@ export default function AskAssistant() {
                 <p className="text-base text-black italic">"{lastQuestion}"</p>
               )}
 
-              {/* Prose answer; rendered exactly as returned by the API */}
+              {/* Prose answer (BOLDED including the welcome) */}
               <div className="text-left mt-2">
                 {loading ? (
                   <p className="text-gray-500 font-semibold animate-pulse">Thinking...</p>
@@ -408,7 +383,13 @@ export default function AskAssistant() {
                         <DemoButton
                           item={{ title: b.title || b.label, description: b.description }}
                           idx={idx}
-                          onClick={() => setSelectedDemo(b)}
+                          onClick={() =>
+                            setSelectedDemo({
+                              title: b.title || b.label,
+                              url: b.url || b.value,
+                              description: b.description,
+                            })
+                          }
                         />
                       </div>
                     ))}
@@ -420,7 +401,7 @@ export default function AskAssistant() {
         </div>
 
         {/* Input */}
-        <div className="px-4 py-3 border-t border-gray-400">
+        <div className="px-4 py-3 border-top border-gray-400 border-t">
           <div className="relative w-full">
             <textarea
               rows={1}
@@ -429,12 +410,10 @@ export default function AskAssistant() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
-              disabled={loading}
             />
             <button
               aria-label="Send"
               onClick={sendMessage}
-              disabled={loading}
               className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
             >
               <ArrowUpCircleIcon className="w-8 h-8 text-red-600 hover:text-red-700" />
