@@ -25,6 +25,7 @@ function DemoButton({ item, idx, onClick }) {
         "bg-gradient-to-b from-gray-600 to-gray-700 text-white hover:from-gray-500 hover:to-gray-600",
         "px-3 transition-shadow hover:shadow-md",
       ].join(" ")}
+      title={item.title}
     >
       <span
         className="font-semibold text-sm leading-snug w-full"
@@ -121,7 +122,7 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
             <DemoButton
               item={{ title: d.title, description: d.description }}
               idx={idx}
-              onClick={() => onPick(d)}
+              onClick={() => onPick(d)} // d includes id,title,description,url
             />
           </div>
         ))}
@@ -134,8 +135,9 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
 export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-  const [mode, setMode] = useState("ask");
-  const [selectedDemo, setSelectedDemo] = useState(null);
+  const [mode, setMode] = useState("ask"); // "ask" | "browse" | "finished"
+  const [selectedDemo, setSelectedDemo] = useState(null); // {id,title,url,description}
+  const [allDemos, setAllDemos] = useState([]); // for ID lookups on related items
 
   // Bot bootstrap by alias
   const alias = useMemo(() => {
@@ -172,13 +174,33 @@ export default function AskAssistant() {
     };
   }, [alias, apiBase]);
 
-  // Conversation state
+  // Also keep a copy of all demos for id lookups (so related items can be re-opened and re-recommended)
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      if (!botId) return;
+      try {
+        const params = new URLSearchParams();
+        params.set("bot_id", botId);
+        const res = await fetch(`${apiBase}/browse-demos?${params.toString()}`);
+        const data = await res.json();
+        if (!cancel) setAllDemos(Array.isArray(data?.demos) ? data.demos : []);
+      } catch {
+        if (!cancel) setAllDemos([]);
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [apiBase, botId]);
+
+  // Conversation state (Ask flow)
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
   const [responseText, setResponseText] = useState(
     "Hello. I am here to answer any questions you may have about what we offer or who we are. Please enter your question below to begin."
   );
-  const [buttons, setButtons] = useState([]);
+  const [buttons, setButtons] = useState([]); // also used for related-on-video
   const [loading, setLoading] = useState(false);
 
   // Tabs
@@ -196,12 +218,11 @@ export default function AskAssistant() {
   const handleTab = (key) => {
     if (key === "demos") {
       setMode("browse");
-      setSelectedDemo(null);
+      // Do not clear selectedDemo so a user can return after browsing if desired
       return;
     }
     if (key === "finished") {
       setMode("finished");
-      setSelectedDemo(null);
       return;
     }
   };
@@ -211,7 +232,7 @@ export default function AskAssistant() {
     const outgoing = input.trim();
     setInput("");
     setMode("ask");
-    setSelectedDemo(null);
+    setSelectedDemo(null); // ask flow shows answer + recs based on the answer
     setLastQuestion(outgoing);
     setButtons([]);
     setLoading(true);
@@ -228,6 +249,48 @@ export default function AskAssistant() {
     } finally {
       setLoading(false);
     }
+  }
+
+  // ------- New: related demos based on the selected demo (video view) -------
+  function lookupDemoId(item) {
+    if (item?.id) return item.id;
+    const byUrl = allDemos.find((d) => d.url && (d.url === item.url));
+    if (byUrl) return byUrl.id;
+    const byTitle = allDemos.find((d) => d.title && (d.title === item.title));
+    return byTitle ? byTitle.id : "";
+  }
+
+  async function fetchRelatedByDemoId(demoId) {
+    if (!botId || !demoId) {
+      setButtons([]);
+      return;
+    }
+    try {
+      const params = new URLSearchParams();
+      params.set("bot_id", botId);
+      params.set("demo_id", demoId);
+      params.set("limit", "12");
+      // If you later add a server-side threshold, you can also pass: params.set("threshold","0.35");
+      const res = await fetch(`${apiBase}/related-demos?${params.toString()}`);
+      const data = await res.json();
+      const related = Array.isArray(data?.related) ? data.related : [];
+      setButtons(related);
+    } catch {
+      setButtons([]);
+    }
+  }
+
+  async function setSelectedDemoAndLoadRelated(demoLike) {
+    const id = lookupDemoId(demoLike);
+    const next = {
+      id,
+      title: demoLike.title || "",
+      url: demoLike.url || demoLike.value || "",
+      description: demoLike.description || "",
+    };
+    setSelectedDemo(next);
+    setMode("ask"); // show the player screen layout
+    await fetchRelatedByDemoId(id);
   }
 
   const breadcrumb = selectedDemo
@@ -269,7 +332,7 @@ export default function AskAssistant() {
             </div>
           </div>
 
-          {/* Tabs like before */}
+          {/* Tabs */}
           {tabs.length > 0 && (
             <nav
               className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -299,7 +362,7 @@ export default function AskAssistant() {
           )}
         </div>
 
-        {/* Content (scrolls). On video screen the video is sticky so it stays visible. */}
+        {/* Content (scrolls). On video screen the video is sticky so it stays visible at the top while list scrolls */}
         <div className="px-6 pt-3 pb-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
           {mode === "finished" ? (
             <div className="flex-1 flex items-center justify-center">
@@ -310,13 +373,8 @@ export default function AskAssistant() {
               apiBase={apiBase}
               botId={botId}
               onPick={(demo) => {
-                // Jump to video viewer
-                setSelectedDemo({
-                  title: demo.title,
-                  url: demo.url,
-                  description: demo.description,
-                });
-                setMode("ask"); // switch out of browse to show the player screen
+                // demo from browse has id,title,description,url
+                setSelectedDemoAndLoadRelated(demo);
               }}
             />
           ) : selectedDemo ? (
@@ -333,23 +391,26 @@ export default function AskAssistant() {
                 />
               </div>
 
-              {/* Recommended Demos */}
+              {/* Related to the selected demo */}
               {buttons?.length ? (
                 <>
-                  <p className="text-base italic text-left mb-1">Recommended Demos</p>
+                  <p className="text-base italic text-left mb-1">Based on your selection:</p>
                   <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
                     {buttons.map((b, idx) => (
-                      <div key={`${b.title}-${idx}`} className="relative">
+                      <div key={`${(b.title || b.label || "demo")}-${idx}`} className="relative">
                         <DemoButton
                           item={{ title: b.title || b.label, description: b.description }}
                           idx={idx}
-                          onClick={() =>
-                            setSelectedDemo({
+                          onClick={() => {
+                            // Turn a related button back into a full demo object (needs id lookup)
+                            const full = {
+                              id: lookupDemoId({ title: b.title || b.label, url: b.url || b.value }),
                               title: b.title || b.label,
                               url: b.url || b.value,
                               description: b.description,
-                            })
-                          }
+                            };
+                            setSelectedDemoAndLoadRelated(full);
+                          }}
                         />
                       </div>
                     ))}
@@ -364,7 +425,7 @@ export default function AskAssistant() {
                 <p className="text-base text-black italic">"{lastQuestion}"</p>
               )}
 
-              {/* Prose answer (BOLDED including the welcome) */}
+              {/* Prose answer (bolded, including welcome) */}
               <div className="text-left mt-2">
                 {loading ? (
                   <p className="text-gray-500 font-semibold animate-pulse">Thinking...</p>
@@ -373,23 +434,26 @@ export default function AskAssistant() {
                 )}
               </div>
 
-              {/* Recommended under the prose */}
+              {/* Recommended under the prose (ask flow) */}
               {buttons?.length ? (
                 <>
                   <p className="text-base italic text-left mt-3 mb-1">Recommended Demos</p>
                   <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
                     {buttons.map((b, idx) => (
-                      <div key={`${b.title}-${idx}`} className="relative">
+                      <div key={`${(b.title || b.label || "demo")}-${idx}`} className="relative">
                         <DemoButton
                           item={{ title: b.title || b.label, description: b.description }}
                           idx={idx}
-                          onClick={() =>
-                            setSelectedDemo({
+                          onClick={() => {
+                            // If a user clicks a rec from the ask flow, switch to player view and load related-by-demo
+                            const full = {
+                              id: lookupDemoId({ title: b.title || b.label, url: b.url || b.value }),
                               title: b.title || b.label,
                               url: b.url || b.value,
                               description: b.description,
-                            })
-                          }
+                            };
+                            setSelectedDemoAndLoadRelated(full);
+                          }}
                         />
                       </div>
                     ))}
