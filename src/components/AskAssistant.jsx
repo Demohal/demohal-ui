@@ -115,7 +115,7 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
 
       <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
         {filtered.map((d, idx) => (
-          <div key={d.id} className="relative">
+          <div key={d.id || d.url || d.title} className="relative">
             <DemoButton
               item={{ title: d.title, description: d.description }}
               idx={idx}
@@ -134,8 +134,8 @@ export default function AskAssistant() {
 
   const [mode, setMode] = useState("ask"); // "ask" | "browse" | "finished"
   const [selectedDemo, setSelectedDemo] = useState(null); // {id,title,url,description}
-  const [allDemos, setAllDemos] = useState([]); // cache for id lookups
-  const [buttons, setButtons] = useState([]); // used for recs (ask flow or video related)
+  const [allDemos, setAllDemos] = useState([]); // cache for fallbacks
+  const [buttons, setButtons] = useState([]); // recs (ask flow OR video related)
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
   const [responseText, setResponseText] = useState(
@@ -178,25 +178,34 @@ export default function AskAssistant() {
     };
   }, [alias, apiBase]);
 
-  // Load all demos for id lookup and client fallback
+  // Load all demos for fallback usage
+  async function ensureAllDemosLoaded(currentBotId) {
+    if (!currentBotId) return [];
+    if (allDemos.length) return allDemos;
+    try {
+      const params = new URLSearchParams();
+      params.set("bot_id", currentBotId);
+      const res = await fetch(`${apiBase}/browse-demos?${params.toString()}`);
+      const data = await res.json();
+      const list = Array.isArray(data?.demos) ? data.demos : [];
+      setAllDemos(list);
+      return list;
+    } catch {
+      return [];
+    }
+  }
+
   useEffect(() => {
     let cancel = false;
     (async () => {
       if (!botId) return;
-      try {
-        const params = new URLSearchParams();
-        params.set("bot_id", botId);
-        const res = await fetch(`${apiBase}/browse-demos?${params.toString()}`);
-        const data = await res.json();
-        if (!cancel) setAllDemos(Array.isArray(data?.demos) ? data.demos : []);
-      } catch {
-        if (!cancel) setAllDemos([]);
-      }
+      const list = await ensureAllDemosLoaded(botId);
+      if (!cancel && list.length && !allDemos.length) setAllDemos(list);
     })();
     return () => {
       cancel = true;
     };
-  }, [apiBase, botId]);
+  }, [apiBase, botId]); // eslint-disable-line
 
   // Tabs
   const tabs = useMemo(() => {
@@ -257,34 +266,47 @@ export default function AskAssistant() {
       setButtons([]);
       return;
     }
-    const id = lookupDemoId(sel);
-    try {
-      const params = new URLSearchParams();
-      params.set("bot_id", botId);
-      if (id) {
-        params.set("demo_id", id);
-      } else if (sel.url) {
-        params.set("demo_url", sel.url);
-      } else if (sel.title) {
-        params.set("demo_title", sel.title);
-      }
-      params.set("limit", "12");
-      params.set("threshold", "0.40"); // tight
 
+    // Make sure we have allDemos so fallback will always work
+    const demosCache = await ensureAllDemosLoaded(botId);
+
+    const id = lookupDemoId(sel);
+    const params = new URLSearchParams();
+    params.set("bot_id", botId);
+    if (id) {
+      params.set("demo_id", id);
+    } else if (sel.url) {
+      params.set("demo_url", sel.url);
+    } else if (sel.title) {
+      params.set("demo_title", sel.title);
+    }
+    params.set("limit", "12");
+    params.set("threshold", "0.40"); // tight
+
+    console.debug("[related-demos] params", Object.fromEntries(params));
+
+    try {
       const res = await fetch(`${apiBase}/related-demos?${params.toString()}`);
       const data = await res.json();
-      const related = Array.isArray(data?.related) ? data.related : [];
-      if (related.length) {
-        setButtons(related);
-      } else {
-        // client-side fallback: other demos on this bot (except the selected)
-        const others = allDemos.filter((d) => (id ? d.id !== id : d.url !== sel.url));
-        setButtons(others.map((d) => ({ title: d.title, description: d.description, url: d.url })));
+      console.debug("[related-demos] response", data);
+
+      let related = Array.isArray(data?.related) ? data.related : [];
+      if (!related.length) {
+        // Client fallback: other demos in this bot (exclude the selected)
+        const others = demosCache.filter((d) => (id ? d.id !== id : d.url !== sel.url));
+        related = others.map((d) => ({
+          title: d.title,
+          description: d.description,
+          url: d.url,
+        }));
       }
-    } catch {
-      // fallback to others
-      const others = allDemos.filter((d) => (id ? d.id !== id : d.url !== sel.url));
-      setButtons(others.map((d) => ({ title: d.title, description: d.description, url: d.url })));
+      setButtons(related);
+    } catch (err) {
+      console.warn("[related-demos] fetch failed; using fallback", err);
+      const others = demosCache.filter((d) => (id ? d.id !== id : d.url !== sel.url));
+      setButtons(
+        others.map((d) => ({ title: d.title, description: d.description, url: d.url }))
+      );
     }
   }
 
@@ -296,7 +318,7 @@ export default function AskAssistant() {
       description: demoLike.description || "",
     };
     setSelectedDemo(next);
-    setMode("ask"); // use the video layout in this screen
+    setMode("ask"); // video layout in this screen
     await fetchRelatedForSelected(next);
   }
 
@@ -392,26 +414,26 @@ export default function AskAssistant() {
                 />
               </div>
 
-              {/* Related demos (tight match) */}
+              {/* Related demos */}
+              <p className="text-base italic text-left mb-1">Based on your selection:</p>
               {buttons?.length ? (
-                <>
-                  <p className="text-base italic text-left mb-1">Based on your selection:</p>
-                  <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {buttons.map((b, idx) => (
-                      <div key={`${(b.title || b.label || "demo")}-${idx}`} className="relative">
-                        <DemoButton
-                          item={{ title: b.title || b.label, description: b.description }}
-                          idx={idx}
-                          onClick={() => setSelectedDemoAndLoadRelated({
+                <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {buttons.map((b, idx) => (
+                    <div key={`${(b.title || b.label || "demo")}-${idx}`} className="relative">
+                      <DemoButton
+                        item={{ title: b.title || b.label, description: b.description }}
+                        idx={idx}
+                        onClick={() =>
+                          setSelectedDemoAndLoadRelated({
                             title: b.title || b.label,
                             url: b.url || b.value,
                             description: b.description,
-                          })}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </>
+                          })
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
               ) : (
                 <p className="text-sm text-gray-500 text-left">No related demos found.</p>
               )}
@@ -442,11 +464,13 @@ export default function AskAssistant() {
                         <DemoButton
                           item={{ title: b.title || b.label, description: b.description }}
                           idx={idx}
-                          onClick={() => setSelectedDemoAndLoadRelated({
-                            title: b.title || b.label,
-                            url: b.url || b.value,
-                            description: b.description,
-                          })}
+                          onClick={() =>
+                            setSelectedDemoAndLoadRelated({
+                              title: b.title || b.label,
+                              url: b.url || b.value,
+                              description: b.description,
+                            })
+                          }
                         />
                       </div>
                     ))}
