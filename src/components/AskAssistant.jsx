@@ -270,18 +270,35 @@ export default function AskAssistant() {
 
       setResponseText(data.response_text || "");
 
-      // Tolerate either shape and normalize
-      const rawBtns = Array.isArray(data.buttons)
-        ? data.buttons
-        : (Array.isArray(data.demos) ? data.demos : []);
-      const normalized = rawBtns.map((b) => ({
-        id: b.id ?? b.demo_id ?? "",
-        title: b.title ?? b.name ?? "",
-        url: b.url ?? b.value ?? "",
-        description: b.description ?? "",
-      }));
-      console.debug("[ask] buttons:", normalized);
-      setButtons(normalized);
+      // Recommendations can be under `demos` (preferred) or `buttons`
+      const recs = Array.isArray(data.demos)
+        ? data.demos
+        : (Array.isArray(data.buttons) ? data.buttons : []);
+      
+      // Ensure we have the full catalog to enrich id-only items
+      const catalog = await ensureAllDemosLoaded(botId);
+      
+      // Join by id → url/description (fallbacks: url, then title)
+      const normalized = recs.map((r) => {
+        const id = r.id ?? r.demo_id ?? null;
+        let meta = null;
+        if (id) meta = catalog.find((d) => d.id === id) || null;
+        if (!meta && r.url) meta = catalog.find((d) => d.url === r.url) || null;
+        if (!meta && r.title) meta = catalog.find((d) => d.title === r.title) || null;
+      
+        return {
+          id: id || meta?.id || "",
+          title: r.title || meta?.title || "",
+          url: r.url || meta?.url || "",
+          description: r.description || meta?.description || "",
+        };
+      });
+      
+      // Keep only items with a title so the grid renders reliably
+      const finalBtns = normalized.filter((b) => b.title);
+      console.debug("[ask] recs:", finalBtns);
+      setButtons(finalBtns);
+
     } catch (e) {
       console.error("demo-hal failed:", e);
       setResponseText("Sorry, something went wrong. Please try again.");
