@@ -207,6 +207,16 @@ export default function AskAssistant() {
     };
   }, [apiBase, botId]); // eslint-disable-line
 
+  // If the user selected a demo before botId finished loading,
+  // fetch related as soon as both are available.
+  useEffect(() => {
+    if (!selectedDemo || !botId) return;
+    console.debug("[related-demos] late-trigger", { botId, selectedDemo });
+    fetchRelatedForSelected(selectedDemo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [botId, selectedDemo]);
+
+
   // Tabs
   const tabs = useMemo(() => {
     const list = [];
@@ -319,7 +329,11 @@ export default function AskAssistant() {
     };
     setSelectedDemo(next);
     setMode("ask"); // video layout in this screen
-    await fetchRelatedForSelected(next);
+    if (botId) {
+      await fetchRelatedForSelected(next);
+    } else {
+      console.debug("[related-demos] deferred until botId available", next);
+    }
   }
 
   const breadcrumb = selectedDemo
