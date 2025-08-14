@@ -316,57 +316,36 @@ export default function AskAssistant() {
     return byTitle ? byTitle.id : "";
   }
 
-  async function fetchRelatedForSelected(sel) {
-    if (!botId || !sel) {
-      setButtons([]);
-      return;
-    }
+  async function fetchRelatedForSelected(demo) {
+  try {
+    if (!demo?.id || !botId) return;
 
-    // Ensure we have all demos for strong fallback
-    const demosCache = await ensureAllDemosLoaded(botId);
+    const url = `${apiBase}/related-demos?bot_id=${encodeURIComponent(
+      botId
+    )}&demo_id=${encodeURIComponent(demo.id)}&limit=6`;
 
-    const id = lookupDemoId(sel);
-    const params = new URLSearchParams();
-    params.set("bot_id", botId);
-    if (id) {
-      params.set("demo_id", id);
-    } else if (sel.url) {
-      params.set("demo_url", sel.url);
-    } else if (sel.title) {
-      params.set("demo_title", sel.title);
-    }
-    params.set("limit", "12");
-    params.set("threshold", "0.40"); // tighter match
+    const res = await fetch(url);
+    const data = await res.json();
 
-    try {
-      const res = await fetch(`${apiBase}/related-demos?${params.toString()}`);
-      const data = await res.json();
-      if (data.error_code || data.error) {
-        console.error("related-demos error:", data.error_code || data.error);
-      }
+    const items = (data?.related || data?.buttons || data?.demos || [])
+      .map((d) => ({
+        id: d.id || d.demo_id || "",
+        title: d.title || "",
+        url: d.url || d.value || "",
+        description: d.description || "",
+        action: "demo",
+      }))
+      .filter((x) => x.id && x.title && x.url);
 
-      let related = Array.isArray(data?.related) ? data.related : [];
-      if (!related.length) {
-        // Client fallback: other demos (exclude selected)
-        const others = demosCache.filter((d) => (id ? d.id !== id : d.url !== sel.url));
-        related = others.map((d) => ({
-          title: d.title,
-          description: d.description,
-          url: d.url,
-        }));
-      }
-      setButtons(related);
-    } catch (err) {
-      console.warn("[related-demos] fetch failed; using fallback", err);
-      const others = demosCache.filter((d) => (id ? d.id !== id : d.url !== sel.url));
-      setButtons(
-        others.map((d) => ({ title: d.title, description: d.description, url: d.url }))
-      );
-    }
+    // Hard cap to 6 in UI even if backend returns more
+    setRelated(items.slice(0, 6));
+  } catch {
+    setRelated([]);
   }
+}
 
-  // ✅ FIX: do not fetch immediately after setSelectedDemo; let the effect run
-  function setSelectedDemoAndLoadRelated(demoLike) {
+// ✅ FIX: do not fetch immediately after setSelectedDemo; let the effect run
+function setSelectedDemoAndLoadRelated(demoLike) {
     const next = {
       id: lookupDemoId(demoLike),
       title: demoLike.title || "",
