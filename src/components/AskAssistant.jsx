@@ -344,7 +344,7 @@ export default function AskAssistant() {
   }
 }
 
-// ✅ FIX: do not fetch immediately after setSelectedDemo; let the effect run
+  // ✅ FIX: do not fetch immediately after setSelectedDemo; let the effect run
 function setSelectedDemoAndLoadRelated(demoLike) {
     const next = {
       id: lookupDemoId(demoLike),
