@@ -572,8 +572,6 @@ function setSelectedDemoAndLoadRelated(demoLike) {
               </div>
               )}
 
-        </div>
-
         {/* Input */}
         <div className="px-4 py-3 border-top border-gray-400 border-t">
           <div className="relative w-full">
