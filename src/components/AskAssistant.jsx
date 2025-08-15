@@ -520,76 +520,77 @@ function setSelectedDemoAndLoadRelated(demoLike) {
                 );
               })()}
 
-            <div className="w-full flex-1 flex flex-col">
-              {/* Question mirror (shown above response) */}
-              {!lastQuestion ? null : (
-                <p className="text-base text-black italic">"{lastQuestion}"</p>
-              )}
-
-              {/* Bolded prose (includes welcome) */}
-              <div className="text-left mt-2">
-                {loading ? (
-                  <p className="text-gray-500 font-semibold animate-pulse">Thinking...</p>
-                ) : (
-                  <p className="text-black text-base font-bold whitespace-pre-line">{responseText}</p>
+              <div className="w-full flex-1 flex flex-col">
+                {/* Question mirror (shown above response) */}
+                {!lastQuestion ? null : (
+                  <p className="text-base text-black italic">"{lastQuestion}"</p>
                 )}
-              </div>
 
-              {/* Ask-flow recommendations */}
-              {Array.isArray(buttons) && buttons.length > 0 ? (
-                <>
-                  <p className="text-base italic text-left mt-3 mb-1">Recommended Demos</p>
-                  <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {[...buttons]
-                      .filter(Boolean)
-                      .map((b) => ({
-                        id: b.id || b.demo_id || b.value || "",
-                        title: b.title || b.label || "",
-                        url: b.url || b.value || "",
-                        description: b.description || "",
-                        score:
-                          typeof b.score === "number"
-                            ? b.score
-                            : typeof b.similarity === "number"
-                            ? b.similarity
-                            : null,
-                      }))
-                      .filter((x) => x.id && x.title && x.url)
-                      // order by score desc when present; otherwise keep original order
-                      .sort((a, b) => (b.score ?? -Infinity) - (a.score ?? -Infinity))
-                      .map((item, idx) => (
-                        <div key={`${item.id || item.title}-${idx}`} className="relative">
-                          <DemoButton
-                            item={{ title: item.title, description: item.description }}
-                            idx={idx}
-                            onClick={() => setSelectedDemoAndLoadRelated(item)}
-                          />
-                        </div>
-                      ))}
-                  </div>
-                </>
-              ) : null}
-              </div>
-              )}
+                {/* Bolded prose (includes welcome) */}
+                <div className="text-left mt-2">
+                  {loading ? (
+                    <p className="text-gray-500 font-semibold animate-pulse">Thinking...</p>
+                  ) : (
+                    <p className="text-black text-base font-bold whitespace-pre-line">{responseText}</p>
+                  )}
+                </div>
 
-        {/* Input */}
-        <div className="px-4 py-3 border-top border-gray-400 border-t">
-          <div className="relative w-full">
-            <textarea
-              rows={1}
-              className="w-full border border-gray-400 rounded-lg px-4 py-2 pr-14 text-base resize-y min-h-[3rem] max-h-[160px]"
-              placeholder="Ask your question here"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
-            />
-            <button
-              aria-label="Send"
-              onClick={sendMessage}
-              className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
-            >
-              <ArrowUpCircleIcon className="w-8 h-8 text-red-600 hover:text-red-700" />
-            </button>
+                {/* Ask-flow recommendations */}
+                {Array.isArray(buttons) && buttons.length > 0 ? (
+                  <>
+                    <p className="text-base italic text-left mt-3 mb-1">Recommended Demos</p>
+                    <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {[...buttons]
+                        .filter(Boolean)
+                        .map((b) => ({
+                          id: b.id || b.demo_id || b.value || "",
+                          title: b.title || b.label || "",
+                          url: b.url || b.value || "",
+                          description: b.description || "",
+                          score:
+                            typeof b.score === "number"
+                              ? b.score
+                              : typeof b.similarity === "number"
+                              ? b.similarity
+                              : null,
+                        }))
+                        .filter((x) => x.id && x.title && x.url)
+                        // order by score desc when present; otherwise keep original order
+                        .sort((a, b) => (b.score ?? -Infinity) - (a.score ?? -Infinity))
+                        .map((item, idx) => (
+                          <div key={`${item.id || item.title}-${idx}`} className="relative">
+                            <DemoButton
+                              item={{ title: item.title, description: item.description }}
+                              idx={idx}
+                              onClick={() => setSelectedDemoAndLoadRelated(item)}
+                            />
+                          </div>
+                        ))}
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+          {/* Input */}
+          <div className="px-4 py-3 border-top border-gray-400 border-t">
+            <div className="relative w-full">
+              <textarea
+                rows={1}
+                className="w-full border border-gray-400 rounded-lg px-4 py-2 pr-14 text-base resize-y min-h-[3rem] max-h-[160px]"
+                placeholder="Ask your question here"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
+              />
+              <button
+                aria-label="Send"
+                onClick={sendMessage}
+                className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
+              >
+                <ArrowUpCircleIcon className="w-8 h-8 text-red-600 hover:text-red-700" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
