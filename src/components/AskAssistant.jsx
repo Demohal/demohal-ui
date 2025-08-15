@@ -145,7 +145,9 @@ export default function AskAssistant() {
   const [mode, setMode] = useState("ask");
   const [selectedDemo, setSelectedDemo] = useState(null); // {id,title,url,description}
   const [allDemos, setAllDemos] = useState([]); // cache for fallbacks
-  const [buttons, setButtons] = useState([]); // recs (ask flow OR video related)
+  const [buttons, setButtons] = useState([]); // ask-flow recs
+  const [related, setRelated] = useState({}); // grouped related demos by dimension
+
 
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
@@ -320,27 +322,30 @@ export default function AskAssistant() {
   try {
     if (!demo?.id || !botId) return;
 
-    const url = `${apiBase}/related-demos?bot_id=${encodeURIComponent(
-      botId
-    )}&demo_id=${encodeURIComponent(demo.id)}&limit=6`;
-
+    // New grouped endpoint (no hard cap; backend controls ordering)
+    const url = `${apiBase}/related-demos-grouped?bot_id=${encodeURIComponent(botId)}&demo_id=${encodeURIComponent(demo.id)}`;
     const res = await fetch(url);
     const data = await res.json();
 
-    const items = (data?.related || data?.buttons || data?.demos || [])
-      .map((d) => ({
-        id: d.id || d.demo_id || "",
-        title: d.title || "",
-        url: d.url || d.value || "",
-        description: d.description || "",
-        action: "demo",
-      }))
-      .filter((x) => x.id && x.title && x.url);
+    let groups = data?.groups;
 
-    // Hard cap to 6 in UI even if backend returns more
-    setRelated(items.slice(0, 6));
-  } catch {
-    setRelated([]);
+    // Legacy fallback: if backend doesn’t support grouped yet, bucket flat list under a single heading
+    if (!groups) {
+      const flat = (data?.related || data?.buttons || data?.demos || [])
+        .map((d) => ({
+          id: d.id || d.demo_id || "",
+          title: d.title || "",
+          url: d.url || d.value || "",
+          description: d.description || "",
+        }))
+        .filter((x) => x.id && x.title && x.url);
+      groups = flat.length ? { Related: flat } : {};
+    }
+
+    setRelated(groups);
+  } catch (e) {
+    console.error("[related] fetch failed:", e);
+    setRelated({});
   }
 }
 
@@ -449,24 +454,30 @@ function setSelectedDemoAndLoadRelated(demoLike) {
                 />
               </div>
 
-              {/* Related demos */}
-              <p className="text-base italic text-left mb-1">Based on your selection:</p>
-              {buttons?.length ? (
-                <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {buttons.map((b, idx) => (
-                    <div key={`${(b.title || b.label || "demo")}-${idx}`} className="relative">
-                      <DemoButton
-                        item={{ title: b.title || b.label, description: b.description }}
-                        idx={idx}
-                        onClick={() =>
-                          setSelectedDemoAndLoadRelated({
-                            title: b.title || b.label,
-                            url: b.url || b.value,
-                            description: b.description,
-                          })
-                        }
-                      />
-                    </div>
+              {/* Related demos grouped by dimension */}
+              {related && Object.keys(related).length ? (
+                <div className="space-y-6">
+                  {Object.entries(related).map(([groupName, items]) => (
+                    <section key={groupName}>
+                      <p className="text-base italic text-left mb-1">{groupName}</p>
+                      <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {(items || []).map((b, idx) => (
+                          <div key={`${groupName}-${(b.id || b.url || b.title || idx)}`} className="relative">
+                            <DemoButton
+                              item={{ title: b.title || b.label, description: b.description }}
+                              idx={idx}
+                              onClick={() =>
+                                setSelectedDemoAndLoadRelated({
+                                  title: b.title || b.label,
+                                  url: b.url || b.value,
+                                  description: b.description,
+                                })
+                              }
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </section>
                   ))}
                 </div>
               ) : (
