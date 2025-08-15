@@ -123,7 +123,7 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
 
       {/* Title-only cards; tooltips confined by this grid container */}
       <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-        {filtered.map((d, idx) => (
+        {(Array.isArray(filtered) ? filtered : []).map((d, idx) => (
           <div key={d.id || d.url || d.title} className="relative">
             <DemoButton
               item={{ title: d.title, description: d.description }}
@@ -146,8 +146,8 @@ export default function AskAssistant() {
   const [selectedDemo, setSelectedDemo] = useState(null); // {id,title,url,description}
   const [allDemos, setAllDemos] = useState([]); // cache for fallbacks
   const [buttons, setButtons] = useState([]); // ask-flow recs
-  const [related, setRelated] = useState({}); // grouped related demos by dimension
-
+  const [related, setRelated] = useState([]);        // flat list for existing UI
+  const [relatedGroups, setRelatedGroups] = useState({}); // optional grouped view
 
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
@@ -281,7 +281,7 @@ export default function AskAssistant() {
       const catalog = await ensureAllDemosLoaded(botId);
       
       // Join by id → url/description (fallbacks: url, then title)
-      const normalized = recs.map((r) => {
+      const normalized = (Array.isArray(recs) ? recs : Object.values(recs || {}).flat()).map((r) => {
         const id = r.id ?? r.demo_id ?? null;
         let meta = null;
         if (id) meta = catalog.find((d) => d.id === id) || null;
@@ -322,30 +322,47 @@ export default function AskAssistant() {
   try {
     if (!demo?.id || !botId) return;
 
-    // New grouped endpoint (no hard cap; backend controls ordering)
-    const url = `${apiBase}/related-demos-grouped?bot_id=${encodeURIComponent(botId)}&demo_id=${encodeURIComponent(demo.id)}`;
+    const url = `${apiBase}/related-demos?bot_id=${encodeURIComponent(
+      botId
+    )}&demo_id=${encodeURIComponent(demo.id)}&limit=6`;
+
     const res = await fetch(url);
     const data = await res.json();
 
-    let groups = data?.groups;
+    // Accept BOTH shapes:
+    //  A) flat: { related | buttons | demos: [...] }
+    //  B) grouped: { groups: { "Construction":[...], "Project Mgmt":[...] } }
+    const groups =
+      data && typeof data.groups === "object" && !Array.isArray(data.groups)
+        ? data.groups
+        : null;
 
-    // Legacy fallback: if backend doesn’t support grouped yet, bucket flat list under a single heading
-    if (!groups) {
-      const flat = (data?.related || data?.buttons || data?.demos || [])
-        .map((d) => ({
-          id: d.id || d.demo_id || "",
-          title: d.title || "",
-          url: d.url || d.value || "",
-          description: d.description || "",
-        }))
-        .filter((x) => x.id && x.title && x.url);
-      groups = flat.length ? { Related: flat } : {};
-    }
+    const rawList = groups
+      ? Object.values(groups).flat()
+      : (data?.related || data?.buttons || data?.demos || []);
 
-    setRelated(groups);
-  } catch (e) {
-    console.error("[related] fetch failed:", e);
-    setRelated({});
+    const items = (
+          Array.isArray(rawList)
+            ? rawList
+            : Object.values(rawList || {}).flat()
+        ).map((d) => ({
+        id: d.id || d.demo_id || "",
+        title: d.title || "",
+        url: d.url || d.value || "",
+        description: d.description || "",
+        action: "demo",
+      }))
+      .filter((x) => x.id && x.title && x.url);
+
+    // Keep flat list for existing UI to avoid .map errors
+    setRelated(items);
+
+    // Keep grouped (optional future UI)
+    if (groups) setRelatedGroups(groups);
+    else setRelatedGroups({});
+  } catch {
+    setRelated([]);
+    setRelatedGroups({});
   }
 }
 
@@ -405,9 +422,10 @@ function setSelectedDemoAndLoadRelated(demoLike) {
             className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             role="tablist"
           >
-            {tabs.map((t) => {
-              const active = currentTab === t.key;
-              return (
+            {(Array.isArray(tabs) ? tabs : Object.values(tabs || {})).map((t) => {
+                const key = t.key ?? t.id ?? String(t);
+                const active = currentTab === key;
+                return (
                 <button
                   key={t.key}
                   onClick={() => handleTab(t.key)}
@@ -454,37 +472,54 @@ function setSelectedDemoAndLoadRelated(demoLike) {
                 />
               </div>
 
-              {/* Related demos grouped by dimension */}
-              {related && Object.keys(related).length ? (
-                <div className="space-y-6">
-                  {Object.entries(related).map(([groupName, items]) => (
-                    <section key={groupName}>
-                      <p className="text-base italic text-left mb-1">{groupName}</p>
-                      <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-                        {(items || []).map((b, idx) => (
-                          <div key={`${groupName}-${(b.id || b.url || b.title || idx)}`} className="relative">
-                            <DemoButton
-                              item={{ title: b.title || b.label, description: b.description }}
-                              idx={idx}
-                              onClick={() =>
-                                setSelectedDemoAndLoadRelated({
-                                  title: b.title || b.label,
-                                  url: b.url || b.value,
-                                  description: b.description,
-                                })
-                              }
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500 text-left">No related demos found.</p>
-              )}
-            </div>
-          ) : (
+              {(() => {
+                // Accept both shapes:
+                // - related = { groups: { "Construction": [...], ... } }
+                // - related = { "Construction": [...], ... }
+                // - related = [ ... ]  (fallback -> "Related demos")
+                const rel = related?.groups ?? related;
+                const groups = Array.isArray(rel) ? { "Related demos": rel } : (rel || {});
+                const entries = Object.entries(groups).filter(([, arr]) => Array.isArray(arr) && arr.length);
+                if (!entries.length) return null;
+              
+                return (
+                  <div className="space-y-6">
+                    {entries.map(([groupName, items]) => (
+                      <section key={groupName}>
+                        <p className="text-base italic text-left mb-1">{groupName}</p>
+              
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                          {items.map((d) => {
+                            const id = d.id || d.demo_id || d.value || "";
+                            const title = d.title || d.name || "";
+                            const url = d.url || d.value || "";
+                            const description = d.description || "";
+                            if (!id || !title || !url) return null;
+              
+                            return (
+                              <button
+                                key={`${groupName}:${id}`}
+                                onClick={() =>
+                                  setSelectedDemo({ id, title, url, description })
+                                }
+                                className="text-left px-3 py-2 rounded-xl border hover:bg-muted"
+                              >
+                                <div className="font-medium">{title}</div>
+                                {description ? (
+                                  <div className="text-xs text-muted-foreground line-clamp-2">
+                                    {description}
+                                  </div>
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    ))}
+                  </div>
+                );
+              })()}
+
             <div className="w-full flex-1 flex flex-col">
               {/* Question mirror (shown above response) */}
               {!lastQuestion ? null : (
@@ -501,30 +536,42 @@ function setSelectedDemoAndLoadRelated(demoLike) {
               </div>
 
               {/* Ask-flow recommendations */}
-              {buttons?.length ? (
+              {Array.isArray(buttons) && buttons.length > 0 ? (
                 <>
                   <p className="text-base italic text-left mt-3 mb-1">Recommended Demos</p>
                   <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {buttons.map((b, idx) => (
-                      <div key={`${(b.title || b.label || "demo")}-${idx}`} className="relative">
-                        <DemoButton
-                          item={{ title: b.title || b.label, description: b.description }}
-                          idx={idx}
-                          onClick={() =>
-                            setSelectedDemoAndLoadRelated({
-                              title: b.title || b.label,
-                              url: b.url || b.value,
-                              description: b.description,
-                            })
-                          }
-                        />
-                      </div>
-                    ))}
+                    {[...buttons]
+                      .filter(Boolean)
+                      .map((b) => ({
+                        id: b.id || b.demo_id || b.value || "",
+                        title: b.title || b.label || "",
+                        url: b.url || b.value || "",
+                        description: b.description || "",
+                        score:
+                          typeof b.score === "number"
+                            ? b.score
+                            : typeof b.similarity === "number"
+                            ? b.similarity
+                            : null,
+                      }))
+                      .filter((x) => x.id && x.title && x.url)
+                      // order by score desc when present; otherwise keep original order
+                      .sort((a, b) => (b.score ?? -Infinity) - (a.score ?? -Infinity))
+                      .map((item, idx) => (
+                        <div key={`${item.id || item.title}-${idx}`} className="relative">
+                          <DemoButton
+                            item={{ title: item.title, description: item.description }}
+                            idx={idx}
+                            onClick={() => setSelectedDemoAndLoadRelated(item)}
+                          />
+                        </div>
+                      ))}
                   </div>
                 </>
               ) : null}
-            </div>
-          )}
+              </div>
+              )}
+
         </div>
 
         {/* Input */}
