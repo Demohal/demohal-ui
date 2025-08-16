@@ -1,485 +1,544 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+// AskAssistant.jsx — unified recommendations, robust parsing, sticky video, aligned tooltips
 
-/**
- * AskAssistant.jsx — 2025-08-16
- *
- * Goals of this replacement:
- * 1) Fix boot loop by being strict about apiBase and adding robust bot resolution.
- *    - Supports bot lookup by `bot_id` OR `alias` (from props or ?query).
- *    - Validates responses and surfaces helpful, on-screen errors in dev.
- *    - Never calls the UI origin by accident when apiBase is missing.
- * 2) Prevent "no formatting" look by shipping minimal, namespaced fallback CSS that
- *    works even if Tailwind isn't loaded. Tailwind classes are still present.
- * 3) Add small dev/debug panel (toggle with ?debug=1) to inspect computed config
- *    and last fetch statuses without opening the console.
- */
+import React, { useEffect, useMemo, useState } from "react";
+import axios from "axios";
+import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
+import logo from "../assets/logo.png";
 
-/*****************************
- * Namespaced fallback styles *
- *****************************/
-const FALLBACK_CSS = `
-.demohal { --ring:#11182733; --border:#e5e7eb; --muted:#6b7280; --bg:#ffffff; --ink:#111827; --card:#111827; --cardText:#ffffff; }
-.demohal { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji"; color: var(--ink); }
-.demohal .container { max-width: 1040px; margin: 0 auto; padding: 24px; }
-.demohal .stack { display: grid; gap: 16px; }
-.demohal .row { display: flex; align-items: center; gap: 8px; }
-.demohal .btn { border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; cursor: pointer; background:#111827; color:#fff; }
-.demohal .btn.secondary { background:#fff; color:#111827; }
-.demohal .tabs button.active { background:#111827; color:#fff; }
-.demohal .input { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; width: 100%; }
-.demohal .card { background: var(--card); color: var(--cardText); border-radius: 14px; padding: 14px; box-shadow: 0 6px 18px rgba(17,24,39,0.15); }
-.demohal .muted { color: var(--muted); }
-.demohal .grid { display:grid; grid-template-columns: 1fr; gap:12px; }
-@media (min-width: 768px) { .demohal .grid.cols-3 { grid-template-columns: repeat(3, 1fr); } }
-.demohal .pill { display:inline-flex; align-items:center; gap:8px; border:1px solid var(--border); border-radius:999px; padding:6px 10px; font-size:12px; }
-.demohal .kbd { border:1px solid var(--border); border-radius:6px; padding:0 6px; font-size:12px; }
-.demohal iframe { border: 0; }
-`;
-
-/************************
- * Utilities / helpers  *
- ************************/
-const trimSlashes = (s) => (s || "").replace(/\/+$/, "");
-const asArray = (v) => (Array.isArray(v) ? v : v ? [v] : []);
-const entries = (obj) =>
-  obj && typeof obj === "object" && !Array.isArray(obj) ? Object.entries(obj) : [];
-const values = (v) => (Array.isArray(v) ? v : v && typeof v === "object" ? Object.values(v) : []);
-
-function useQueryParam(name) {
-  const [val, setVal] = useState(() => new URLSearchParams(window.location.search).get(name));
-  useEffect(() => {
-    const onPop = () => setVal(new URLSearchParams(window.location.search).get(name));
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, [name]);
-  return val;
+/* --------------------------- Tooltip helpers --------------------------- */
+function tooltipAlignClasses(idx) {
+  // Mobile: center; Desktop: left/center/right by column
+  const mobile = "left-1/2 -translate-x-1/2";
+  const col = idx % 3;
+  if (col === 0) return `${mobile} md:left-0 md:translate-x-0`;
+  if (col === 2) return `${mobile} md:right-0 md:left-auto md:translate-x-0`;
+  return `${mobile}`;
 }
 
-/** Fetch with timeout + JSON safety */
-async function fetchJSON(url, opts = {}) {
-  const { timeoutMs = 15000, ...rest } = opts;
-  const ctrl = new AbortController();
-  const id = setTimeout(() => ctrl.abort("timeout"), timeoutMs);
-  try {
-    const res = await fetch(url, { signal: ctrl.signal, ...rest });
-    const text = await res.text();
-    let json;
-    try { json = text ? JSON.parse(text) : {}; } catch (e) { json = { _raw: text }; }
-    if (!res.ok) {
-      const msg = (json && (json.message || json.error)) || `HTTP ${res.status}`;
-      const err = new Error(msg);
-      err.status = res.status;
-      err.body = json;
-      throw err;
-    }
-    return json;
-  } finally {
-    clearTimeout(id);
-  }
-}
-
-/** Lightweight local button so this file is self-contained */
-function DemoButton({ item, idx = 0, onClick }) {
-  const title = (item?.title || item?.label || "Demo").trim();
-  const description = (item?.description || "").trim();
+/* A single, uniform demo button used everywhere (Ask, Video, Browse). */
+function DemoButton({ item, idx, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="card"
-      aria-label={`Demo ${idx + 1}: ${title}`}
+      className={[
+        "group relative w-full h-20",
+        "flex items-center justify-center text-center",
+        "rounded-xl border border-gray-700",
+        "bg-gradient-to-b from-gray-600 to-gray-700 text-white hover:from-gray-500 hover:to-gray-600",
+        "px-3 transition-shadow hover:shadow-md",
+      ].join(" ")}
+      title={item.title}
     >
-      <div style={{ fontWeight: 600 }}>{title}</div>
-      {description ? (
-        <div style={{ fontSize: 12, opacity: 0.85, marginTop: 4 }}>{description}</div>
+      {/* Centered title, max two lines; uniform sizing */}
+      <span
+        className="font-semibold text-sm leading-snug w-full"
+        style={{
+          display: "-webkit-box",
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden",
+          wordBreak: "break-word",
+        }}
+      >
+        {item.title || "Demo"}
+      </span>
+
+      {/* White tooltip, two grid-cells wide on md+, aligned by column; clipped by grid container */}
+      {item.description ? (
+        <div
+          className={[
+            "pointer-events-none absolute z-30 hidden group-hover:block",
+            "bottom-full mb-2",
+            tooltipAlignClasses(idx),
+            "w-[95vw] max-w-[95vw] md:w-[200%] md:max-w-[200%]",
+            "rounded-lg border border-gray-300 bg-white text-black",
+            "px-3 py-2 text-xs leading-snug shadow-xl",
+          ].join(" ")}
+        >
+          {item.description}
+        </div>
       ) : null}
     </button>
   );
 }
 
-export default function AskAssistant(props) {
-  // ---- Config ----
-  const envBase = trimSlashes(import.meta?.env?.VITE_API_BASE);
-  const propBase = trimSlashes(props?.apiBase);
-  const globalBase = trimSlashes(
-    typeof window !== "undefined" ? window.__DEMOHAL_API_BASE__ : ""
-  );
-  const apiBase = propBase || envBase || globalBase; // DO NOT default to "" to avoid calling UI origin
+/* ------------------------ Browse Demos (search) ------------------------ */
+function BrowseDemosPanel({ apiBase, botId, onPick }) {
+  const [demos, setDemos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [q, setQ] = useState("");
 
-  const qpAlias = useQueryParam("alias");
-  const qpBotId = useQueryParam("bot_id");
-  const alias = (props?.alias || qpAlias || "").trim();
-  const preferredBotId = (props?.botId || qpBotId || "").trim();
-
-  const debugOn = (props?.debug ?? false) || (useQueryParam("debug") === "1");
-
-  // ---- State ----
-  const [mode, setMode] = useState("ask"); // "ask" | "browse" | "finished"
-  const [status, setStatus] = useState({ phase: "init", level: "info", message: "" });
-  const [bot, setBot] = useState(null);
-  const [botId, setBotId] = useState("");
-  const [allDemos, setAllDemos] = useState([]);
-  const [selectedDemo, setSelectedDemo] = useState(null);
-  const [input, setInput] = useState("");
-  const [answer, setAnswer] = useState("");
-  const [askRecs, setAskRecs] = useState([]);
-  const [related, setRelated] = useState({});
-
-  // Keep last error for debug
-  const lastErrorRef = useRef(null);
-
-  // ---- Boot: resolve bot ----
   useEffect(() => {
-    let cancelled = false;
-
-    async function resolveBot() {
-      // Guard: require apiBase
-      if (!apiBase) {
-        setStatus({
-          phase: "config",
-          level: "error",
-          message:
-            "Missing apiBase. Pass apiBase as a prop, set VITE_API_BASE, or define window.__DEMOHAL_API_BASE__.",
-        });
-        return;
-      }
-
-      try {
-        setStatus({ phase: "boot", level: "info", message: "Resolving bot…" });
-
-        // 1) Try by bot_id if provided
-        if (preferredBotId) {
-          const url = `${apiBase}/bot-by-id?bot_id=${encodeURIComponent(preferredBotId)}`;
-          const j = await fetchJSON(url);
-          const b = j?.bot || j;
-          if (!cancelled && b?.id) {
-            setBot(b);
-            setBotId(b.id);
-            setStatus({ phase: "ready", level: "success", message: "Bot resolved by id." });
-            return;
-          }
-        }
-
-        // 2) Try by alias
-        if (alias) {
-          const url = `${apiBase}/bot-by-alias?alias=${encodeURIComponent(alias)}`;
-          const j = await fetchJSON(url);
-          const b = j?.bot || j;
-          if (!cancelled && b?.id) {
-            setBot(b);
-            setBotId(b.id);
-            setStatus({ phase: "ready", level: "success", message: "Bot resolved by alias." });
-            return;
-          }
-        }
-
-        // 3) If both missing or failed
-        setStatus({
-          phase: "error",
-          level: "error",
-          message:
-            "Unable to resolve bot. Provide ?bot_id=… or ?alias=… and ensure apiBase points to your Flask backend.",
-        });
-      } catch (e) {
-        lastErrorRef.current = e;
-        setStatus({
-          phase: "error",
-          level: "error",
-          message: e?.message || "Failed resolving bot.",
-        });
-      }
-    }
-
-    resolveBot();
-    return () => {
-      cancelled = true;
-    };
-  }, [apiBase, alias, preferredBotId]);
-
-  // ---- Load browse list when we have a bot ----
-  useEffect(() => {
-    if (!botId || !apiBase) return;
-    let cancelled = false;
+    let cancel = false;
     (async () => {
+      if (!botId) return;
+      setLoading(true);
       try {
-        setStatus({ phase: "browse", level: "info", message: "Loading demos…" });
-        const url = `${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`;
-        const j = await fetchJSON(url);
-        const demos = asArray(j?.demos);
-        if (!cancelled) {
-          setAllDemos(demos);
-          setStatus({ phase: "ready", level: "success", message: "Demos loaded." });
-        }
-      } catch (e) {
-        lastErrorRef.current = e;
-        if (!cancelled) setStatus({ phase: "error", level: "error", message: e?.message || "Browse error" });
+        const params = new URLSearchParams();
+        params.set("bot_id", botId);
+        const res = await fetch(`${apiBase}/browse-demos?${params.toString()}`);
+        const data = await res.json();
+        if (!cancel) setDemos(Array.isArray(data?.demos) ? data.demos : []);
+      } catch {
+        if (!cancel) setDemos([]);
+      } finally {
+        if (!cancel) setLoading(false);
       }
     })();
     return () => {
-      cancelled = true;
+      cancel = true;
     };
   }, [apiBase, botId]);
 
-  // ---- Helper: when picking a demo from browse or a related card ----
-  const setSelectedDemoAndLoadRelated = async (demo) => {
-    if (!demo?.url || !demo?.title) return;
-    setSelectedDemo(demo);
-    setMode("ask"); // keep single page; video shown at top area
-    setRelated({});
-    if (!apiBase || !botId) return;
+  const filtered = useMemo(() => {
+    if (!q.trim()) return demos;
+    const needle = q.toLowerCase();
+    return demos.filter((d) => {
+      return (
+        (d.title || "").toLowerCase().includes(needle) ||
+        (d.description || "").toLowerCase().includes(needle)
+      );
+    });
+  }, [demos, q]);
 
-    try {
-      const url = `${apiBase}/related-demos-grouped?bot_id=${encodeURIComponent(
-        botId
-      )}&demo_id=${encodeURIComponent(demo.id || "")}&limit=60`;
-      const j = await fetchJSON(url);
-      const groups = j?.groups || {};
-      setRelated(groups);
-    } catch (e) {
-      lastErrorRef.current = e;
-      setRelated({});
-    }
-  };
+  if (loading) return <p className="text-gray-500">Loading demos...</p>;
+  if (!demos.length) return <p className="text-gray-500">No demos available.</p>;
 
-  // ---- Ask flow ----
-  const onAsk = async () => {
-    const q = (input || "").trim();
-    if (!q || !botId || !apiBase) return;
-    setAnswer("");
-    setAskRecs([]);
-    try {
-      const url = `${apiBase}/demo-hal`;
-      const body = { bot_id: botId, user_question: q };
-      const j = await fetchJSON(url, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      setAnswer((j?.response_text || "").trim());
-      const demos = asArray(j?.demos || j?.buttons);
-      setAskRecs(demos);
-      setMode("ask");
-    } catch (e) {
-      lastErrorRef.current = e;
-      setStatus({ phase: "error", level: "error", message: e?.message || "Ask error" });
-    }
-  };
+  return (
+    <div className="text-left">
+      {/* Help copy */}
+      <p className="italic mb-3">
+        Here are all demos in our library. Just click on the one you want to view.
+      </p>
 
-  // ---- Simple header ----
-  const Header = () => (
-    <div className="row" style={{ justifyContent: "space-between" }}>
-      <div style={{ fontSize: 18, fontWeight: 600 }}>DemoHAL</div>
-      <div className="row tabs">
-        <button
-          className={`btn secondary ${mode === "browse" ? "active" : ""}`}
-          onClick={() => setMode("browse")}
-        >
-          Browse Demos
-        </button>
-        <button
-          className={`btn secondary ${mode === "finished" ? "active" : ""}`}
-          onClick={() => setMode("finished")}
-        >
-          Finish
-        </button>
-      </div>
-    </div>
-  );
-
-  // ---- Renderers ----
-  const BrowsePanel = () => {
-    const [q, setQ] = useState("");
-    const list = useMemo(() => {
-      const needle = q.toLowerCase();
-      const base = asArray(allDemos);
-      if (!needle) return base;
-      return base.filter((d) => (d?.title || "").toLowerCase().includes(needle));
-    }, [q, allDemos]);
-
-    return (
-      <div className="stack">
-        <p className="muted" style={{ fontSize: 14 }}>
-          Here are all demos in our library. Just click one to view.
-        </p>
+      {/* Search-only */}
+      <div className="mb-3">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search demos…"
-          className="input"
+          placeholder="Search demos..."
+          className="w-full border border-gray-300 rounded-lg px-3 py-2"
         />
-        <div className="grid cols-3">
-          {asArray(list).map((d, idx) => (
+      </div>
+
+      {/* Title-only cards; tooltips confined by this grid container */}
+      <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
+        {filtered.map((d, idx) => (
+          <div key={d.id || d.url || d.title} className="relative">
             <DemoButton
-              key={`${d?.id || idx}`}
-              item={d}
+              item={{ title: d.title, description: d.description }}
               idx={idx}
-              onClick={() => setSelectedDemoAndLoadRelated(d)}
+              onClick={() => onPick(d)}
             />
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
-    );
+    </div>
+  );
+}
+
+/* ----------------------------- Main Screen ----------------------------- */
+export default function AskAssistant() {
+  const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
+
+  // "ask" | "browse" | "finished"
+  const [mode, setMode] = useState("ask");
+  const [selectedDemo, setSelectedDemo] = useState(null); // {id,title,url,description}
+  const [allDemos, setAllDemos] = useState([]); // cache for fallbacks
+  const [buttons, setButtons] = useState([]); // recs (ask flow OR video related)
+
+  const [input, setInput] = useState("");
+  const [lastQuestion, setLastQuestion] = useState("");
+  const [responseText, setResponseText] = useState(
+    "Hello. I am here to answer any questions you may have about what we offer or who we are. Please enter your question below to begin."
+  );
+  const [loading, setLoading] = useState(false);
+
+  /* Bot bootstrap by alias */
+  const alias = useMemo(() => {
+    const qs = new URLSearchParams(window.location.search);
+    return (qs.get("alias") || qs.get("a") || "").trim();
+  }, []);
+  const [bot, setBot] = useState(null);
+  const [botId, setBotId] = useState("");
+  const [fatal, setFatal] = useState("");
+
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      if (!alias) {
+        setFatal("Missing alias in URL.");
+        return;
+      }
+      try {
+        const res = await fetch(`${apiBase}/bot-by-alias?alias=${encodeURIComponent(alias)}`);
+        if (!res.ok) throw new Error("Bad alias");
+        const data = await res.json();
+        const b = data?.bot;
+        if (!b?.id) throw new Error("Bad alias");
+        if (!cancel) {
+          setBot(b);
+          setBotId(b.id);
+        }
+      } catch {
+        if (!cancel) setFatal("Invalid or inactive alias.");
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [alias, apiBase]);
+
+  /* Preload demos for fallbacks / id lookup */
+  async function ensureAllDemosLoaded(currentBotId) {
+    if (!currentBotId) return [];
+    if (allDemos.length) return allDemos;
+    try {
+      const params = new URLSearchParams();
+      params.set("bot_id", currentBotId);
+      const res = await fetch(`${apiBase}/browse-demos?${params.toString()}`);
+      const data = await res.json();
+      const list = Array.isArray(data?.demos) ? data.demos : [];
+      setAllDemos(list);
+      return list;
+    } catch {
+      return [];
+    }
+  }
+
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      if (!botId) return;
+      const list = await ensureAllDemosLoaded(botId);
+      if (!cancel && list.length && !allDemos.length) setAllDemos(list);
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [apiBase, botId]); // eslint-disable-line
+
+  /* If a demo was selected before botId arrived, kick related once both are ready */
+  useEffect(() => {
+    if (!selectedDemo || !botId) return;
+    fetchRelatedForSelected(selectedDemo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [botId, selectedDemo]);
+
+  /* Tabs built from bot toggles */
+  const tabs = useMemo(() => {
+    const list = [];
+    if (bot?.show_browse_demos) list.push({ key: "demos", label: "Browse Demos" });
+    if (bot?.show_schedule_meeting) list.push({ key: "meeting", label: "Schedule Meeting" });
+    list.push({ key: "finished", label: "Finished" });
+    return list;
+  }, [bot]);
+
+  const currentTab = mode === "browse" ? "demos" : mode === "finished" ? "finished" : null;
+
+  const handleTab = (key) => {
+    if (key === "demos") {
+      setMode("browse");
+      return;
+    }
+    if (key === "finished") {
+      setMode("finished");
+      return;
+    }
   };
 
-  const RelatedGroups = () => {
-    if (!related || !Object.keys(related || {}).length) return null;
+  /* Ask flow */
+  async function sendMessage() {
+    if (!input.trim() || !botId) return;
+    const outgoing = input.trim();
+    setInput("");
+    setMode("ask");
+    setSelectedDemo(null);
+    setLastQuestion(outgoing);
+    setButtons([]);
+    setLoading(true);
+
+    try {
+      const payload = { visitor_id: "local-ui", user_question: outgoing, bot_id: botId };
+      const res = await axios.post(`${apiBase}/demo-hal`, payload);
+      const data = res.data || {};
+
+      // Log surfaced server-side errors (still 200)
+      if (data.error_code || data.error) {
+        console.error("API error:", data.error_code || data.error, data.error_message || "");
+      }
+
+      setResponseText(data.response_text || "");
+
+      // Tolerate either shape and normalize
+      const rawBtns = Array.isArray(data.buttons)
+        ? data.buttons
+        : (Array.isArray(data.demos) ? data.demos : []);
+      const normalized = rawBtns.map((b) => ({
+        id: b.id ?? b.demo_id ?? "",
+        title: b.title ?? b.name ?? "",
+        url: b.url ?? b.value ?? "",
+        description: b.description ?? "",
+      }));
+      console.debug("[ask] buttons:", normalized);
+      setButtons(normalized);
+    } catch (e) {
+      console.error("demo-hal failed:", e);
+      setResponseText("Sorry, something went wrong. Please try again.");
+      setButtons([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function lookupDemoId(item) {
+    if (item?.id) return item.id;
+    const byUrl = allDemos.find((d) => d.url && item?.url && d.url === item.url);
+    if (byUrl) return byUrl.id;
+    const byTitle = allDemos.find((d) => d.title && item?.title && d.title === item.title);
+    return byTitle ? byTitle.id : "";
+  }
+
+  async function fetchRelatedForSelected(sel) {
+    if (!botId || !sel) {
+      setButtons([]);
+      return;
+    }
+
+    // Ensure we have all demos for strong fallback
+    const demosCache = await ensureAllDemosLoaded(botId);
+
+    const id = lookupDemoId(sel);
+    const params = new URLSearchParams();
+    params.set("bot_id", botId);
+    if (id) {
+      params.set("demo_id", id);
+    } else if (sel.url) {
+      params.set("demo_url", sel.url);
+    } else if (sel.title) {
+      params.set("demo_title", sel.title);
+    }
+    params.set("limit", "12");
+    params.set("threshold", "0.40"); // tighter match
+
+    try {
+      const res = await fetch(`${apiBase}/related-demos?${params.toString()}`);
+      const data = await res.json();
+      if (data.error_code || data.error) {
+        console.error("related-demos error:", data.error_code || data.error);
+      }
+
+      let related = Array.isArray(data?.related) ? data.related : [];
+      if (!related.length) {
+        // Client fallback: other demos (exclude selected)
+        const others = demosCache.filter((d) => (id ? d.id !== id : d.url !== sel.url));
+        related = others.map((d) => ({
+          title: d.title,
+          description: d.description,
+          url: d.url,
+        }));
+      }
+      setButtons(related);
+    } catch (err) {
+      console.warn("[related-demos] fetch failed; using fallback", err);
+      const others = demosCache.filter((d) => (id ? d.id !== id : d.url !== sel.url));
+      setButtons(
+        others.map((d) => ({ title: d.title, description: d.description, url: d.url }))
+      );
+    }
+  }
+
+  // ✅ FIX: do not fetch immediately after setSelectedDemo; let the effect run
+  function setSelectedDemoAndLoadRelated(demoLike) {
+    const next = {
+      id: lookupDemoId(demoLike),
+      title: demoLike.title || "",
+      url: demoLike.url || demoLike.value || "",
+      description: demoLike.description || "",
+    };
+    setSelectedDemo(next);
+    setMode("ask"); // video layout lives in "ask" mode
+    // Fetch is handled by the effect that watches botId + selectedDemo
+  }
+
+  const breadcrumb = selectedDemo
+    ? (selectedDemo.title || "Selected Demo")
+    : mode === "browse"
+    ? "Browse All Demos"
+    : "Ask the Assistant";
+
+  if (fatal) {
     return (
-      <div className="stack">
-        {entries(related).map(([groupName, raw]) => {
-          const rows = values(raw);
-          if (!rows.length) return null;
-          return (
-            <section key={groupName}>
-              <p style={{ fontStyle: "italic", marginBottom: 6 }}>{groupName}</p>
-              <div className="grid cols-3">
-                {asArray(rows).map((b, idx) => (
-                  <DemoButton
-                    key={`${groupName}-${b?.id || b?.url || idx}`}
-                    item={b}
-                    idx={idx}
-                    onClick={() =>
-                      setSelectedDemoAndLoadRelated({
-                        id: b?.id,
-                        title: b?.title || b?.label,
-                        url: b?.url || b?.value,
-                        description: b?.description,
-                      })
-                    }
-                  />
-                ))}
-              </div>
-            </section>
-          );
-        })}
+      <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
+        <div className="text-red-600 font-semibold">{fatal}</div>
       </div>
     );
-  };
+  }
+  if (!botId) {
+    return (
+      <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
+        <div className="text-gray-700">Loading...</div>
+      </div>
+    );
+  }
 
-  // ---- Layout ----
   return (
-    <div className="demohal" data-version="2025-08-16">
-      <style dangerouslySetInnerHTML={{ __html: FALLBACK_CSS }} />
-
-      {/* Status / config pill */}
-      <div className="container">
-        <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
-          <div className="pill">
-            <span style={{ width: 8, height: 8, borderRadius: 99, background: status.level === "error" ? "#ef4444" : status.level === "success" ? "#10b981" : "#f59e0b" }} />
-            <span>{status.phase}</span>
-            {status.message ? <span className="muted">· {status.message}</span> : null}
-          </div>
-          {debugOn ? (
-            <div className="pill">
-              <span className="kbd">debug</span>
-              <span>on</span>
+    <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-2 sm:p-0">
+      <div
+        className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300"
+        style={{ width: "min(720px, 100vw - 16px)", height: "auto", minHeight: 450, maxHeight: "90vh" }}
+      >
+        {/* Banner */}
+        <div className="bg-black text-white px-4 sm:px-6">
+          <div className="flex items-center justify-between w-full py-3">
+            <div className="flex items-center gap-3">
+              <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
             </div>
-          ) : null}
+            <div className="text-lg sm:text-xl font-semibold text-white truncate max-w-[60%] text-right">
+              {breadcrumb}
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <nav
+            className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            role="tablist"
+          >
+            {tabs.map((t) => {
+              const active = currentTab === t.key;
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => handleTab(t.key)}
+                  role="tab"
+                  aria-selected={active}
+                  className={[
+                    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
+                    "rounded-t-md border border-b-0",
+                    active
+                      ? "bg-gradient-to-b from-red-500 to-red-700 text-white border-red-700 -mb-px shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_2px_0_rgba(0,0,0,0.15)]"
+                      : "bg-gradient-to-b from-gray-600 to-gray-700 text-white border-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]",
+                  ].join(" ")}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
+          </nav>
         </div>
 
-        <div className="stack">
-          <Header />
-
-          {/* Ask box */}
-          <div className="row">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask a question…"
-              className="input"
-              onKeyDown={(e) => e.key === "Enter" && onAsk()}
-            />
-            <button onClick={onAsk} className="btn">Ask</button>
-          </div>
-
-          {/* Modes */}
+        {/* Content area (scrolls). Video frame is sticky on top when shown. */}
+        <div className="px-6 pt-3 pb-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
           {mode === "finished" ? (
-            <div style={{ padding: "48px 0", textAlign: "center" }} className="muted">
-              Thanks for exploring! We’ll design this screen next.
+            <div className="flex-1 flex items-center justify-center">
+              <p className="text-gray-600">Thanks for exploring! We will design this screen next.</p>
             </div>
           ) : mode === "browse" ? (
-            <BrowsePanel />
-          ) : (
-            <div className="stack">
-              {/* Welcome or answer */}
-              {!answer ? (
-                <div className="muted">
-                  Hello. We’re here to help. Ask anything about our demos or products below.
-                </div>
-              ) : (
-                <div style={{ lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{answer}</div>
-              )}
+            <BrowseDemosPanel
+              apiBase={apiBase}
+              botId={botId}
+              onPick={(demo) => setSelectedDemoAndLoadRelated(demo)}
+            />
+          ) : selectedDemo ? (
+            <div className="w-full flex-1 flex flex-col">
+              {/* Sticky video frame; small top/bottom padding so it does not collide with banner */}
+              <div className="sticky top-0 z-10 bg-white pt-2 pb-3">
+                <iframe
+                  style={{ width: "100%", aspectRatio: "471 / 272" }}
+                  src={selectedDemo.url || selectedDemo.value}
+                  title={selectedDemo.title || "Selected demo"}
+                  className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
 
-              {/* Selected video (when present) */}
-              {selectedDemo?.url ? (
-                <div>
-                  <div style={{ position: "sticky", top: 0, zIndex: 10, background: "var(--bg)", paddingTop: 8, paddingBottom: 12 }}>
-                    <iframe
-                      style={{ width: "100%", aspectRatio: "471 / 272", borderRadius: 12, boxShadow: "0 4px 12px rgba(107,114,128,0.3)" }}
-                      src={selectedDemo.url}
-                      title={selectedDemo.title || "Selected demo"}
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                    />
-                  </div>
-                </div>
-              ) : null}
-
-              {/* Ask-mode recommended demos */}
-              {asArray(askRecs).length ? (
-                <>
-                  <p style={{ fontStyle: "italic", marginTop: 8, marginBottom: 6 }}>Recommended Demos</p>
-                  <div className="grid cols-3">
-                    {asArray(askRecs).map((b, idx) => (
+              {/* Related demos */}
+              <p className="text-base italic text-left mb-1">Based on your selection:</p>
+              {buttons?.length ? (
+                <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {buttons.map((b, idx) => (
+                    <div key={`${(b.title || b.label || "demo")}-${idx}`} className="relative">
                       <DemoButton
-                        key={`${b?.id || b?.url || idx}`}
-                        item={b}
+                        item={{ title: b.title || b.label, description: b.description }}
                         idx={idx}
                         onClick={() =>
                           setSelectedDemoAndLoadRelated({
-                            id: b?.id,
-                            title: b?.title || b?.label,
-                            url: b?.url || b?.value,
-                            description: b?.description,
+                            title: b.title || b.label,
+                            url: b.url || b.value,
+                            description: b.description,
                           })
                         }
                       />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 text-left">No related demos found.</p>
+              )}
+            </div>
+          ) : (
+            <div className="w-full flex-1 flex flex-col">
+              {/* Question mirror (shown above response) */}
+              {!lastQuestion ? null : (
+                <p className="text-base text-black italic">"{lastQuestion}"</p>
+              )}
+
+              {/* Bolded prose (includes welcome) */}
+              <div className="text-left mt-2">
+                {loading ? (
+                  <p className="text-gray-500 font-semibold animate-pulse">Thinking...</p>
+                ) : (
+                  <p className="text-black text-base font-bold whitespace-pre-line">{responseText}</p>
+                )}
+              </div>
+
+              {/* Ask-flow recommendations */}
+              {buttons?.length ? (
+                <>
+                  <p className="text-base italic text-left mt-3 mb-1">Recommended Demos</p>
+                  <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {buttons.map((b, idx) => (
+                      <div key={`${(b.title || b.label || "demo")}-${idx}`} className="relative">
+                        <DemoButton
+                          item={{ title: b.title || b.label, description: b.description }}
+                          idx={idx}
+                          onClick={() =>
+                            setSelectedDemoAndLoadRelated({
+                              title: b.title || b.label,
+                              url: b.url || b.value,
+                              description: b.description,
+                            })
+                          }
+                        />
+                      </div>
                     ))}
                   </div>
                 </>
               ) : null}
-
-              {/* Grouped related demos for the selected video */}
-              <RelatedGroups />
             </div>
           )}
+        </div>
 
-          {/* Debug panel */}
-          {debugOn ? (
-            <div style={{ marginTop: 12 }}>
-              <details open>
-                <summary style={{ cursor: "pointer", userSelect: "none" }}>Debug</summary>
-                <pre style={{ fontSize: 12, color: "#374151", background: "#f9fafb", padding: 12, border: "1px solid #e5e7eb", borderRadius: 8, whiteSpace: "pre-wrap" }}>
-{JSON.stringify(
-  {
-    status,
-    apiBase,
-    alias,
-    preferredBotId,
-    botId,
-    bot: bot ? { id: bot.id, name: bot.name } : null,
-    allDemos: asArray(allDemos).length,
-    selectedDemo: selectedDemo ? { id: selectedDemo.id, title: selectedDemo.title } : null,
-    relatedGroups: Object.keys(related || {}).length,
-    askRecs: asArray(askRecs).length,
-    inputLen: (input || "").length,
-    lastError: lastErrorRef.current ? { message: lastErrorRef.current.message, status: lastErrorRef.current.status } : null,
-  },
-  null,
-  2
-)}
-                </pre>
-              </details>
-            </div>
-          ) : null}
+        {/* Input */}
+        <div className="px-4 py-3 border-top border-gray-400 border-t">
+          <div className="relative w-full">
+            <textarea
+              rows={1}
+              className="w-full border border-gray-400 rounded-lg px-4 py-2 pr-14 text-base resize-y min-h-[3rem] max-h-[160px]"
+              placeholder="Ask your question here"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
+            />
+            <button
+              aria-label="Send"
+              onClick={sendMessage}
+              className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
+            >
+              <ArrowUpCircleIcon className="w-8 h-8 text-red-600 hover:text-red-700" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
