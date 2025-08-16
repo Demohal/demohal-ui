@@ -1,9 +1,16 @@
-// AskAssistant.jsx — ask mode restored + robust mapping + grouped related demos
+// AskAssistant.jsx — debug-heavy build (use ?debug=1 to enable logs)
 
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
+
+/* --------------------------------- Debug --------------------------------- */
+const qs = new URLSearchParams(window.location.search);
+const DEBUG = qs.get("debug") === "1";
+const dlog = (...args) => {
+  if (DEBUG) console.log("[UI]", ...args);
+};
 
 /* ----------------------------- tiny utilities ---------------------------- */
 const list = (v) => (Array.isArray(v) ? v : []); // safe list
@@ -75,10 +82,14 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
       try {
         const params = new URLSearchParams();
         params.set("bot_id", botId);
+        dlog("[browse] GET /browse-demos", params.toString());
         const res = await fetch(`${apiBase}/browse-demos?${params.toString()}`);
         const data = await res.json();
-        if (!cancel) setDemos(Array.isArray(data?.demos) ? data.demos : []);
-      } catch {
+        const lst = Array.isArray(data?.demos) ? data.demos : [];
+        dlog("[browse] demos loaded:", lst.length, lst.slice(0, 2));
+        if (!cancel) setDemos(lst);
+      } catch (e) {
+        console.error("[browse] failed:", e);
         if (!cancel) setDemos([]);
       } finally {
         if (!cancel) setLoading(false);
@@ -92,11 +103,13 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
   const filtered = useMemo(() => {
     if (!q.trim()) return demos;
     const needle = q.toLowerCase();
-    return demos.filter(
+    const out = demos.filter(
       (d) =>
         (d.title || "").toLowerCase().includes(needle) ||
         (d.description || "").toLowerCase().includes(needle)
     );
+    dlog("[browse] filter", { q, in: demos.length, out: out.length });
+    return out;
   }, [demos, q]);
 
   if (loading) return <p className="text-gray-500">Loading demos...</p>;
@@ -121,7 +134,10 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
             <DemoButton
               item={{ title: d.title, description: d.description }}
               idx={idx}
-              onClick={() => onPick(d)}
+              onClick={() => {
+                dlog("[browse] pick", d);
+                onPick(d);
+              }}
             />
           </div>
         ))}
@@ -148,8 +164,8 @@ export default function AskAssistant() {
 
   // alias → bot lookup
   const alias = useMemo(() => {
-    const qs = new URLSearchParams(window.location.search);
-    return (qs.get("alias") || qs.get("a") || "").trim();
+    const q = new URLSearchParams(window.location.search);
+    return (q.get("alias") || q.get("a") || "").trim();
   }, []);
   const [bot, setBot] = useState(null);
   const [botId, setBotId] = useState("");
@@ -163,16 +179,19 @@ export default function AskAssistant() {
         return;
       }
       try {
+        dlog("[boot] GET /bot-by-alias", alias);
         const res = await fetch(`${apiBase}/bot-by-alias?alias=${encodeURIComponent(alias)}`);
         if (!res.ok) throw new Error("Bad alias");
         const data = await res.json();
         const b = data?.bot;
+        dlog("[boot] bot:", b);
         if (!b?.id) throw new Error("Bad alias");
         if (!cancel) {
           setBot(b);
           setBotId(b.id);
         }
-      } catch {
+      } catch (e) {
+        console.error("[boot] alias lookup failed:", e);
         if (!cancel) setFatal("Invalid or inactive alias.");
       }
     })();
@@ -188,12 +207,15 @@ export default function AskAssistant() {
     try {
       const params = new URLSearchParams();
       params.set("bot_id", currentBotId);
+      dlog("[catalog] GET /browse-demos", params.toString());
       const res = await fetch(`${apiBase}/browse-demos?${params.toString()}`);
       const data = await res.json();
       const lst = Array.isArray(data?.demos) ? data.demos : [];
+      dlog("[catalog] demos count:", lst.length, lst.slice(0, 2));
       setAllDemos(lst);
       return lst;
-    } catch {
+    } catch (e) {
+      console.error("[catalog] load failed:", e);
       return [];
     }
   }
@@ -221,6 +243,7 @@ export default function AskAssistant() {
   }, [bot]);
   const currentTab = mode === "browse" ? "demos" : mode === "finished" ? "finished" : null;
   const handleTab = (key) => {
+    dlog("[tabs] click", key);
     if (key === "demos") return setMode("browse");
     if (key === "finished") return setMode("finished");
   };
@@ -263,17 +286,21 @@ export default function AskAssistant() {
   // set + trigger related fetch in effect
   function setSelectedDemoAndLoadRelated(demoLike) {
     const next = {
-      id: lookupDemoId(demoLike),
+      id: lookupDemoId(demoLike) || demoLike.id || "",
       title: demoLike.title || "",
       url: demoLike.url || demoLike.value || "",
       description: demoLike.description || "",
     };
+    dlog("[video] setSelectedDemo", next);
     setSelectedDemo(next);
     setMode("ask"); // video layout lives in "ask" mode
   }
 
   useEffect(() => {
     if (!selectedDemo || !botId) return;
+    const demoKey = selectedDemo.id || selectedDemo.url || selectedDemo.title || "unknown";
+    dlog("[related] effect trigger for", demoKey);
+
     (async () => {
       try {
         // try grouped endpoint
@@ -281,21 +308,27 @@ export default function AskAssistant() {
         {
           const url = `${apiBase}/related-demos-grouped?bot_id=${encodeURIComponent(
             botId
-          )}&demo_id=${encodeURIComponent(selectedDemo.id)}`;
+          )}&demo_id=${encodeURIComponent(selectedDemo.id || "")}`;
+          dlog("[related] GET grouped", url);
           const res = await fetch(url);
           if (res.ok) {
             const data = await res.json();
             groupsObj = data?.groups || null;
+            dlog("[related] grouped ok:", groupsObj && Object.keys(groupsObj));
+          } else {
+            dlog("[related] grouped status:", res.status);
           }
         }
         // fallback to flat endpoint
         if (!groupsObj) {
           const url = `${apiBase}/related-demos?bot_id=${encodeURIComponent(
             botId
-          )}&demo_id=${encodeURIComponent(selectedDemo.id)}&limit=24`;
+          )}&demo_id=${encodeURIComponent(selectedDemo.id || "")}&limit=24`;
+          dlog("[related] GET flat", url);
           const res2 = await fetch(url);
           const data2 = await res2.json();
           const flat = (data2?.related || data2?.buttons || data2?.demos || []).map((d) => d);
+          dlog("[related] flat size:", flat.length, flat.slice(0, 3));
           groupsObj = flat.length ? { Related: flat } : {};
         }
 
@@ -307,9 +340,12 @@ export default function AskAssistant() {
             : raw && typeof raw === "object"
             ? Object.values(raw)
             : [];
-          const norm = rows.map((r) => unifyItem(r, catalog)).filter((b) => b.title && (b.url || lookupDemoId(b)));
+          const norm = rows
+            .map((r) => unifyItem(r, catalog))
+            .filter((b) => b.title && (b.url || lookupDemoId(b)));
           if (norm.length) enriched[name] = norm;
         }
+        dlog("[related] enriched groups:", Object.fromEntries(Object.entries(enriched).map(([k, v]) => [k, v.length])));
         setRelated(enriched);
       } catch (e) {
         console.error("[related] fetch failed:", e);
@@ -317,7 +353,7 @@ export default function AskAssistant() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [botId, selectedDemo?.id]);
+  }, [botId, selectedDemo?.id, selectedDemo?.url, selectedDemo?.title]);
 
   /* -------------------------------- ask flow ----------------------------- */
   async function sendMessage() {
@@ -331,8 +367,10 @@ export default function AskAssistant() {
 
     try {
       const payload = { visitor_id: "local-ui", user_question: outgoing, bot_id: botId };
+      dlog("[ask] POST /demo-hal payload:", payload);
       const res = await axios.post(`${apiBase}/demo-hal`, payload);
       const data = res.data || {};
+      dlog("[ask] response keys:", Object.keys(data || {}));
 
       if (data.error_code || data.error) {
         console.error("API error:", data.error_code || data.error, data.error_message || "");
@@ -349,6 +387,7 @@ export default function AskAssistant() {
       const catalog = await ensureAllDemosLoaded(botId);
       const normalized = list(recs).map((r) => unifyItem(r, catalog));
       const finalBtns = normalized.filter((b) => b.title);
+      dlog("[ask] recs normalized:", finalBtns.length, finalBtns.slice(0, 3));
       setAskRecs(finalBtns);
     } catch (e) {
       console.error("demo-hal failed:", e);
@@ -472,13 +511,14 @@ export default function AskAssistant() {
                               <DemoButton
                                 item={{ title: b.title || b.label, description: b.description }}
                                 idx={idx}
-                                onClick={() =>
+                                onClick={() => {
+                                  dlog("[related] pick", b);
                                   setSelectedDemoAndLoadRelated({
                                     title: b.title || b.label,
                                     url: b.url || b.value,
                                     description: b.description,
-                                  })
-                                }
+                                  });
+                                }}
                               />
                             </div>
                           ))}
@@ -502,13 +542,14 @@ export default function AskAssistant() {
                         <DemoButton
                           item={{ title: b.title, description: b.description }}
                           idx={idx}
-                          onClick={() =>
+                          onClick={() => {
+                            dlog("[ask] pick", b);
                             setSelectedDemoAndLoadRelated({
                               title: b.title,
                               url: b.url,
                               description: b.description,
-                            })
-                          }
+                            });
+                          }}
                         />
                       </div>
                     ))}
@@ -545,6 +586,28 @@ export default function AskAssistant() {
             </button>
           </div>
         </div>
+
+        {/* Inline debug panel */}
+        {DEBUG ? (
+          <div className="px-4 pb-3 border-t border-gray-200 text-left text-xs text-gray-700 bg-gray-50">
+            <pre className="whitespace-pre-wrap">
+{JSON.stringify(
+  {
+    mode,
+    botId,
+    alias,
+    allDemos: allDemos.length,
+    selectedDemo,
+    related: Object.fromEntries(Object.entries(related || {}).map(([k, v]) => [k, Array.isArray(v) ? v.length : 0])),
+    askRecs: askRecs.length,
+    inputLen: input.length,
+  },
+  null,
+  2
+)}
+            </pre>
+          </div>
+        ) : null}
       </div>
     </div>
   );
