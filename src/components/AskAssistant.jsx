@@ -1,4 +1,4 @@
-// AskAssistant.jsx — robust mapping + catalog enrichment for related demos
+// AskAssistant.jsx — ask mode restored + robust mapping + grouped related demos
 
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
@@ -6,7 +6,7 @@ import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
 
 /* ----------------------------- tiny utilities ---------------------------- */
-const list = (v) => (Array.isArray(v) ? v : []); // safe mapper
+const list = (v) => (Array.isArray(v) ? v : []); // safe list
 
 function tooltipAlignClasses(idx) {
   const mobile = "left-1/2 -translate-x-1/2";
@@ -137,13 +137,12 @@ export default function AskAssistant() {
   const [mode, setMode] = useState("ask"); // "ask" | "browse" | "finished"
   const [selectedDemo, setSelectedDemo] = useState(null);
   const [allDemos, setAllDemos] = useState([]); // catalog cache
-  const [buttons, setButtons] = useState([]); // ask-flow recs
+  const [askRecs, setAskRecs] = useState([]); // ask-flow recs
   const [related, setRelated] = useState({}); // grouped related demos
 
   const [input, setInput] = useState("");
-  const [lastQuestion, setLastQuestion] = useState("");
   const [responseText, setResponseText] = useState(
-    "Hello. I am here to answer any questions you may have about what we offer or who we are. Please enter your question below to begin."
+    "Hello. We’re here to help. Ask anything about our demos or products below."
   );
   const [loading, setLoading] = useState(false);
 
@@ -212,13 +211,6 @@ export default function AskAssistant() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiBase, botId]);
 
-  /* kick related when demo + bot ready */
-  useEffect(() => {
-    if (!selectedDemo || !botId) return;
-    fetchRelatedForSelected(selectedDemo);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [botId, selectedDemo]);
-
   /* tabs */
   const tabs = useMemo(() => {
     const lst = [];
@@ -233,11 +225,9 @@ export default function AskAssistant() {
     if (key === "finished") return setMode("finished");
   };
 
-  /* ------------------------------- ask flow ------------------------------ */
+  /* ------------------------------- helpers ------------------------------- */
   function unifyItem(r, catalog = []) {
-    // r may be {id,title,url,description} or just id/url/title
     if (typeof r === "string") {
-      // try id match, else title match, else url match
       const meta =
         catalog.find((d) => d.id === r) ||
         catalog.find((d) => (d.title || "").toLowerCase() === r.toLowerCase()) ||
@@ -248,8 +238,7 @@ export default function AskAssistant() {
         : { id: "", title: r, url: "", description: "" };
     }
 
-    const id =
-      r.id || r.demo_id || r.demo_video_id || r.video_id || r.value || r.key || "";
+    const id = r.id || r.demo_id || r.demo_video_id || r.video_id || r.value || r.key || "";
     let meta = id ? catalog.find((d) => d.id === id) || null : null;
 
     if (!meta && r.url) meta = catalog.find((d) => d.url === r.url) || null;
@@ -263,14 +252,81 @@ export default function AskAssistant() {
     };
   }
 
+  function lookupDemoId(item) {
+    if (item?.id) return item.id;
+    const byUrl = allDemos.find((d) => d.url && item?.url && d.url === item.url);
+    if (byUrl) return byUrl.id;
+    const byTitle = allDemos.find((d) => d.title && item?.title && d.title === item.title);
+    return byTitle ? byTitle.id : "";
+  }
+
+  // set + trigger related fetch in effect
+  function setSelectedDemoAndLoadRelated(demoLike) {
+    const next = {
+      id: lookupDemoId(demoLike),
+      title: demoLike.title || "",
+      url: demoLike.url || demoLike.value || "",
+      description: demoLike.description || "",
+    };
+    setSelectedDemo(next);
+    setMode("ask"); // video layout lives in "ask" mode
+  }
+
+  useEffect(() => {
+    if (!selectedDemo || !botId) return;
+    (async () => {
+      try {
+        // try grouped endpoint
+        let groupsObj = null;
+        {
+          const url = `${apiBase}/related-demos-grouped?bot_id=${encodeURIComponent(
+            botId
+          )}&demo_id=${encodeURIComponent(selectedDemo.id)}`;
+          const res = await fetch(url);
+          if (res.ok) {
+            const data = await res.json();
+            groupsObj = data?.groups || null;
+          }
+        }
+        // fallback to flat endpoint
+        if (!groupsObj) {
+          const url = `${apiBase}/related-demos?bot_id=${encodeURIComponent(
+            botId
+          )}&demo_id=${encodeURIComponent(selectedDemo.id)}&limit=24`;
+          const res2 = await fetch(url);
+          const data2 = await res2.json();
+          const flat = (data2?.related || data2?.buttons || data2?.demos || []).map((d) => d);
+          groupsObj = flat.length ? { Related: flat } : {};
+        }
+
+        const catalog = await ensureAllDemosLoaded(botId);
+        const enriched = {};
+        for (const [name, raw] of Object.entries(groupsObj || {})) {
+          const rows = Array.isArray(raw)
+            ? raw
+            : raw && typeof raw === "object"
+            ? Object.values(raw)
+            : [];
+          const norm = rows.map((r) => unifyItem(r, catalog)).filter((b) => b.title && (b.url || lookupDemoId(b)));
+          if (norm.length) enriched[name] = norm;
+        }
+        setRelated(enriched);
+      } catch (e) {
+        console.error("[related] fetch failed:", e);
+        setRelated({});
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [botId, selectedDemo?.id]);
+
+  /* -------------------------------- ask flow ----------------------------- */
   async function sendMessage() {
     if (!input.trim() || !botId) return;
     const outgoing = input.trim();
     setInput("");
     setMode("ask");
     setSelectedDemo(null);
-    setLastQuestion(outgoing);
-    setButtons([]);
+    setAskRecs([]);
     setLoading(true);
 
     try {
@@ -293,72 +349,14 @@ export default function AskAssistant() {
       const catalog = await ensureAllDemosLoaded(botId);
       const normalized = list(recs).map((r) => unifyItem(r, catalog));
       const finalBtns = normalized.filter((b) => b.title);
-      setButtons(finalBtns);
+      setAskRecs(finalBtns);
     } catch (e) {
       console.error("demo-hal failed:", e);
       setResponseText("Sorry, something went wrong. Please try again.");
-      setButtons([]);
+      setAskRecs([]);
     } finally {
       setLoading(false);
     }
-  }
-
-  function lookupDemoId(item) {
-    if (item?.id) return item.id;
-    const byUrl = allDemos.find((d) => d.url && item?.url && d.url === item.url);
-    if (byUrl) return byUrl.id;
-    const byTitle = allDemos.find((d) => d.title && item?.title && d.title === item.title);
-    return byTitle ? byTitle.id : "";
-  }
-
-  async function fetchRelatedForSelected(demo) {
-    try {
-      if (!demo?.id || !botId) return;
-
-      const url = `${apiBase}/related-demos-grouped?bot_id=${encodeURIComponent(
-        botId
-      )}&demo_id=${encodeURIComponent(demo.id)}`;
-      const res = await fetch(url);
-      const data = await res.json();
-
-      // groups from new endpoint OR synthesize from legacy
-      let groupsObj = data?.groups;
-      if (!groupsObj) {
-        const flat = (data?.related || data?.buttons || data?.demos || []).map((d) => d);
-        groupsObj = flat.length ? { Related: flat } : {};
-      }
-
-      const catalog = await ensureAllDemosLoaded(botId);
-
-      // normalize + enrich each group so every button has title/url
-      const enriched = {};
-      for (const [name, raw] of Object.entries(groupsObj || {})) {
-        const rows = Array.isArray(raw)
-          ? raw
-          : raw && typeof raw === "object"
-          ? Object.values(raw)
-          : [];
-        const norm = rows.map((r) => unifyItem(r, catalog)).filter((b) => b.title);
-        if (norm.length) enriched[name] = norm;
-      }
-
-      setRelated(enriched);
-    } catch (e) {
-      console.error("[related] fetch failed:", e);
-      setRelated({});
-    }
-  }
-
-  // defer fetch to effect so we never race on botId
-  function setSelectedDemoAndLoadRelated(demoLike) {
-    const next = {
-      id: lookupDemoId(demoLike),
-      title: demoLike.title || "",
-      url: demoLike.url || demoLike.value || "",
-      description: demoLike.description || "",
-    };
-    setSelectedDemo(next);
-    setMode("ask"); // video layout lives in "ask" mode
   }
 
   const breadcrumb = selectedDemo
@@ -491,7 +489,35 @@ export default function AskAssistant() {
                 </div>
               ) : null}
             </div>
-          ) : null}
+          ) : (
+            /* -------- ASK MODE (welcome + answer + recommended buttons) -------- */
+            <div className="text-left space-y-4">
+              <p className="text-gray-800 whitespace-pre-wrap">{responseText}</p>
+              {askRecs.length ? (
+                <>
+                  <p className="text-base italic mb-1">Recommended Demos</p>
+                  <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {askRecs.map((b, idx) => (
+                      <div key={`${b.id || b.url || b.title || idx}`} className="relative">
+                        <DemoButton
+                          item={{ title: b.title, description: b.description }}
+                          idx={idx}
+                          onClick={() =>
+                            setSelectedDemoAndLoadRelated({
+                              title: b.title,
+                              url: b.url,
+                              description: b.description,
+                            })
+                          }
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : null}
+              {loading ? <p className="text-gray-500">Thinking…</p> : null}
+            </div>
+          )}
         </div>
 
         {/* Input */}
