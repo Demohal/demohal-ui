@@ -5,6 +5,9 @@ import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
 
+// Small guard so we can safely map any list without crashing
+const list = (v) => (Array.isArray(v) ? v : []);
+
 /* --------------------------- Tooltip helpers --------------------------- */
 function tooltipAlignClasses(idx) {
   // Mobile: center; Desktop: left/center/right by column
@@ -123,7 +126,7 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
 
       {/* Title-only cards; tooltips confined by this grid container */}
       <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-        {filtered.map((d, idx) => (
+        {list(filtered).map((d, idx) => (
           <div key={d.id || d.url || d.title} className="relative">
             <DemoButton
               item={{ title: d.title, description: d.description }}
@@ -280,7 +283,7 @@ export default function AskAssistant() {
       const catalog = await ensureAllDemosLoaded(botId);
       
       // Join by id → url/description (fallbacks: url, then title)
-      const normalized = recs.map((r) => {
+      const normalized = list(recs).map((r) => {
         const id = r.id ?? r.demo_id ?? null;
         let meta = null;
         if (id) meta = catalog.find((d) => d.id === id) || null;
@@ -406,7 +409,7 @@ export default function AskAssistant() {
             className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             role="tablist"
           >
-            {tabs.map((t) => {
+            {list(tabs).map((t) => {
               const active = currentTab === t.key;
               return (
                 <button
@@ -458,11 +461,20 @@ export default function AskAssistant() {
               {/* Related demos grouped by dimension */}
               {related && Object.keys(related).length ? (
                 <div className="space-y-6">
-                  {Object.entries(related).map(([groupName, items]) => (
+                  {Object.entries(related || {}).map(([groupName, items]) => (
                     <section key={groupName}>
                       <p className="text-base italic text-left mb-1">{groupName}</p>
                       <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-                        {(items || []).map((b, idx) => (
+                        {(() => {
+                          const rows = Array.isArray(items)
+                            ? items
+                            : (items && typeof items === "object")
+                              ? Object.values(items)
+                              : [];
+                          return rows.map((b, idx) => (
+                            // ...
+                          ));
+                        })()}
                           <div key={`${groupName}-${(b.id || b.url || b.title || idx)}`} className="relative">
                             <DemoButton
                               item={{ title: b.title || b.label, description: b.description }}
@@ -506,7 +518,7 @@ export default function AskAssistant() {
                 <>
                   <p className="text-base italic text-left mt-3 mb-1">Recommended Demos</p>
                   <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {buttons.map((b, idx) => (
+                    {list(buttons).map((b, idx) => (
                       <div key={`${(b.title || b.label || "demo")}-${idx}`} className="relative">
                         <DemoButton
                           item={{ title: b.title || b.label, description: b.description }}
