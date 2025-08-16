@@ -1,614 +1,423 @@
-// AskAssistant.jsx — debug-heavy build (use ?debug=1 to enable logs)
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
-import React, { useEffect, useMemo, useState } from "react";
-import axios from "axios";
-import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
-import logo from "../assets/logo.png";
-
-/* --------------------------------- Debug --------------------------------- */
-const qs = new URLSearchParams(window.location.search);
-const DEBUG = qs.get("debug") === "1";
-const dlog = (...args) => {
-  if (DEBUG) console.log("[UI]", ...args);
-};
-
-/* ----------------------------- tiny utilities ---------------------------- */
-const list = (v) => (Array.isArray(v) ? v : []); // safe list
-
-function tooltipAlignClasses(idx) {
-  const mobile = "left-1/2 -translate-x-1/2";
-  const col = idx % 3;
-  if (col === 0) return `${mobile} md:left-0 md:translate-x-0`;
-  if (col === 2) return `${mobile} md:right-0 md:left-auto md:translate-x-0`;
-  return `${mobile}`;
-}
-
-/* A single, uniform demo button used everywhere (Ask, Video, Browse) */
+/** Simple pill-style demo button */
 function DemoButton({ item, idx, onClick }) {
+  const title = item?.title || item?.label || "Demo";
+  const desc = item?.description || "";
   return (
     <button
       onClick={onClick}
-      className={[
-        "group relative w-full h-20",
-        "flex items-center justify-center text-center",
-        "rounded-xl border border-gray-700",
-        "bg-gradient-to-b from-gray-600 to-gray-700 text-white hover:from-gray-500 hover:to-gray-600",
-        "px-3 transition-shadow hover:shadow-md",
-      ].join(" ")}
-      title={item.title}
+      className="w-full text-left rounded-xl px-5 py-6 bg-slate-700 text-white hover:bg-slate-600 shadow"
+      aria-label={`demo-${idx}`}
     >
-      <span
-        className="font-semibold text-sm leading-snug w-full"
-        style={{
-          display: "-webkit-box",
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: "vertical",
-          overflow: "hidden",
-          wordBreak: "break-word",
-        }}
-      >
-        {item.title || "Demo"}
-      </span>
-
-      {item.description ? (
-        <div
-          className={[
-            "pointer-events-none absolute z-30 hidden group-hover:block",
-            "bottom-full mb-2",
-            tooltipAlignClasses(idx),
-            "w-[95vw] max-w-[95vw] md:w-[200%] md:max-w-[200%]",
-            "rounded-lg border border-gray-300 bg-white text-black",
-            "px-3 py-2 text-xs leading-snug shadow-xl",
-          ].join(" ")}
-        >
-          {item.description}
-        </div>
-      ) : null}
+      <div className="font-semibold">{title}</div>
+      {desc ? <div className="opacity-80 text-sm mt-1">{desc}</div> : null}
     </button>
   );
 }
 
-/* ------------------------------- Browse tab ------------------------------ */
-function BrowseDemosPanel({ apiBase, botId, onPick }) {
-  const [demos, setDemos] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [q, setQ] = useState("");
+/** One-liner helper */
+const safeArr = (v) => (Array.isArray(v) ? v : []);
 
+/** Turn a flat list into a single default group */
+const asDefaultGroup = (list, group = "Recommended") => ({
+  [group]: safeArr(list),
+});
+
+/** Normalize a messy backend payload into groups -> array<demo> */
+function normalizeRelatedPayload(payload) {
+  // Accept shapes:
+  //  - { groups: { functions:[...], modules:[...], industries:[...] } }
+  //  - { related: [...] }
+  //  - { demos: [...] } or { buttons: [...] }
+  if (!payload || typeof payload !== "object") return {};
+
+  if (payload.groups && typeof payload.groups === "object") {
+    const out = {};
+    for (const [g, v] of Object.entries(payload.groups)) {
+      if (Array.isArray(v)) out[g] = v;
+    }
+    return out;
+  }
+  if (Array.isArray(payload.related)) return asDefaultGroup(payload.related);
+  if (Array.isArray(payload.demos)) return asDefaultGroup(payload.demos);
+  if (Array.isArray(payload.buttons)) return asDefaultGroup(payload.buttons);
+  return {};
+}
+
+export default function AskAssistant({
+  apiBase = "https://demohal-app.onrender.com",
+  alias = "demo",
+}) {
+  // core state
+  const [mode, setMode] = useState("ask"); // "ask" | "browse" | "finished"
+  const [botId, setBotId] = useState("");
+  const [allDemos, setAllDemos] = useState([]);
+  const [selectedDemo, setSelectedDemo] = useState(null);
+
+  // results
+  const [answer, setAnswer] = useState("");
+  const [askRecs, setAskRecs] = useState([]); // recommendations from /demo-hal
+  const [related, setRelated] = useState({}); // grouped recommendations for a selected demo
+
+  // debug
+  const [netlog, setNetlog] = useState([]);
+  const appendLog = (line) =>
+    setNetlog((prev) => [...prev.slice(-40), `${new Date().toISOString()} ${line}`]);
+
+  // input
+  const [input, setInput] = useState("");
+  const inputRef = useRef(null);
+
+  /** Resolve bot by alias on mount */
   useEffect(() => {
-    let cancel = false;
+    let active = true;
     (async () => {
-      if (!botId) return;
-      setLoading(true);
       try {
-        const params = new URLSearchParams();
-        params.set("bot_id", botId);
-        dlog("[browse] GET /browse-demos", params.toString());
-        const res = await fetch(`${apiBase}/browse-demos?${params.toString()}`);
+        appendLog(`[init] GET /bot-by-alias?alias=${alias}`);
+        const res = await fetch(`${apiBase}/bot-by-alias?alias=${encodeURIComponent(alias)}`);
         const data = await res.json();
-        const lst = Array.isArray(data?.demos) ? data.demos : [];
-        dlog("[browse] demos loaded:", lst.length, lst.slice(0, 2));
-        if (!cancel) setDemos(lst);
+        if (!active) return;
+
+        const id = data?.bot?.id || data?.id || data?.bot_id || "";
+        setBotId(id || "");
+        appendLog(`[init] botId=${id || "(missing)"}`);
+
+        // pre-load demos for Browse
+        if (id) {
+          appendLog(`[init] GET /browse-demos?bot_id=${id}`);
+          const br = await fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(id)}`);
+          const bj = await br.json();
+          const demos = safeArr(bj?.demos).map((d) => ({
+            id: d.id || d.demo_id || d.value || "",
+            title: d.title || d.label || "",
+            url: d.url || d.value || "",
+            description: d.description || "",
+          }));
+          setAllDemos(demos);
+          appendLog(`[init] browse count=${demos.length}`);
+        }
       } catch (e) {
-        console.error("[browse] failed:", e);
-        if (!cancel) setDemos([]);
-      } finally {
-        if (!cancel) setLoading(false);
+        appendLog(`[init][err] ${e?.message || e}`);
       }
     })();
     return () => {
-      cancel = true;
+      active = false;
     };
-  }, [apiBase, botId]);
+  }, [apiBase, alias]);
 
+  /** Fetch related for a picked demo (grouped first, fallback to flat) */
+  const fetchRelatedForSelected = async (demo) => {
+    if (!botId || !demo?.id) {
+      appendLog(`[related] skipped botId=${botId ? "ok" : "missing"} demo.id=${demo?.id || "missing"}`);
+      return;
+    }
+    try {
+      // grouped attempt
+      const gUrl = `${apiBase}/related-demos-grouped?bot_id=${encodeURIComponent(
+        botId
+      )}&demo_id=${encodeURIComponent(demo.id)}&limit=24`;
+      appendLog(`[related] GET ${gUrl}`);
+      let res = await fetch(gUrl);
+      if (res.ok) {
+        const gj = await res.json();
+        const groups = normalizeRelatedPayload(gj);
+        const groupsCount = Object.values(groups).reduce((a, v) => a + safeArr(v).length, 0);
+        appendLog(`[related] grouped ok groups=${Object.keys(groups).length} items=${groupsCount}`);
+
+        // Strip self if present
+        for (const [k, arr] of Object.entries(groups)) {
+          groups[k] = safeArr(arr).filter((x) => (x.id || x.demo_id || "") !== demo.id);
+        }
+        setRelated(groups);
+        return;
+      }
+
+      // fallback to flat
+      const fUrl = `${apiBase}/related-demos?bot_id=${encodeURIComponent(
+        botId
+      )}&demo_id=${encodeURIComponent(demo.id)}&limit=24`;
+      appendLog(`[related] GET ${fUrl} (fallback)`);
+      res = await fetch(fUrl);
+      const fj = await res.json();
+      const flatGroups = normalizeRelatedPayload(fj);
+      for (const [k, arr] of Object.entries(flatGroups)) {
+        flatGroups[k] = safeArr(arr).filter((x) => (x.id || x.demo_id || "") !== demo.id);
+      }
+      const itemsCount = Object.values(flatGroups).reduce((a, v) => a + safeArr(v).length, 0);
+      appendLog(`[related] flat ok items=${itemsCount}`);
+      setRelated(flatGroups);
+    } catch (e) {
+      appendLog(`[related][err] ${e?.message || e}`);
+    }
+  };
+
+  /** Ensure we auto-fetch related when selected changes */
+  useEffect(() => {
+    if (selectedDemo?.id && botId) {
+      fetchRelatedForSelected(selectedDemo);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDemo?.id, botId]);
+
+  /** Pick a demo from Browse and fetch related immediately */
+  const setSelectedDemoAndLoadRelated = (demo) => {
+    const picked = {
+      id: demo?.id || demo?.demo_id || "",
+      title: demo?.title || demo?.label || "",
+      url: demo?.url || demo?.value || "",
+      description: demo?.description || "",
+    };
+    setSelectedDemo(picked);
+    setMode("ask"); // keep single-screen UX
+    setRelated({});
+    appendLog(`[pick] ${picked.id} "${picked.title}"`);
+    fetchRelatedForSelected(picked);
+  };
+
+  /** Ask the assistant */
+  const ask = async () => {
+    if (!botId || !input.trim()) return;
+    try {
+      const body = {
+        bot_id: botId,
+        user_question: input.trim(),
+      };
+      appendLog(`[ask] POST /demo-hal (len=${body.user_question.length})`);
+      const res = await fetch(`${apiBase}/demo-hal`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+
+      setAnswer(data?.response_text || data?.text || "");
+      // Normalize possible rec fields
+      const raw =
+        safeArr(data?.buttons)?.length
+          ? data.buttons
+          : safeArr(data?.demos)?.length
+          ? data.demos
+          : safeArr(data?.related);
+      const mapped = safeArr(raw).map((d) => ({
+        id: d.id || d.demo_id || "",
+        title: d.title || d.label || "",
+        url: d.url || d.value || "",
+        description: d.description || "",
+      }));
+      setAskRecs(mapped);
+      appendLog(`[ask] recs=${mapped.length}`);
+    } catch (e) {
+      appendLog(`[ask][err] ${e?.message || e}`);
+    }
+  };
+
+  /** Browse-screen filter */
+  const [q, setQ] = useState("");
   const filtered = useMemo(() => {
-    if (!q.trim()) return demos;
-    const needle = q.toLowerCase();
-    const out = demos.filter(
+    const needle = q.trim().toLowerCase();
+    if (!needle) return allDemos;
+    return safeArr(allDemos).filter(
       (d) =>
         (d.title || "").toLowerCase().includes(needle) ||
         (d.description || "").toLowerCase().includes(needle)
     );
-    dlog("[browse] filter", { q, in: demos.length, out: out.length });
-    return out;
-  }, [demos, q]);
+  }, [q, allDemos]);
 
-  if (loading) return <p className="text-gray-500">Loading demos...</p>;
-  if (!demos.length) return <p className="text-gray-500">No demos available.</p>;
-
-  return (
-    <div className="text-left">
-      <p className="italic mb-3">Here are all demos in our library. Just click one to view.</p>
-
-      <div className="mb-3">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search demos…"
-          className="w-full border border-gray-300 rounded-lg px-3 py-2"
-        />
-      </div>
-
-      <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-        {list(filtered).map((d, idx) => (
-          <div key={d.id || d.url || d.title || idx} className="relative">
-            <DemoButton
-              item={{ title: d.title, description: d.description }}
-              idx={idx}
-              onClick={() => {
-                dlog("[browse] pick", d);
-                onPick(d);
-              }}
-            />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* --------------------------------- Main --------------------------------- */
-export default function AskAssistant() {
-  const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
-
-  const [mode, setMode] = useState("ask"); // "ask" | "browse" | "finished"
-  const [selectedDemo, setSelectedDemo] = useState(null);
-  const [allDemos, setAllDemos] = useState([]); // catalog cache
-  const [askRecs, setAskRecs] = useState([]); // ask-flow recs
-  const [related, setRelated] = useState({}); // grouped related demos
-
-  const [input, setInput] = useState("");
-  const [responseText, setResponseText] = useState(
-    "Hello. We’re here to help. Ask anything about our demos or products below."
-  );
-  const [loading, setLoading] = useState(false);
-
-  // alias → bot lookup
-  const alias = useMemo(() => {
-    const q = new URLSearchParams(window.location.search);
-    return (q.get("alias") || q.get("a") || "").trim();
-  }, []);
-  const [bot, setBot] = useState(null);
-  const [botId, setBotId] = useState("");
-  const [fatal, setFatal] = useState("");
-
-  useEffect(() => {
-    let cancel = false;
-    (async () => {
-      if (!alias) {
-        setFatal("Missing alias in URL.");
-        return;
-      }
-      try {
-        dlog("[boot] GET /bot-by-alias", alias);
-        const res = await fetch(`${apiBase}/bot-by-alias?alias=${encodeURIComponent(alias)}`);
-        if (!res.ok) throw new Error("Bad alias");
-        const data = await res.json();
-        const b = data?.bot;
-        dlog("[boot] bot:", b);
-        if (!b?.id) throw new Error("Bad alias");
-        if (!cancel) {
-          setBot(b);
-          setBotId(b.id);
-        }
-      } catch (e) {
-        console.error("[boot] alias lookup failed:", e);
-        if (!cancel) setFatal("Invalid or inactive alias.");
-      }
-    })();
-    return () => {
-      cancel = true;
+  /** Render helpers */
+  const Debug = () => {
+    const obj = {
+      mode,
+      botId,
+      alias,
+      allDemos: allDemos.length,
+      selectedDemo,
+      related,
+      askRecs: askRecs.length,
+      inputLen: input.length,
     };
-  }, [alias, apiBase]);
-
-  /* catalog for enrichment / fallbacks */
-  async function ensureAllDemosLoaded(currentBotId) {
-    if (!currentBotId) return [];
-    if (allDemos.length) return allDemos;
-    try {
-      const params = new URLSearchParams();
-      params.set("bot_id", currentBotId);
-      dlog("[catalog] GET /browse-demos", params.toString());
-      const res = await fetch(`${apiBase}/browse-demos?${params.toString()}`);
-      const data = await res.json();
-      const lst = Array.isArray(data?.demos) ? data.demos : [];
-      dlog("[catalog] demos count:", lst.length, lst.slice(0, 2));
-      setAllDemos(lst);
-      return lst;
-    } catch (e) {
-      console.error("[catalog] load failed:", e);
-      return [];
-    }
-  }
-
-  useEffect(() => {
-    let cancel = false;
-    (async () => {
-      if (!botId) return;
-      const lst = await ensureAllDemosLoaded(botId);
-      if (!cancel && lst.length && !allDemos.length) setAllDemos(lst);
-    })();
-    return () => {
-      cancel = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiBase, botId]);
-
-  /* tabs */
-  const tabs = useMemo(() => {
-    const lst = [];
-    if (bot?.show_browse_demos) lst.push({ key: "demos", label: "Browse Demos" });
-    if (bot?.show_schedule_meeting) lst.push({ key: "meeting", label: "Schedule Meeting" });
-    lst.push({ key: "finished", label: "Finished" });
-    return lst;
-  }, [bot]);
-  const currentTab = mode === "browse" ? "demos" : mode === "finished" ? "finished" : null;
-  const handleTab = (key) => {
-    dlog("[tabs] click", key);
-    if (key === "demos") return setMode("browse");
-    if (key === "finished") return setMode("finished");
+    return (
+      <pre className="text-xs bg-slate-50 border rounded p-3 overflow-auto max-h-64 mt-4">
+        {JSON.stringify(obj, null, 2)}
+      </pre>
+    );
   };
 
-  /* ------------------------------- helpers ------------------------------- */
-  function unifyItem(r, catalog = []) {
-    if (typeof r === "string") {
-      const meta =
-        catalog.find((d) => d.id === r) ||
-        catalog.find((d) => (d.title || "").toLowerCase() === r.toLowerCase()) ||
-        catalog.find((d) => d.url === r) ||
-        null;
-      return meta
-        ? { id: meta.id, title: meta.title, url: meta.url, description: meta.description }
-        : { id: "", title: r, url: "", description: "" };
-    }
-
-    const id = r.id || r.demo_id || r.demo_video_id || r.video_id || r.value || r.key || "";
-    let meta = id ? catalog.find((d) => d.id === id) || null : null;
-
-    if (!meta && r.url) meta = catalog.find((d) => d.url === r.url) || null;
-    if (!meta && r.title) meta = catalog.find((d) => d.title === r.title) || null;
-
-    return {
-      id: id || meta?.id || "",
-      title: r.title || r.label || meta?.title || "",
-      url: r.url || r.value || meta?.url || "",
-      description: r.description || meta?.description || "",
-    };
-  }
-
-  function lookupDemoId(item) {
-    if (item?.id) return item.id;
-    const byUrl = allDemos.find((d) => d.url && item?.url && d.url === item.url);
-    if (byUrl) return byUrl.id;
-    const byTitle = allDemos.find((d) => d.title && item?.title && d.title === item.title);
-    return byTitle ? byTitle.id : "";
-  }
-
-  // set + trigger related fetch in effect
-  function setSelectedDemoAndLoadRelated(demoLike) {
-    const next = {
-      id: lookupDemoId(demoLike) || demoLike.id || "",
-      title: demoLike.title || "",
-      url: demoLike.url || demoLike.value || "",
-      description: demoLike.description || "",
-    };
-    dlog("[video] setSelectedDemo", next);
-    setSelectedDemo(next);
-    setMode("ask"); // video layout lives in "ask" mode
-  }
-
-  useEffect(() => {
-    if (!selectedDemo || !botId) return;
-    const demoKey = selectedDemo.id || selectedDemo.url || selectedDemo.title || "unknown";
-    dlog("[related] effect trigger for", demoKey);
-
-    (async () => {
-      try {
-        // try grouped endpoint
-        let groupsObj = null;
-        {
-          const url = `${apiBase}/related-demos-grouped?bot_id=${encodeURIComponent(
-            botId
-          )}&demo_id=${encodeURIComponent(selectedDemo.id || "")}`;
-          dlog("[related] GET grouped", url);
-          const res = await fetch(url);
-          if (res.ok) {
-            const data = await res.json();
-            groupsObj = data?.groups || null;
-            dlog("[related] grouped ok:", groupsObj && Object.keys(groupsObj));
-          } else {
-            dlog("[related] grouped status:", res.status);
-          }
-        }
-        // fallback to flat endpoint
-        if (!groupsObj) {
-          const url = `${apiBase}/related-demos?bot_id=${encodeURIComponent(
-            botId
-          )}&demo_id=${encodeURIComponent(selectedDemo.id || "")}&limit=24`;
-          dlog("[related] GET flat", url);
-          const res2 = await fetch(url);
-          const data2 = await res2.json();
-          const flat = (data2?.related || data2?.buttons || data2?.demos || []).map((d) => d);
-          dlog("[related] flat size:", flat.length, flat.slice(0, 3));
-          groupsObj = flat.length ? { Related: flat } : {};
-        }
-
-        const catalog = await ensureAllDemosLoaded(botId);
-        const enriched = {};
-        for (const [name, raw] of Object.entries(groupsObj || {})) {
-          const rows = Array.isArray(raw)
-            ? raw
-            : raw && typeof raw === "object"
-            ? Object.values(raw)
-            : [];
-          const norm = rows
-            .map((r) => unifyItem(r, catalog))
-            .filter((b) => b.title && (b.url || lookupDemoId(b)));
-          if (norm.length) enriched[name] = norm;
-        }
-        dlog("[related] enriched groups:", Object.fromEntries(Object.entries(enriched).map(([k, v]) => [k, v.length])));
-        setRelated(enriched);
-      } catch (e) {
-        console.error("[related] fetch failed:", e);
-        setRelated({});
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [botId, selectedDemo?.id, selectedDemo?.url, selectedDemo?.title]);
-
-  /* -------------------------------- ask flow ----------------------------- */
-  async function sendMessage() {
-    if (!input.trim() || !botId) return;
-    const outgoing = input.trim();
-    setInput("");
-    setMode("ask");
-    setSelectedDemo(null);
-    setAskRecs([]);
-    setLoading(true);
-
-    try {
-      const payload = { visitor_id: "local-ui", user_question: outgoing, bot_id: botId };
-      dlog("[ask] POST /demo-hal payload:", payload);
-      const res = await axios.post(`${apiBase}/demo-hal`, payload);
-      const data = res.data || {};
-      dlog("[ask] response keys:", Object.keys(data || {}));
-
-      if (data.error_code || data.error) {
-        console.error("API error:", data.error_code || data.error, data.error_message || "");
-      }
-
-      setResponseText(data.response_text || "");
-
-      const recs = Array.isArray(data.demos)
-        ? data.demos
-        : Array.isArray(data.buttons)
-        ? data.buttons
-        : [];
-
-      const catalog = await ensureAllDemosLoaded(botId);
-      const normalized = list(recs).map((r) => unifyItem(r, catalog));
-      const finalBtns = normalized.filter((b) => b.title);
-      dlog("[ask] recs normalized:", finalBtns.length, finalBtns.slice(0, 3));
-      setAskRecs(finalBtns);
-    } catch (e) {
-      console.error("demo-hal failed:", e);
-      setResponseText("Sorry, something went wrong. Please try again.");
-      setAskRecs([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const breadcrumb = selectedDemo
-    ? selectedDemo.title || "Selected Demo"
-    : mode === "browse"
-    ? "Browse All Demos"
-    : "Ask the Assistant";
-
-  if (fatal) {
-    return (
-      <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
-        <div className="text-red-600 font-semibold">{fatal}</div>
-      </div>
-    );
-  }
-  if (!botId) {
-    return (
-      <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
-        <div className="text-gray-700">Loading...</div>
-      </div>
-    );
-  }
+  const NetLog = () => (
+    <pre className="text-[10px] bg-slate-50 border rounded p-2 overflow-auto max-h-40 mt-2">
+      {safeArr(netlog).join("\n")}
+    </pre>
+  );
 
   return (
-    <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-2 sm:p-0">
-      <div
-        className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300"
-        style={{ width: "min(720px, 100vw - 16px)", height: "auto", minHeight: 450, maxHeight: "90vh" }}
-      >
-        {/* Banner */}
-        <div className="bg-black text-white px-4 sm:px-6">
-          <div className="flex items-center justify-between w-full py-3">
-            <div className="flex items-center gap-3">
-              <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
-            </div>
-            <div className="text-lg sm:text-xl font-semibold text-white truncate max-w-[60%] text-right">
-              {breadcrumb}
-            </div>
-          </div>
+    <div className="w-full max-w-5xl mx-auto">
+      {/* Tabs */}
+      <div className="flex gap-2 items-center mb-4">
+        <button
+          className={`px-4 py-2 rounded ${mode === "browse" ? "bg-slate-700 text-white" : "bg-slate-200"}`}
+          onClick={() => setMode("browse")}
+        >
+          Browse Demos
+        </button>
+        <button
+          className={`px-4 py-2 rounded ${mode === "ask" ? "bg-slate-700 text-white" : "bg-slate-200"}`}
+          onClick={() => setMode("ask")}
+        >
+          Schedule Meeting
+        </button>
+        <button
+          className={`px-4 py-2 rounded ${mode === "finished" ? "bg-slate-700 text-white" : "bg-slate-200"}`}
+          onClick={() => setMode("finished")}
+        >
+          Finished
+        </button>
+        <div className="ml-auto font-semibold text-lg">
+          {selectedDemo?.title || (mode === "browse" ? "Browse All Demos" : "Ask the Assistant")}
+        </div>
+      </div>
 
-          {/* Tabs */}
-          <nav
-            className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            role="tablist"
+      {/* Top notice (welcome) */}
+      {mode === "ask" && !selectedDemo ? (
+        <div className="rounded border bg-white p-4 mb-3">
+          Hello. We’re here to help. Ask anything about our demos or products below.
+        </div>
+      ) : null}
+
+      {/* Ask box */}
+      <div className="rounded border bg-white p-3 mb-4">
+        <div className="flex gap-2">
+          <input
+            ref={inputRef}
+            className="flex-1 border rounded px-3 py-2"
+            placeholder="Ask your question here"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") ask();
+            }}
+          />
+          <button
+            className="px-4 py-2 rounded bg-red-600 text-white"
+            onClick={ask}
+            title="Ask"
           >
-            {list(tabs).map((t) => {
-              const active = currentTab === t.key;
-              return (
-                <button
-                  key={t.key}
-                  onClick={() => handleTab(t.key)}
-                  role="tab"
-                  aria-selected={active}
-                  className={[
-                    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
-                    "rounded-t-md border border-b-0",
-                    active
-                      ? "bg-gradient-to-b from-red-500 to-red-700 text-white border-red-700 -mb-px shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_2px_0_rgba(0,0,0,0.15)]"
-                      : "bg-gradient-to-b from-gray-600 to-gray-700 text-white border-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]",
-                  ].join(" ")}
-                >
-                  {t.label}
-                </button>
-              );
-            })}
-          </nav>
+            ⬆
+          </button>
         </div>
-
-        {/* Content area (scrolls). Video frame is sticky on top when shown. */}
-        <div className="px-6 pt-3 pb-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
-          {mode === "finished" ? (
-            <div className="flex-1 flex items-center justify-center">
-              <p className="text-gray-600">Thanks for exploring! We will design this screen next.</p>
-            </div>
-          ) : mode === "browse" ? (
-            <BrowseDemosPanel
-              apiBase={apiBase}
-              botId={botId}
-              onPick={(demo) => setSelectedDemoAndLoadRelated(demo)}
-            />
-          ) : selectedDemo ? (
-            <div className="w-full flex-1 flex flex-col">
-              {/* Sticky video frame */}
-              <div className="sticky top-0 z-10 bg-white pt-2 pb-3">
-                <iframe
-                  style={{ width: "100%", aspectRatio: "471 / 272" }}
-                  src={selectedDemo.url || selectedDemo.value}
-                  title={selectedDemo.title || "Selected demo"}
-                  className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              </div>
-
-              {/* Related demos grouped by dimension */}
-              {related && Object.keys(related || {}).length ? (
-                <div className="space-y-6">
-                  {Object.entries(related || {}).map(([groupName, rawList]) => {
-                    const rows = Array.isArray(rawList)
-                      ? rawList
-                      : rawList && typeof rawList === "object"
-                      ? Object.values(rawList)
-                      : [];
-                    return (
-                      <section key={groupName}>
-                        <p className="text-base italic text-left mb-1">{groupName}</p>
-                        <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-                          {rows.map((b, idx) => (
-                            <div
-                              key={`${groupName}-${(b.id || b.url || b.title || idx)}`}
-                              className="relative"
-                            >
-                              <DemoButton
-                                item={{ title: b.title || b.label, description: b.description }}
-                                idx={idx}
-                                onClick={() => {
-                                  dlog("[related] pick", b);
-                                  setSelectedDemoAndLoadRelated({
-                                    title: b.title || b.label,
-                                    url: b.url || b.value,
-                                    description: b.description,
-                                  });
-                                }}
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      </section>
-                    );
-                  })}
+        {answer ? (
+          <div className="mt-3 p-3 bg-slate-50 rounded border text-left whitespace-pre-wrap">{answer}</div>
+        ) : null}
+        {/* Ask recs */}
+        {askRecs.length ? (
+          <>
+            <p className="text-base italic text-left mt-3 mb-1">Recommended Demos</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {safeArr(askRecs).map((b, idx) => (
+                <div key={`ask-${b.id || b.url || idx}`} className="relative">
+                  <DemoButton
+                    item={b}
+                    idx={idx}
+                    onClick={() =>
+                      setSelectedDemoAndLoadRelated({
+                        id: b.id || b.demo_id || "",
+                        title: b.title || b.label || "",
+                        url: b.url || b.value || "",
+                        description: b.description || "",
+                      })
+                    }
+                  />
                 </div>
-              ) : null}
+              ))}
             </div>
-          ) : (
-            /* -------- ASK MODE (welcome + answer + recommended buttons) -------- */
-            <div className="text-left space-y-4">
-              <p className="text-gray-800 whitespace-pre-wrap">{responseText}</p>
-              {askRecs.length ? (
-                <>
-                  <p className="text-base italic mb-1">Recommended Demos</p>
-                  <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {askRecs.map((b, idx) => (
-                      <div key={`${b.id || b.url || b.title || idx}`} className="relative">
-                        <DemoButton
-                          item={{ title: b.title, description: b.description }}
-                          idx={idx}
-                          onClick={() => {
-                            dlog("[ask] pick", b);
-                            setSelectedDemoAndLoadRelated({
-                              title: b.title,
-                              url: b.url,
-                              description: b.description,
-                            });
-                          }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : null}
-              {loading ? <p className="text-gray-500">Thinking…</p> : null}
-            </div>
-          )}
-        </div>
-
-        {/* Input */}
-        <div className="px-4 py-3 border-t border-gray-300">
-          <div className="relative w-full">
-            <textarea
-              rows={1}
-              className="w-full border border-gray-400 rounded-lg px-4 py-2 pr-14 text-base resize-y min-h-[3rem] max-h-[160px]"
-              placeholder="Ask your question here"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  sendMessage();
-                }
-              }}
-            />
-            <button
-              aria-label="Send"
-              onClick={sendMessage}
-              className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
-            >
-              <ArrowUpCircleIcon className="w-8 h-8 text-red-600 hover:text-red-700" />
-            </button>
-          </div>
-        </div>
-
-        {/* Inline debug panel */}
-        {DEBUG ? (
-          <div className="px-4 pb-3 border-t border-gray-200 text-left text-xs text-gray-700 bg-gray-50">
-            <pre className="whitespace-pre-wrap">
-{JSON.stringify(
-  {
-    mode,
-    botId,
-    alias,
-    allDemos: allDemos.length,
-    selectedDemo,
-    related: Object.fromEntries(Object.entries(related || {}).map(([k, v]) => [k, Array.isArray(v) ? v.length : 0])),
-    askRecs: askRecs.length,
-    inputLen: input.length,
-  },
-  null,
-  2
-)}
-            </pre>
-          </div>
+          </>
         ) : null}
       </div>
+
+      {/* Mode blocks */}
+      {mode === "finished" ? (
+        <div className="rounded border bg-white p-6 text-center text-gray-600">
+          Thanks for exploring! We will design this screen next.
+        </div>
+      ) : mode === "browse" ? (
+        <div className="rounded border bg-white p-4">
+          <p className="mb-3">Here are all demos in our library. Just click one to view.</p>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search demos..."
+            className="w-full border rounded px-3 py-2 mb-4"
+          />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {safeArr(filtered).map((d, idx) => (
+              <div key={`browse-${d.id || d.title || idx}`}>
+                <DemoButton
+                  item={d}
+                  idx={idx}
+                  onClick={() => setSelectedDemoAndLoadRelated(d)}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : selectedDemo ? (
+        <div className="rounded border bg-white p-4">
+          {/* Video */}
+          <div className="sticky top-0 z-10 bg-white pt-2 pb-3">
+            <iframe
+              style={{ width: "100%", aspectRatio: "471 / 272" }}
+              src={selectedDemo.url}
+              title={selectedDemo.title || "Selected demo"}
+              className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+
+          {/* Related */}
+          <div className="mt-4 space-y-6">
+            {Object.keys(related || {}).length ? (
+              Object.entries(related || {}).map(([groupName, raw]) => {
+                const rows = safeArr(raw).map((d) => ({
+                  id: d.id || d.demo_id || "",
+                  title: d.title || d.label || "",
+                  url: d.url || d.value || "",
+                  description: d.description || "",
+                }));
+                if (!rows.length) return null;
+                return (
+                  <section key={groupName}>
+                    <p className="text-base italic text-left mb-1">{groupName}</p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {rows.map((b, idx) => (
+                        <div key={`${groupName}-${b.id || b.url || idx}`} className="relative">
+                          <DemoButton
+                            item={b}
+                            idx={idx}
+                            onClick={() =>
+                              setSelectedDemoAndLoadRelated({
+                                id: b.id,
+                                title: b.title,
+                                url: b.url,
+                                description: b.description,
+                              })
+                            }
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                );
+              })
+            ) : (
+              <div className="text-sm text-gray-500">Loading related demos…</div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Debug */}
+      <Debug />
+      <NetLog />
     </div>
   );
 }
