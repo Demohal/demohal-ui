@@ -459,82 +459,38 @@ export default function AskAssistant() {
               </div>
 
               {/* Related demos grouped by dimension */}
-              {related && Object.keys(related).length ? (
+              {related && Object.keys(related || {}).length ? (
                 <div className="space-y-6">
-                  {Object.entries(related || {}).map(([groupName, items]) => (
-                    <section key={groupName}>
-                      <p className="text-base italic text-left mb-1">{groupName}</p>
-                      <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-                        {(() => {
-                          const rows = Array.isArray(items)
-                            ? items
-                            : (items && typeof items === "object")
-                              ? Object.values(items)
-                              : [];
-                          return rows.map((b, idx) => (
-                            // ...
-                          ));
-                        })()}
-                          <div key={`${groupName}-${(b.id || b.url || b.title || idx)}`} className="relative">
-                            <DemoButton
-                              item={{ title: b.title || b.label, description: b.description }}
-                              idx={idx}
-                              onClick={() =>
-                                setSelectedDemoAndLoadRelated({
-                                  title: b.title || b.label,
-                                  url: b.url || b.value,
-                                  description: b.description,
-                                })
-                              }
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-                  ))}
+                  {Object.entries(related || {}).map(([groupName, rawList]) => {
+                    const rows = Array.isArray(rawList)
+                      ? rawList
+                      : rawList && typeof rawList === "object"
+                        ? Object.values(rawList)
+                        : [];
+                    return (
+                      <section key={groupName}>
+                        <p className="text-base italic text-left mb-1">{groupName}</p>
+                        <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
+                          {rows.map((b, idx) => (
+                            <div key={`${groupName}-${(b.id || b.url || b.title || idx)}`} className="relative">
+                              <DemoButton
+                                item={{ title: b.title || b.label, description: b.description }}
+                                idx={idx}
+                                onClick={() =>
+                                  setSelectedDemoAndLoadRelated({
+                                    title: b.title || b.label,
+                                    url: b.url || b.value,
+                                    description: b.description,
+                                  })
+                                }
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    );
+                  })}
                 </div>
-              ) : (
-                <p className="text-sm text-gray-500 text-left">No related demos found.</p>
-              )}
-            </div>
-          ) : (
-            <div className="w-full flex-1 flex flex-col">
-              {/* Question mirror (shown above response) */}
-              {!lastQuestion ? null : (
-                <p className="text-base text-black italic">"{lastQuestion}"</p>
-              )}
-
-              {/* Bolded prose (includes welcome) */}
-              <div className="text-left mt-2">
-                {loading ? (
-                  <p className="text-gray-500 font-semibold animate-pulse">Thinking...</p>
-                ) : (
-                  <p className="text-black text-base font-bold whitespace-pre-line">{responseText}</p>
-                )}
-              </div>
-
-              {/* Ask-flow recommendations */}
-              {buttons?.length ? (
-                <>
-                  <p className="text-base italic text-left mt-3 mb-1">Recommended Demos</p>
-                  <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {list(buttons).map((b, idx) => (
-                      <div key={`${(b.title || b.label || "demo")}-${idx}`} className="relative">
-                        <DemoButton
-                          item={{ title: b.title || b.label, description: b.description }}
-                          idx={idx}
-                          onClick={() =>
-                            setSelectedDemoAndLoadRelated({
-                              title: b.title || b.label,
-                              url: b.url || b.value,
-                              description: b.description,
-                            })
-                          }
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </>
               ) : null}
             </div>
           )}
