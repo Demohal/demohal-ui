@@ -1,268 +1,348 @@
 import React, { useEffect, useMemo, useState } from "react";
 
-function DemoButton({ item, idx, onClick }) {
+/** Lightweight local button so this file is self-contained */
+function DemoButton({ item, idx = 0, onClick }) {
+  const title = (item?.title || item?.label || "Demo").trim();
+  const description = (item?.description || "").trim();
   return (
     <button
       onClick={onClick}
-      className="w-full text-left p-4 rounded-xl bg-white border border-gray-200 shadow hover:shadow-md transition"
+      className="w-full text-left rounded-xl bg-slate-700 hover:bg-slate-600 text-white px-4 py-4 shadow"
+      aria-label={`Demo ${idx + 1}: ${title}`}
     >
-      <div className="font-medium">{item.title || `Demo ${idx + 1}`}</div>
-      {item.description ? (
-        <div className="text-sm text-gray-600 mt-1 line-clamp-3">{item.description}</div>
+      <div className="font-semibold">{title}</div>
+      {description ? (
+        <div className="text-xs opacity-80 mt-1 line-clamp-2">{description}</div>
       ) : null}
     </button>
   );
 }
 
-function BrowseDemosPanel({ apiBase, botId, onPick }) {
-  const [demos, setDemos] = useState([]);
-  const [q, setQ] = useState("");
+/** Safe helpers */
+const asArray = (v) => (Array.isArray(v) ? v : []);
+const entries = (obj) =>
+  obj && typeof obj === "object" && !Array.isArray(obj) ? Object.entries(obj) : [];
+const values = (v) =>
+  Array.isArray(v) ? v : v && typeof v === "object" ? Object.values(v) : [];
 
-  useEffect(() => {
-    if (!botId) return;
-    (async () => {
-      const res = await fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`);
-      const data = await res.json();
-      const items = (data?.demos || []).map((d) => ({
-        id: d.id || d.demo_id || "",
-        title: d.title || "",
-        url: d.url || d.value || "",
-        description: d.description || "",
-      })).filter((x) => x.id && x.title && x.url);
-      setDemos(items);
-    })();
-  }, [apiBase, botId]);
+/** MAIN COMPONENT */
+export default function AskAssistant(props) {
+  // ---- Config ----
+  const apiBase =
+    (props?.apiBase || import.meta?.env?.VITE_API_BASE || "").replace(/\/+$/, "");
+  const urlParams = new URLSearchParams(window.location.search);
+  const alias = (props?.alias || urlParams.get("alias") || "demo").trim();
 
-  const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return demos;
-    return demos.filter((d) =>
-      (d.title || "").toLowerCase().includes(s) ||
-      (d.description || "").toLowerCase().includes(s)
-    );
-  }, [q, demos]);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search demos…"
-          className="w-full border rounded-lg px-3 py-2"
-        />
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {filtered.map((d, idx) => (
-          <DemoButton
-            key={d.id}
-            item={d}
-            idx={idx}
-            onClick={() => onPick(d)}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export default function AskAssistant({ apiBase, botId }) {
-  const [mode, setMode] = useState("browse"); // "browse" | "finished"
+  // ---- State ----
+  const [mode, setMode] = useState("ask"); // "ask" | "browse" | "finished"
+  const [bot, setBot] = useState(null);
+  const [botId, setBotId] = useState("");
+  const [allDemos, setAllDemos] = useState([]);
   const [selectedDemo, setSelectedDemo] = useState(null);
-  const [related, setRelated] = useState(null); // grouped object from backend
-  const [assistantText, setAssistantText] = useState("");
-  const [buttons, setButtons] = useState([]);
 
-  // Select demo + load grouped related
-  const setSelectedDemoAndLoadRelated = (demo) => {
-    setSelectedDemo(demo);
-    setRelated(null);
+  const [input, setInput] = useState("");
+  const [answer, setAnswer] = useState("");
+  const [askRecs, setAskRecs] = useState([]); // demos from /demo-hal
 
-    if (!demo?.id || !botId) return;
+  const [related, setRelated] = useState({}); // grouped related demos
+
+  // ---- Boot: resolve bot ----
+  useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
-        const url = `${apiBase}/related-demos-grouped?bot_id=${encodeURIComponent(
-          botId
-        )}&demo_id=${encodeURIComponent(demo.id)}&limit=60`;
-        const res = await fetch(url);
-        const data = await res.json();
-        // expect { groups: { "Heading": [ {id,title,url,description}, ... ], ... } }
-        const groups = data?.groups && typeof data.groups === "object" ? data.groups : {};
-        setRelated(groups);
-        console.debug("[related-demos-grouped] groups keys:", Object.keys(groups || {}));
+        const url = `${apiBase}/bot-by-alias?alias=${encodeURIComponent(alias)}`;
+        console.log("[init] GET", url);
+        const r = await fetch(url);
+        const j = await r.json();
+        const b = j?.bot;
+        if (!cancelled && b?.id) {
+          setBot(b);
+          setBotId(b.id);
+        }
       } catch (e) {
-        console.error("[related-demos-grouped] fetch error", e);
-        setRelated({});
+        console.error("[init] bot-by-alias error", e);
       }
     })();
-  };
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBase, alias]);
 
-  // demo-hal submit
-  const askAssistant = async (userQuestion) => {
-    setAssistantText("");
-    setButtons([]);
+  // ---- Load browse list when we have a bot ----
+  useEffect(() => {
+    if (!botId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const url = `${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`;
+        console.log("[browse] GET", url);
+        const r = await fetch(url);
+        const j = await r.json();
+        const demos = asArray(j?.demos);
+        if (!cancelled) setAllDemos(demos);
+      } catch (e) {
+        console.error("[browse] error", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBase, botId]);
+
+  // ---- Helper: when picking a demo from browse or a related card ----
+  const setSelectedDemoAndLoadRelated = async (demo) => {
+    if (!demo?.url || !demo?.title) return;
+    setSelectedDemo(demo);
+    setMode("ask"); // keep single page; video shown at top area
+    setRelated({});
     try {
-      const payload = { bot_id: botId, user_question: userQuestion || "" };
-      const res = await fetch(`${apiBase}/demo-hal`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      const text = data?.response_text || "";
-      const rawList = data?.buttons || data?.demos || [];
-
-      const items = (Array.isArray(rawList) ? rawList : [])
-        .map((d) => ({
-          id: d.id || d.demo_id || "",
-          title: d.title || "",
-          url: d.url || d.value || "",
-          description: d.description || "",
-        }))
-        .filter((x) => x.id && x.title && x.url);
-
-      setAssistantText(text);
-      setButtons(items);
-      setMode("browse"); // keep user on same screen; the answer shows above the browse panel
+      const url = `${apiBase}/related-demos-grouped?bot_id=${encodeURIComponent(
+        botId
+      )}&demo_id=${encodeURIComponent(demo.id || "")}&limit=60`;
+      console.log("[related-grouped] GET", url);
+      const r = await fetch(url);
+      const j = await r.json();
+      const groups = j?.groups || {};
+      console.log("[related-grouped] groups keys:", Object.keys(groups || {}));
+      setRelated(groups);
     } catch (e) {
-      console.error("[demo-hal] error", e);
-      setAssistantText("Sorry — something went wrong. Please try again.");
-      setButtons([]);
+      console.error("[related-grouped] error", e);
+      setRelated({});
     }
   };
 
-  return (
-    <div className="w-full h-full flex flex-col">
-      {/* Top banner / header */}
-      <div className="px-6 py-4 border-b bg-white">
-        <div className="flex items-center justify-between">
-          <div className="text-lg font-semibold">DemoHAL</div>
-          <div className="flex items-center gap-2">
-            <button
-              className={`px-3 py-1 rounded ${mode === "browse" ? "bg-black text-white" : "bg-gray-100"}`}
-              onClick={() => setMode("browse")}
-            >
-              Browse Demos
-            </button>
-            <button
-              className={`px-3 py-1 rounded ${mode === "finished" ? "bg-black text-white" : "bg-gray-100"}`}
-              onClick={() => setMode("finished")}
-            >
-              Finish
-            </button>
-          </div>
+  // ---- Ask flow ----
+  const onAsk = async () => {
+    const q = (input || "").trim();
+    if (!q || !botId) return;
+    setAnswer("");
+    setAskRecs([]);
+    try {
+      const url = `${apiBase}/demo-hal`;
+      console.log("[ask] POST", url);
+      const body = { bot_id: botId, user_question: q };
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      console.log("[ask] resp", j);
+      setAnswer((j?.response_text || "").trim());
+      const demos = asArray(j?.demos || j?.buttons);
+      setAskRecs(demos);
+      setMode("ask");
+    } catch (e) {
+      console.error("[ask] error", e);
+    }
+  };
+
+  // ---- Simple header ----
+  const Header = () => (
+    <div className="w-full flex items-center justify-between gap-4">
+      <div className="text-lg font-semibold">DemoHAL</div>
+      <div className="flex items-center gap-2">
+        <button
+          className={`px-3 py-1 rounded border ${
+            mode === "browse" ? "bg-black text-white" : "bg-white"
+          }`}
+          onClick={() => setMode("browse")}
+        >
+          Browse Demos
+        </button>
+        <button
+          className={`px-3 py-1 rounded border ${
+            mode === "finished" ? "bg-black text-white" : "bg-white"
+          }`}
+          onClick={() => setMode("finished")}
+        >
+          Finish
+        </button>
+      </div>
+    </div>
+  );
+
+  // ---- Renderers ----
+  const BrowsePanel = () => {
+    const [q, setQ] = useState("");
+    const list = useMemo(() => {
+      const needle = q.toLowerCase();
+      const base = asArray(allDemos);
+      if (!needle) return base;
+      return base.filter((d) =>
+        (d?.title || "").toLowerCase().includes(needle)
+      );
+    }, [q, allDemos]);
+
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-gray-700">
+          Here are all demos in our library. Just click one to view.
+        </p>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search demos..."
+          className="w-full border rounded px-3 py-2"
+        />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {asArray(list).map((d, idx) => (
+            <DemoButton
+              key={`${d?.id || idx}`}
+              item={d}
+              idx={idx}
+              onClick={() => setSelectedDemoAndLoadRelated(d)}
+            />
+          ))}
         </div>
       </div>
+    );
+  };
 
-      {/* Body */}
-      <div className="px-6 pt-3 pb-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
-        {/* Quick Q&A box */}
-        <div className="max-w-3xl mx-auto w-full">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const q = e.currentTarget.elements.userq.value.trim();
-              if (q) askAssistant(q);
-            }}
-            className="flex gap-2"
-          >
-            <input
-              name="userq"
-              placeholder="Ask a question…"
-              className="flex-1 border rounded-lg px-3 py-2"
-            />
-            <button className="px-4 py-2 rounded bg-black text-white">Ask</button>
-          </form>
-          {assistantText ? (
-            <div className="text-left mt-3 p-3 rounded-lg bg-gray-50">{assistantText}</div>
+  const RelatedGroups = () => {
+    if (!related || !Object.keys(related || {}).length) return null;
+    return (
+      <div className="space-y-6">
+        {entries(related).map(([groupName, raw]) => {
+          const rows = values(raw);
+          if (!rows.length) return null;
+          return (
+            <section key={groupName}>
+              <p className="text-base italic text-left mb-1">{groupName}</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {asArray(rows).map((b, idx) => (
+                  <DemoButton
+                    key={`${groupName}-${b?.id || b?.url || idx}`}
+                    item={b}
+                    idx={idx}
+                    onClick={() =>
+                      setSelectedDemoAndLoadRelated({
+                        id: b?.id,
+                        title: b?.title || b?.label,
+                        url: b?.url || b?.value,
+                        description: b?.description,
+                      })
+                    }
+                  />
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // ---- Layout ----
+  return (
+    <div className="max-w-5xl mx-auto w-full p-6 space-y-6">
+      <Header />
+
+      {/* Ask box */}
+      <div className="flex items-center gap-2">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Ask a question..."
+          className="flex-1 border rounded px-3 py-2"
+          onKeyDown={(e) => e.key === "Enter" && onAsk()}
+        />
+        <button
+          onClick={onAsk}
+          className="px-4 py-2 rounded bg-black text-white"
+        >
+          Ask
+        </button>
+      </div>
+
+      {/* Modes */}
+      {mode === "finished" ? (
+        <div className="py-12 text-center text-gray-600">
+          Thanks for exploring! We’ll design this screen next.
+        </div>
+      ) : mode === "browse" ? (
+        <BrowsePanel />
+      ) : (
+        <div className="space-y-6">
+          {/* Welcome or answer */}
+          {!answer ? (
+            <div className="text-gray-700">
+              Hello. We’re here to help. Ask anything about our demos or
+              products below.
+            </div>
+          ) : (
+            <div className="text-gray-900 leading-relaxed whitespace-pre-wrap">
+              {answer}
+            </div>
+          )}
+
+          {/* Selected video (when present) */}
+          {selectedDemo?.url ? (
+            <div>
+              <div className="sticky top-0 z-10 bg-white pt-2 pb-3">
+                <iframe
+                  style={{ width: "100%", aspectRatio: "471 / 272" }}
+                  src={selectedDemo.url}
+                  title={selectedDemo.title || "Selected demo"}
+                  className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            </div>
           ) : null}
-          {buttons?.length ? (
+
+          {/* Ask-mode recommended demos */}
+          {asArray(askRecs).length ? (
             <>
-              <p className="text-base italic text-left mt-3 mb-1">Recommended Demos</p>
-              <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-                {buttons.map((b, idx) => (
-                  <div key={`${(b.title || "demo")}-${idx}`} className="relative">
-                    <DemoButton
-                      item={{ title: b.title, description: b.description }}
-                      idx={idx}
-                      onClick={() =>
-                        setSelectedDemoAndLoadRelated({
-                          id: b.id,
-                          title: b.title,
-                          url: b.url,
-                          description: b.description,
-                        })
-                      }
-                    />
-                  </div>
+              <p className="text-base italic text-left mt-3 mb-1">
+                Recommended Demos
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {asArray(askRecs).map((b, idx) => (
+                  <DemoButton
+                    key={`${b?.id || b?.url || idx}`}
+                    item={b}
+                    idx={idx}
+                    onClick={() =>
+                      setSelectedDemoAndLoadRelated({
+                        id: b?.id,
+                        title: b?.title || b?.label,
+                        url: b?.url || b?.value,
+                        description: b?.description,
+                      })
+                    }
+                  />
                 ))}
               </div>
             </>
           ) : null}
+
+          {/* Grouped related demos for the selected video */}
+          <RelatedGroups />
         </div>
+      )}
 
-        {mode === "finished" ? (
-          <div className="flex-1 flex items-center justify-center">
-            <p className="text-gray-600">Thanks for exploring! We will design this screen next.</p>
-          </div>
-        ) : mode === "browse" ? (
-          <BrowseDemosPanel
-            apiBase={apiBase}
-            botId={botId}
-            onPick={(demo) => setSelectedDemoAndLoadRelated(demo)}
-          />
-        ) : selectedDemo ? (
-          <div className="w-full flex-1 flex flex-col">
-            {/* Sticky video frame; small top/bottom padding so it does not collide with banner */}
-            <div className="sticky top-0 z-10 bg-white pt-2 pb-3">
-              <iframe
-                style={{ width: "100%", aspectRatio: "471 / 272" }}
-                src={selectedDemo.url || selectedDemo.value}
-                title={selectedDemo.title || "Selected demo"}
-                className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            </div>
-
-            {/* Related demos grouped by dimension */}
-            {related && Object.keys(related || {}).length ? (
-              <div className="space-y-6">
-                {Object.entries(related || {}).map(([groupName, rawList]) => {
-                  const rows = Array.isArray(rawList)
-                    ? rawList
-                    : rawList && typeof rawList === "object"
-                      ? Object.values(rawList)
-                      : [];
-                  return (
-                    <section key={groupName}>
-                      <p className="text-base italic text-left mb-1">{groupName}</p>
-                      <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-                        {rows.map((b, idx) => (
-                          <div key={`${groupName}-${(b.id || b.url || b.title || idx)}`} className="relative">
-                            <DemoButton
-                              item={{ title: b.title || b.label, description: b.description }}
-                              idx={idx}
-                              onClick={() =>
-                                setSelectedDemoAndLoadRelated({
-                                  id: b.id,
-                                  title: b.title || b.label,
-                                  url: b.url || b.value,
-                                  description: b.description,
-                                })
-                              }
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-                  );
-                })}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+      {/* Tiny debug block – remove when stable */}
+      <pre className="text-xs text-gray-500 whitespace-pre-wrap">
+{JSON.stringify(
+  {
+    mode,
+    botId,
+    alias,
+    allDemos: asArray(allDemos).length,
+    selectedDemo: selectedDemo
+      ? { id: selectedDemo.id, title: selectedDemo.title }
+      : null,
+    relatedGroups: Object.keys(related || {}).length,
+    askRecs: asArray(askRecs).length,
+    inputLen: (input || "").length,
+  },
+  null,
+  2
+)}
+      </pre>
     </div>
   );
 }
