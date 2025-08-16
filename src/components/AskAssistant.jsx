@@ -457,7 +457,7 @@ export default function AskAssistant() {
                   allowFullScreen
                 />
               </div>
-
+        
               {/* Related demos grouped by dimension */}
               {related && Object.keys(related || {}).length ? (
                 <div className="space-y-6">
@@ -465,14 +465,17 @@ export default function AskAssistant() {
                     const rows = Array.isArray(rawList)
                       ? rawList
                       : rawList && typeof rawList === "object"
-                        ? Object.values(rawList)
-                        : [];
+                      ? Object.values(rawList)
+                      : [];
                     return (
                       <section key={groupName}>
                         <p className="text-base italic text-left mb-1">{groupName}</p>
                         <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
                           {rows.map((b, idx) => (
-                            <div key={`${groupName}-${(b.id || b.url || b.title || idx)}`} className="relative">
+                            <div
+                              key={`${groupName}-${(b.id || b.url || b.title || idx)}`}
+                              className="relative"
+                            >
                               <DemoButton
                                 item={{ title: b.title || b.label, description: b.description }}
                                 idx={idx}
@@ -493,8 +496,9 @@ export default function AskAssistant() {
                 </div>
               ) : null}
             </div>
-          )}
+          ) : null}
         </div>
+
 
         {/* Input */}
         <div className="px-4 py-3 border-top border-gray-400 border-t">
