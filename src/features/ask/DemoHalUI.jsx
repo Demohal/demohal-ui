@@ -1,6 +1,6 @@
-
-/* src/features/ask/DemoHalUI.jsx */
+// src/features/ask/DemoHalUI.jsx
 import React from "react";
+import css from "./DemoHalUI.module.css";
 import DemoGrid from "../../components/DemoGrid";
 import BrandLogo from "../../components/BrandLogo";
 import { useBot } from "../../hooks/useBot";
@@ -9,69 +9,78 @@ import { toDemo } from "../../lib/normalize";
 
 export default function DemoHalUI() {
   const API_BASE = import.meta.env?.VITE_API_URL || "/api";
-  const alias = new URLSearchParams(window.location.search).get("alias") || "";
+  const alias = new URLSearchParams(window.location.search).get("alias") || "demo";
 
   const { bot, botId, error: botErr } = useBot(API_BASE, alias);
-  const { demos, loading: demosLoading } = useDemos(API_BASE, botId);
+  const { demos, loading: demosLoading, error: demosErr } = useDemos(API_BASE, botId);
 
   const [view, setView] = React.useState("browse"); // 'browse' | 'video'
   const [selected, setSelected] = React.useState(null);
 
   return (
-    <div className="p-4 max-w-6xl mx-auto">
-      <header className="flex items-center gap-3 mb-3">
-        <BrandLogo brand={bot?.theme} />
-        <h1 className="text-xl font-semibold">{bot?.name || "DemoHal"}</h1>
+    <div className={css.page}>
+      <header className={css.header}>
+        <BrandLogo brand={bot?.theme} height={24} />
+        <div className={css.brand}>{bot?.name || "DemoHal"}</div>
       </header>
 
-      {botErr && <div className="text-red-600 mb-3">{botErr}</div>}
+      <main className={css.content}>
+        {/* small, readable errors if any */}
+        {botErr && <div style={{ color: "#b00020", marginBottom: 8 }}>Bot error: {String(botErr)}</div>}
+        {demosErr && <div style={{ color: "#b00020", marginBottom: 8 }}>Demos error: {String(demosErr)}</div>}
 
-      {view === "browse" && (
-        <>
-          <h2 className="mb-2 text-sm opacity-70">Browse demos</h2>
-          {demosLoading ? (
-            <div className="opacity-70">Loading…</div>
-          ) : (
-            <DemoGrid
-              items={demos}
-              onPick={(d) => {
-                const dd = toDemo(d);
-                setSelected(dd);
-                setView("video");
-              }}
-            />
-          )}
-        </>
-      )}
-
-      {view === "video" && selected && (
-        <div className="mt-4 space-y-4">
-          <div
-            className="aspect-video w-full rounded-lg overflow-hidden"
-            style={{ border: "1px solid rgba(0,0,0,.1)", background: "rgba(0,0,0,.05)" }}
-          >
-            {selected.url ? (
-              <iframe
-                src={selected.url}
-                title={selected.title}
-                className="w-full h-full"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
+        {view === "browse" && (
+          <>
+            <div className={css.sectionTitle}>Browse demos</div>
+            {demosLoading ? (
+              <div style={{ opacity: 0.7 }}>Loading…</div>
             ) : (
-              <div className="p-6 opacity-70">No video URL available</div>
+              <DemoGrid
+                items={demos}
+                onPick={(d) => {
+                  const dd = toDemo(d);
+                  setSelected(dd);
+                  setView("video");
+                }}
+              />
             )}
-          </div>
+          </>
+        )}
 
-          <button
-            className="mt-2 px-3 py-2 rounded"
-            style={{ border: "1px solid rgba(0,0,0,.2)" }}
-            onClick={() => setView("browse")}
-          >
-            Back to browse
-          </button>
-        </div>
-      )}
+        {view === "video" && selected && (
+          <div style={{ marginTop: 16 }}>
+            <div
+              style={{
+                aspectRatio: "16 / 9",
+                width: "100%",
+                borderRadius: 12,
+                overflow: "hidden",
+                border: "1px solid rgba(0,0,0,.1)",
+                background: "rgba(0,0,0,.05)",
+              }}
+            >
+              {selected.url ? (
+                <iframe
+                  src={selected.url}
+                  title={selected.title}
+                  style={{ width: "100%", height: "100%", border: 0 }}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              ) : (
+                <div style={{ padding: 24, opacity: 0.7 }}>No video URL available</div>
+              )}
+            </div>
+
+            <button
+              style={{ marginTop: 8, padding: "8px 12px", border: "1px solid rgba(0,0,0,.2)", borderRadius: 8 }}
+              onClick={() => setView("browse")}
+            >
+              Back to browse
+            </button>
+          </div>
+        )}
+      </main>
     </div>
   );
 }
