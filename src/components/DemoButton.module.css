@@ -1,0 +1,21 @@
+
+/* src/components/DemoButton.module.css */
+.button{
+  width: 100%;
+  border: 1px solid color-mix(in oklab, #000 25%, transparent);
+  border-radius: var(--radius-xl);
+  padding: 0.9rem 0.75rem;
+  font-size: .9rem;
+  color: #fff;
+  background: var(--brand-muted);
+  box-shadow: var(--shadow-sm);
+  transition: filter var(--t-fast) ease;
+}
+.button:hover{ filter: brightness(1.05); }
+.label{
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-align: left;
+}
