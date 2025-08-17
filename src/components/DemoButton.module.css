@@ -1,3 +1,28 @@
+/* src/components/DemoButton.module.css */
+.button{
+  width: 100%;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 14px;
+  padding: 0.9rem 0.85rem;
+  font-size: .95rem;
+
+  /* dark, pill-like button with white text */
+  background-color: var(--tile-bg, var(--brand-primary, #4b5563));
+  color: #ffffff;
+
+  box-shadow: inset 0 1px 1px rgba(255,255,255,.08), 0 1px 2px rgba(0,0,0,.08);
+  transition: filter var(--t-fast, 120ms) ease, transform var(--t-fast, 120ms) ease;
+}
+.button:hover{ filter: brightness(1.06); }
+.button:active{ transform: translateY(1px); }
+
+.label{
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-align: left;
+}
 
 /* src/components/DemoButton.module.css */
 .button{
