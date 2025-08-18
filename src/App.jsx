@@ -3,7 +3,7 @@ import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 // Adjust the import path if needed
-import AskAssistant from "./features/ask/AskAssistant";
+import AskAssistant from "./components/AskAssistant";
 import RecoTest from "./features/reco/RecoTest";
 
 export default function App() {
