@@ -1,4 +1,5 @@
 // src/components/AskAssistant.jsx
+// New UI
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
