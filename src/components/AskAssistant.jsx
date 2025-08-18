@@ -62,6 +62,98 @@ function DemoButton({ item, idx, onClick }) {
   );
 }
 
+/* -------------------- Grouped recommendations (new) -------------------- */
+/** Renders industry and supergroup sections that look like your mockup.
+ *  Headings use a DARKER gray per your request. */
+function GroupedRecommendationsPanel({ apiBase, botId, demoId, onPick, limit = 8 }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!apiBase || !botId || !demoId) return;
+    const ac = new AbortController();
+    (async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const qs = new URLSearchParams();
+        qs.set("bot_id", botId);
+        qs.set("demo_video_id", demoId);
+        qs.set("limit", String(limit));
+        const res = await fetch(`${apiBase}/recommend-demos?${qs.toString()}`, { signal: ac.signal });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        setData(json || {});
+      } catch (e) {
+        if (e.name !== "AbortError") setError(String(e.message || e));
+      } finally {
+        setLoading(false);
+      }
+    })();
+    return () => ac.abort();
+  }, [apiBase, botId, demoId, limit]);
+
+  const items = (rows = []) =>
+    rows.map((d) => ({
+      id: d.id,
+      title: d.title || "Untitled demo",
+      url: d.url || "",
+      description: d.description || "",
+    }));
+
+  if (!botId || !demoId) return null;
+
+  return (
+    <div className="mt-2">
+      {loading && <p className="text-gray-600">Loading recommendations…</p>}
+      {error && <p className="text-red-600">Error: {error}</p>}
+
+      {!loading && !error && data && (
+        <>
+          {/* Industries */}
+          {(data.industries || []).map((g) => (
+            <section key={`ind-${g.bot_industry_id}`} className="mb-5">
+              {/* DARKER gray helper text per request */}
+              <h3 className="text-left italic text-gray-700 mb-2">
+                Demos that talk about the {g.title} Industry:
+              </h3>
+              <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
+                {items(g.demos).map((d, idx) => (
+                  <div key={`${d.id}-${idx}`} className="relative">
+                    <DemoButton item={{ title: d.title }} idx={idx} onClick={() => onPick?.(d)} />
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
+
+          {/* Supergroups */}
+          {(data.supergroups || []).map((g) => (
+            <section key={`sg-${g.bot_function_supergroup_id}`} className="mb-5">
+              {/* DARKER gray helper text per request */}
+              <h3 className="text-left italic text-gray-700 mb-2">Demos that talk about {g.title}:</h3>
+              <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
+                {items(g.demos).map((d, idx) => (
+                  <div key={`${d.id}-${idx}`} className="relative">
+                    <DemoButton item={{ title: d.title }} idx={idx} onClick={() => onPick?.(d)} />
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
+
+          {/* Nothing found */}
+          {(!data.industries || data.industries.length === 0) &&
+            (!data.supergroups || data.supergroups.length === 0) && (
+              <p className="text-sm text-gray-500 text-left">No recommendations yet.</p>
+            )}
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ------------------------ Browse Demos (search) ------------------------ */
 function BrowseDemosPanel({ apiBase, botId, onPick }) {
   const [demos, setDemos] = useState([]);
@@ -158,6 +250,7 @@ export default function AskAssistant() {
   const alias = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     return (qs.get("alias") || qs.get("a") || "").trim();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [bot, setBot] = useState(null);
   const [botId, setBotId] = useState("");
@@ -216,7 +309,8 @@ export default function AskAssistant() {
     return () => {
       cancel = true;
     };
-  }, [apiBase, botId]); // eslint-disable-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiBase, botId]);
 
   /* If a demo was selected before botId arrived, kick related once both are ready */
   useEffect(() => {
@@ -453,29 +547,19 @@ export default function AskAssistant() {
                 />
               </div>
 
-              {/* Related demos */}
-              <p className="text-base italic text-left mb-1">Based on your selection:</p>
-              {buttons?.length ? (
-                <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {buttons.map((b, idx) => (
-                    <div key={`${(b.title || b.label || "demo")}-${idx}`} className="relative">
-                      <DemoButton
-                        item={{ title: b.title || b.label, description: b.description }}
-                        idx={idx}
-                        onClick={() =>
-                          setSelectedDemoAndLoadRelated({
-                            title: b.title || b.label,
-                            url: b.url || b.value,
-                            description: b.description,
-                          })
-                        }
-                      />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500 text-left">No related demos found.</p>
-              )}
+              {/* NEW: Grouped recommendations (industries + supergroups) */}
+              <GroupedRecommendationsPanel
+                apiBase={apiBase}
+                botId={botId}
+                demoId={selectedDemo.id}
+                onPick={(d) =>
+                  setSelectedDemoAndLoadRelated({
+                    title: d.title,
+                    url: d.url,
+                    description: d.description,
+                  })
+                }
+              />
             </div>
           ) : (
             <div className="w-full flex-1 flex flex-col">
@@ -493,7 +577,7 @@ export default function AskAssistant() {
                 )}
               </div>
 
-              {/* Ask-flow recommendations */}
+              {/* Ask-flow recommendations (unchanged) */}
               {buttons?.length ? (
                 <>
                   <p className="text-base italic text-left mt-3 mb-1">Recommended Demos</p>
