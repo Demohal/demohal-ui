@@ -2,9 +2,8 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-// Adjust the import path if needed
-import AskAssistant from "./components/AskAssistant";
-import RecoTest from "./features/reco/RecoTest";
+import AskAssistant from "./components/AskAssistant";      // ⬅️ your path
+import RecoTest from "./features/reco/RecoTest";           // ⬅️ test screen path
 
 export default function App() {
   return (
