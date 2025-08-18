@@ -1,0 +1,90 @@
+/* src/components/RecommendedDemosPanel.module.css */
+.panel{
+  margin-top: 16px;
+  border: 1px solid rgba(0,0,0,.12);
+  border-radius: 12px;
+  padding: 12px;
+  background: #0b0b0b0d; /* subtle */
+}
+
+.header{
+  font-weight: 600;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.groups{ display: grid; gap: 16px; }
+
+.groupTitle{
+  font-size: 13px;
+  opacity: .85;
+  margin: 4px 0 8px;
+}
+
+.grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.demoBtn{
+  appearance: none;
+  border: 1px solid rgba(0,0,0,.15);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: #f4f6f8;
+  cursor: pointer;
+  text-align: left;
+  transition: transform .05s ease, box-shadow .15s ease, background .15s ease;
+}
+.demoBtn:hover{ transform: translateY(-1px); box-shadow: 0 2px 10px rgba(0,0,0,.09); background: #eef1f4; }
+
+.demoTitle{ font-weight: 600; font-size: 14px; line-height: 1.25; }
+
+.msg{ opacity: .7; font-size: 14px; }
+.error{ color: #b00020; font-size: 14px; }
+/* src/components/RecommendedDemosPanel.module.css */
+.panel{
+  margin-top: 16px;
+  border: 1px solid rgba(0,0,0,.12);
+  border-radius: 12px;
+  padding: 12px;
+  background: #0b0b0b0d; /* subtle */
+}
+
+.header{
+  font-weight: 600;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.groups{ display: grid; gap: 16px; }
+
+.groupTitle{
+  font-size: 13px;
+  opacity: .85;
+  margin: 4px 0 8px;
+}
+
+.grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.demoBtn{
+  appearance: none;
+  border: 1px solid rgba(0,0,0,.15);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: #f4f6f8;
+  cursor: pointer;
+  text-align: left;
+  transition: transform .05s ease, box-shadow .15s ease, background .15s ease;
+}
+.demoBtn:hover{ transform: translateY(-1px); box-shadow: 0 2px 10px rgba(0,0,0,.09); background: #eef1f4; }
+
+.demoTitle{ font-weight: 600; font-size: 14px; line-height: 1.25; }
+
+.msg{ opacity: .7; font-size: 14px; }
+.error{ color: #b00020; font-size: 14px; }
