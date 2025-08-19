@@ -1,4 +1,4 @@
-// src/components/AskAssistant.jsx — Spec fixes per screenshot
+// src/components/AskAssistant.jsx — Spec fixes per screenshot + Browse fallback
 // Changes:
 // - Filter out "All demos" group (invalid per spec)
 // - Ensure grouping order: Industry (A→Z), then Supergroup (A→Z); buttons inside group sorted by title
@@ -6,6 +6,7 @@
 // - Scroll: video is NOT sticky; content (including video) scrolls between banner and question box
 // - Browse header copy set to dark gray
 // - Active tab style: light (bg-white, text-black); inactive stays dark; resets on ask
+// - **Browse fallback:** if sections are empty, show flat demos grid (deduped + A→Z)
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -75,8 +76,12 @@ function cleanGroups(sections) {
 }
 function orderGroups(sections) {
   const filtered = cleanGroups(sections);
-  const inds = filtered.filter((s) => s?.kind === "industry").sort((a, b) => (a.title || "").localeCompare(b.title || ""));
-  const sgs = filtered.filter((s) => s?.kind === "supergroup").sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+  const inds = filtered
+    .filter((s) => s?.kind === "industry")
+    .sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+  const sgs = filtered
+    .filter((s) => s?.kind === "supergroup")
+    .sort((a, b) => (a.title || "").localeCompare(b.title || ""));
   const rest = filtered.filter((s) => s?.kind !== "industry" && s?.kind !== "supergroup");
   return [...inds, ...sgs, ...rest];
 }
@@ -100,9 +105,11 @@ function GroupedSections({ sections, onPick }) {
   return (
     <>
       {ordered.map((s, secIdx) => {
-        const buttons = dedupeWithinGroup((Array.isArray(s.buttons) ? s.buttons : [])
-          .slice()
-          .sort((a, b) => (a.title || "").localeCompare(b.title || "")));
+        const buttons = dedupeWithinGroup(
+          (Array.isArray(s.buttons) ? s.buttons : [])
+            .slice()
+            .sort((a, b) => (a.title || "").localeCompare(b.title || ""))
+        );
         return (
           <section key={`${s.kind || "sec"}-${s.title || secIdx}`} className="mb-6 text-left">
             {/* Helper text only, bold + italic + medium gray; one blank line before/after */}
@@ -155,7 +162,7 @@ function dedupeByIdAndUrl(list, limit = 6) {
 /* ------------------------------- Browse tab ------------------------------ */
 function BrowseDemosPanel({ apiBase, botId, onPick, onSectionsLoaded }) {
   const [sections, setSections] = useState([]);
-  const [demos, setDemos] = useState([]); // flat list for search fallback
+  const [demos, setDemos] = useState([]); // flat list for search / fallback
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [error, setError] = useState("");
@@ -174,6 +181,7 @@ function BrowseDemosPanel({ apiBase, botId, onPick, onSectionsLoaded }) {
         const data = await res.json();
         if (cancel) return;
 
+        // Prefer grouped sections; fall back to grouped buttons if provided there
         let secs = Array.isArray(data?.sections) ? data.sections : [];
         if (
           secs.length === 0 &&
@@ -185,9 +193,11 @@ function BrowseDemosPanel({ apiBase, botId, onPick, onSectionsLoaded }) {
         }
         secs = orderGroups(secs);
 
-        const flat = Array.isArray(data?.demos)
+        // Build flat list for fallback/search, deduped and sorted A→Z by title
+        const flatRaw = Array.isArray(data?.demos)
           ? data.demos
-          : secs.flatMap((g) => Array.isArray(g.buttons) ? g.buttons : []);
+          : secs.flatMap((g) => (Array.isArray(g.buttons) ? g.buttons : []));
+        const flat = dedupeWithinGroup(flatRaw).slice().sort((a, b) => (a.title || "").localeCompare(b.title || ""));
 
         setSections(secs);
         setDemos(flat);
@@ -219,6 +229,10 @@ function BrowseDemosPanel({ apiBase, botId, onPick, onSectionsLoaded }) {
 
   const searching = q.trim().length > 0;
 
+  // If no sections (e.g., backend only had an 'All demos' fallback), show the flat grid
+  const showFlatGrid = searching || sections.length === 0;
+  const gridItems = searching ? filtered : demos;
+
   return (
     <div className="text-left">
       <p className="italic text-gray-700 mb-3">Here are all demos in our library. Just click on the one you want to view.</p>
@@ -232,9 +246,9 @@ function BrowseDemosPanel({ apiBase, botId, onPick, onSectionsLoaded }) {
         />
       </div>
 
-      {searching ? (
+      {showFlatGrid ? (
         <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-          {filtered.map((d, idx) => (
+          {gridItems.map((d, idx) => (
             <div key={d.id || d.url || d.title || idx} className="relative">
               <DemoButton
                 item={{ title: d.title, description: d.description }}
@@ -243,8 +257,8 @@ function BrowseDemosPanel({ apiBase, botId, onPick, onSectionsLoaded }) {
               />
             </div>
           ))}
-          {filtered.length === 0 && (
-            <p className="text-sm text-gray-500">No demos match your search.</p>
+          {gridItems.length === 0 && (
+            <p className="text-sm text-gray-500">No demos found.</p>
           )}
         </div>
       ) : (
@@ -385,7 +399,7 @@ export default function AskAssistant() {
       } else if (Array.isArray(data.demos)) {
         raw = data.demos;
       } else if (secs.length) {
-        raw = secs.flatMap((g) => Array.isArray(g.buttons) ? g.buttons : []);
+        raw = secs.flatMap((g) => (Array.isArray(g.buttons) ? g.buttons : []));
       }
       const normalized = raw.map((b) => ({
         id: b.id ?? b.demo_id ?? "",
