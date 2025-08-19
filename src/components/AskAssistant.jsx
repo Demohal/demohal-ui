@@ -1,12 +1,7 @@
-// src/components/AskAssistant.jsx — Spec fixes per screenshot + Browse fallback
-// Changes:
-// - Filter out "All demos" group (invalid per spec)
-// - Ensure grouping order: Industry (A→Z), then Supergroup (A→Z); buttons inside group sorted by title
-// - Helper text only above groups (bold + italic + medium gray)
-// - Scroll: video is NOT sticky; content (including video) scrolls between banner and question box
-// - Browse header copy set to dark gray
-// - Active tab style: light (bg-white, text-black); inactive stays dark; resets on ask
-// - **Browse fallback:** if sections are empty, show flat demos grid (deduped + A→Z)
+// src/components/AskAssistant.jsx — Fix: show buttons below video after Browse selection; robust group fallback
+// - If Browse returned only an 'all' group (filtered out), we now render a flat grid under the video
+// - Parent now stores both grouped sections and a flat A→Z list from Browse for fallback
+// - Keep previous specs: helper text only, dark gray browse intro, active tab styling, full-area scroll with video
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -141,26 +136,8 @@ function GroupedSections({ sections, onPick }) {
   );
 }
 
-/* --------------------------- Ask-flow utilities -------------------------- */
-function dedupeByIdAndUrl(list, limit = 6) {
-  const out = [];
-  const ids = new Set();
-  const urls = new Set();
-  for (const x of list || []) {
-    const id = (x.id || "").trim();
-    const url = (x.url || "").trim().toLowerCase();
-    if (id && ids.has(id)) continue;
-    if (url && urls.has(url)) continue;
-    out.push(x);
-    if (id) ids.add(id);
-    if (url) urls.add(url);
-    if (out.length >= limit) break;
-  }
-  return out;
-}
-
 /* ------------------------------- Browse tab ------------------------------ */
-function BrowseDemosPanel({ apiBase, botId, onPick, onSectionsLoaded }) {
+function BrowseDemosPanel({ apiBase, botId, onLoaded, onPick }) {
   const [sections, setSections] = useState([]);
   const [demos, setDemos] = useState([]); // flat list for search / fallback
   const [loading, setLoading] = useState(true);
@@ -181,7 +158,6 @@ function BrowseDemosPanel({ apiBase, botId, onPick, onSectionsLoaded }) {
         const data = await res.json();
         if (cancel) return;
 
-        // Prefer grouped sections; fall back to grouped buttons if provided there
         let secs = Array.isArray(data?.sections) ? data.sections : [];
         if (
           secs.length === 0 &&
@@ -193,19 +169,21 @@ function BrowseDemosPanel({ apiBase, botId, onPick, onSectionsLoaded }) {
         }
         secs = orderGroups(secs);
 
-        // Build flat list for fallback/search, deduped and sorted A→Z by title
         const flatRaw = Array.isArray(data?.demos)
           ? data.demos
           : secs.flatMap((g) => (Array.isArray(g.buttons) ? g.buttons : []));
-        const flat = dedupeWithinGroup(flatRaw).slice().sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+        const flat = dedupeWithinGroup(flatRaw)
+          .slice()
+          .sort((a, b) => (a.title || "").localeCompare(b.title || ""));
 
         setSections(secs);
         setDemos(flat);
-        onSectionsLoaded?.(secs);
+        onLoaded?.({ sections: secs, flat });
       } catch (e) {
         if (!cancel) setError(String(e.message || e));
         if (!cancel) setSections([]);
         if (!cancel) setDemos([]);
+        onLoaded?.({ sections: [], flat: [] });
       } finally {
         if (!cancel) setLoading(false);
       }
@@ -213,7 +191,7 @@ function BrowseDemosPanel({ apiBase, botId, onPick, onSectionsLoaded }) {
     return () => {
       cancel = true;
     };
-  }, [apiBase, botId, onSectionsLoaded]);
+  }, [apiBase, botId, onLoaded]);
 
   const filtered = useMemo(() => {
     if (!q.trim()) return demos;
@@ -228,8 +206,6 @@ function BrowseDemosPanel({ apiBase, botId, onPick, onSectionsLoaded }) {
   if (error) return <p className="text-red-600">Error: {error}</p>;
 
   const searching = q.trim().length > 0;
-
-  // If no sections (e.g., backend only had an 'All demos' fallback), show the flat grid
   const showFlatGrid = searching || sections.length === 0;
   const gridItems = searching ? filtered : demos;
 
@@ -250,16 +226,10 @@ function BrowseDemosPanel({ apiBase, botId, onPick, onSectionsLoaded }) {
         <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
           {gridItems.map((d, idx) => (
             <div key={d.id || d.url || d.title || idx} className="relative">
-              <DemoButton
-                item={{ title: d.title, description: d.description }}
-                idx={idx}
-                onClick={() => onPick(d)}
-              />
+              <DemoButton item={{ title: d.title, description: d.description }} idx={idx} onClick={() => onPick(d)} />
             </div>
           ))}
-          {gridItems.length === 0 && (
-            <p className="text-sm text-gray-500">No demos found.</p>
-          )}
+          {gridItems.length === 0 && <p className="text-sm text-gray-500">No demos found.</p>}
         </div>
       ) : (
         <GroupedSections sections={sections} onPick={onPick} />
@@ -275,13 +245,16 @@ export default function AskAssistant() {
   const [mode, setMode] = useState("ask"); // "ask" | "browse" | "finished"
 
   // Shared state
-  const [selectedDemo, setSelectedDemo] = useState(null); // {id,title,url,description}
-  const [selectionSource, setSelectionSource] = useState(null); // "ask" | "browse" | null
+  const [selectedDemo, setSelectedDemo] = useState(null);
+  const [selectionSource, setSelectionSource] = useState(null);
 
   // Ask flow state
-  const [askButtons, setAskButtons] = useState([]); // fallback list
-  const [askSections, setAskSections] = useState([]); // grouped sections
-  const [browseSections, setBrowseSections] = useState([]); // grouped sections
+  const [askButtons, setAskButtons] = useState([]);
+  const [askSections, setAskSections] = useState([]);
+
+  // Browse cache (grouped + flat) for fallback below video
+  const [browseSections, setBrowseSections] = useState([]);
+  const [browseFlat, setBrowseFlat] = useState([]);
 
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
@@ -297,7 +270,6 @@ export default function AskAssistant() {
   const alias = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     return (qs.get("alias") || qs.get("a") || "").trim();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [bot, setBot] = useState(null);
   const [botId, setBotId] = useState("");
@@ -329,7 +301,7 @@ export default function AskAssistant() {
     };
   }, [alias, apiBase]);
 
-  /* Tabs available for this bot */
+  /* Tabs */
   const tabs = useMemo(() => {
     const list = [];
     if (bot?.show_browse_demos) list.push({ key: "demos", label: "Browse Demos" });
@@ -382,32 +354,17 @@ export default function AskAssistant() {
       setResponseText(data.response_text || "");
 
       let secs = Array.isArray(data.sections) ? data.sections : [];
-      if (
-        secs.length === 0 &&
-        Array.isArray(data.buttons) &&
-        data.buttons.length &&
-        Array.isArray(data.buttons[0]?.buttons)
-      ) {
+      if (secs.length === 0 && Array.isArray(data.buttons) && data.buttons.length && Array.isArray(data.buttons[0]?.buttons)) {
         secs = data.buttons;
       }
       setAskSections(orderGroups(secs));
 
-      // Flat fallback for legacy outputs
       let raw = [];
-      if (Array.isArray(data.buttons) && data.buttons.length && !Array.isArray(data.buttons[0]?.buttons)) {
-        raw = data.buttons;
-      } else if (Array.isArray(data.demos)) {
-        raw = data.demos;
-      } else if (secs.length) {
-        raw = secs.flatMap((g) => (Array.isArray(g.buttons) ? g.buttons : []));
-      }
-      const normalized = raw.map((b) => ({
-        id: b.id ?? b.demo_id ?? "",
-        title: b.title ?? b.name ?? "",
-        url: b.url ?? b.value ?? "",
-        description: b.description ?? "",
-      }));
-      setAskButtons(dedupeByIdAndUrl(normalized, 6));
+      if (Array.isArray(data.buttons) && data.buttons.length && !Array.isArray(data.buttons[0]?.buttons)) raw = data.buttons;
+      else if (Array.isArray(data.demos)) raw = data.demos;
+      else if (secs.length) raw = secs.flatMap((g) => (Array.isArray(g.buttons) ? g.buttons : []));
+      const normalized = raw.map((b) => ({ id: b.id ?? b.demo_id ?? "", title: b.title ?? b.name ?? "", url: b.url ?? b.value ?? "", description: b.description ?? "" }));
+      setAskButtons(dedupeWithinGroup(normalized).slice(0, 6));
 
       requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
     } catch (e) {
@@ -422,12 +379,7 @@ export default function AskAssistant() {
   }
 
   function pickFromAsk(item) {
-    const next = {
-      id: item.id || "",
-      title: item.title || "",
-      url: item.url || "",
-      description: item.description || "",
-    };
+    const next = { id: item.id || "", title: item.title || "", url: item.url || "", description: item.description || "" };
     setSelectedDemo(next);
     setSelectionSource("ask");
     setMode("ask");
@@ -435,23 +387,14 @@ export default function AskAssistant() {
   }
 
   function pickFromBrowse(item) {
-    const next = {
-      id: item.id || "",
-      title: item.title || "",
-      url: item.url || "",
-      description: item.description || "",
-    };
+    const next = { id: item.id || "", title: item.title || "", url: item.url || "", description: item.description || "" };
     setSelectedDemo(next);
     setSelectionSource("browse");
     setMode("ask");
     requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
   }
 
-  const breadcrumb = selectedDemo
-    ? (selectedDemo.title || "Selected Demo")
-    : mode === "browse"
-    ? "Browse All Demos"
-    : "Ask the Assistant";
+  const breadcrumb = selectedDemo ? (selectedDemo.title || "Selected Demo") : mode === "browse" ? "Browse All Demos" : "Ask the Assistant";
 
   if (fatal) {
     return (
@@ -470,26 +413,16 @@ export default function AskAssistant() {
 
   return (
     <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-2 sm:p-0">
-      <div
-        className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300"
-        style={{ width: "min(720px, 100vw - 16px)", height: "auto", minHeight: 450, maxHeight: "90vh" }}
-      >
+      <div className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300" style={{ width: "min(720px, 100vw - 16px)", height: "auto", minHeight: 450, maxHeight: "90vh" }}>
         {/* Header */}
         <div className="bg-black text-white px-4 sm:px-6">
           <div className="flex items-center justify-between w-full py-3">
-            <div className="flex items-center gap-3">
-              <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
-            </div>
-            <div className="text-lg sm:text-xl font-semibold text-white truncate max-w-[60%] text-right">
-              {breadcrumb}
-            </div>
+            <div className="flex items-center gap-3"><img src={logo} alt="DemoHAL logo" className="h-10 object-contain" /></div>
+            <div className="text-lg sm:text-xl font-semibold text-white truncate max-w-[60%] text-right">{breadcrumb}</div>
           </div>
 
           {/* Tabs */}
-          <nav
-            className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            role="tablist"
-          >
+          <nav className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
             {tabs.map((t) => {
               const active = currentTab === t.key;
               return (
@@ -516,32 +449,34 @@ export default function AskAssistant() {
         {/* Content (the whole area scrolls, including the video) */}
         <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
           {mode === "finished" ? (
-            <div className="flex-1 flex items-center justify-center">
-              <p className="text-gray-600">Thanks for exploring! We will design this screen next.</p>
-            </div>
+            <div className="flex-1 flex items-center justify-center"><p className="text-gray-600">Thanks for exploring! We will design this screen next.</p></div>
           ) : mode === "browse" ? (
             <BrowseDemosPanel
               apiBase={apiBase}
               botId={botId}
+              onLoaded={({ sections, flat }) => { setBrowseSections(sections); setBrowseFlat(flat); }}
               onPick={pickFromBrowse}
-              onSectionsLoaded={setBrowseSections}
             />
           ) : selectedDemo ? (
             <div className="w-full flex-1 flex flex-col">
-              {/* Video: NOT sticky; it will scroll with the buttons */}
+              {/* Video */}
               <div className="pt-2 pb-3 bg-white">
-                <iframe
-                  style={{ width: "100%", aspectRatio: "471 / 272" }}
-                  src={selectedDemo.url}
-                  title={selectedDemo.title || "Selected demo"}
-                  className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
+                <iframe style={{ width: "100%", aspectRatio: "471 / 272" }} src={selectedDemo.url} title={selectedDemo.title || "Selected demo"} className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
               </div>
 
-              {/* Below the player: grouped sections; fallback to flat */}
-              {selectionSource === "ask" ? (
+              {/* Below the player: if came from BROWSE -> grouped if present else flat fallback */}
+              {selectionSource === "browse" ? (
+                browseSections?.length ? (
+                  <GroupedSections sections={browseSections} onPick={pickFromBrowse} />
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {browseFlat.map((b, idx) => (
+                      <DemoButton key={`${b.id || b.url || b.title || idx}`} item={{ title: b.title, description: b.description }} idx={idx} onClick={() => pickFromBrowse(b)} />
+                    ))}
+                  </div>
+                )
+              ) : (
+                // Came from ASK -> grouped if present else flat fallback (recommended demos)
                 askSections?.length ? (
                   <GroupedSections sections={askSections} onPick={pickFromAsk} />
                 ) : (
@@ -550,51 +485,25 @@ export default function AskAssistant() {
                     <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
                       {askButtons.map((b, idx) => (
                         <div key={`${(b.id || b.url || b.title || "demo")}-${idx}`} className="relative">
-                          <DemoButton
-                            item={{ title: b.title, description: b.description }}
-                            idx={idx}
-                            onClick={() =>
-                              pickFromAsk({ id: b.id, title: b.title, url: b.url, description: b.description })
-                            }
-                          />
+                          <DemoButton item={{ title: b.title, description: b.description }} idx={idx} onClick={() => pickFromAsk({ id: b.id, title: b.title, url: b.url, description: b.description })} />
                         </div>
                       ))}
                     </div>
                   </>
                 )
-              ) : (
-                <GroupedSections sections={browseSections} onPick={pickFromBrowse} />
               )}
             </div>
           ) : (
             <div className="w-full flex-1 flex flex-col">
-              {!lastQuestion ? null : (
-                <p className="text-base text-black italic">"{lastQuestion}"</p>
-              )}
-
-              <div className="text-left mt-2">
-                {loading ? (
-                  <p className="text-gray-500 font-semibold animate-pulse">Thinking...</p>
-                ) : (
-                  <p className="text-black text-base font-bold whitespace-pre-line">{responseText}</p>
-                )}
-              </div>
-
-              {askSections?.length ? (
-                <GroupedSections sections={askSections} onPick={pickFromAsk} />
-              ) : askButtons?.length ? (
+              {!lastQuestion ? null : (<p className="text-base text-black italic">"{lastQuestion}"</p>)}
+              <div className="text-left mt-2">{loading ? (<p className="text-gray-500 font-semibold animate-pulse">Thinking...</p>) : (<p className="text-black text-base font-bold whitespace-pre-line">{responseText}</p>)}</div>
+              {askSections?.length ? (<GroupedSections sections={askSections} onPick={pickFromAsk} />) : askButtons?.length ? (
                 <>
                   <p className="text-base italic text-left mt-3 mb-1 text-gray-600">Recommended Demos</p>
                   <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
                     {askButtons.map((b, idx) => (
                       <div key={`${(b.id || b.url || b.title || "demo")}-${idx}`} className="relative">
-                        <DemoButton
-                          item={{ title: b.title, description: b.description }}
-                          idx={idx}
-                          onClick={() =>
-                            pickFromAsk({ id: b.id, title: b.title, url: b.url, description: b.description })
-                          }
-                        />
+                        <DemoButton item={{ title: b.title, description: b.description }} idx={idx} onClick={() => pickFromAsk({ id: b.id, title: b.title, url: b.url, description: b.description })} />
                       </div>
                     ))}
                   </div>
@@ -607,20 +516,8 @@ export default function AskAssistant() {
         {/* Input */}
         <div className="px-4 py-3 border-top border-gray-400 border-t">
           <div className="relative w-full">
-            <textarea
-              rows={1}
-              className="w-full border border-gray-400 rounded-lg px-4 py-2 pr-14 text-base text-black placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px]"
-              placeholder="Ask your question here"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
-            />
-
-            <button
-              aria-label="Send"
-              onClick={sendMessage}
-              className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
-            >
+            <textarea rows={1} className="w-full border border-gray-400 rounded-lg px-4 py-2 pr-14 text-base text-black placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px]" placeholder="Ask your question here" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()} />
+            <button aria-label="Send" onClick={sendMessage} className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95">
               <ArrowUpCircleIcon className="w-8 h-8 text-red-600 hover:text-red-700" />
             </button>
           </div>
