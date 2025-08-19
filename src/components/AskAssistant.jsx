@@ -1,400 +1,124 @@
-// src/components/AskAssistant.jsx — Fix: show buttons below video after Browse selection; robust group fallback
-// - If Browse returned only an 'all' group (filtered out), we now render a flat grid under the video
-// - Parent now stores both grouped sections and a flat A→Z list from Browse for fallback
-// - Keep previous specs: helper text only, dark gray browse intro, active tab styling, full-area scroll with video
+// src/components/AskAssistant.jsx — MVP: flat list of demos with functions_text (one per row)
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
-import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
+import { ArrowUpCircleIcon, MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
 
-/* --------------------------------- UI bits -------------------------------- */
-function tooltipAlign(idx) {
-  const mobile = "left-1/2 -translate-x-1/2";
-  const col = idx % 3;
-  if (col === 0) return `${mobile} md:left-0 md:translate-x-0`;
-  if (col === 2) return `${mobile} md:right-0 md:left-auto md:translate-x-0`;
-  return `${mobile}`;
-}
-
-function DemoButton({ item, idx, onClick }) {
+function Row({ item, onPick }) {
   return (
     <button
-      onClick={onClick}
-      className={[
-        "group relative w-full h-20",
-        "flex items-center justify-center text-center",
-        "rounded-xl border border-gray-700",
-        "bg-gradient-to-b from-gray-600 to-gray-700 text-white hover:from-gray-500 hover:to-gray-600",
-        "px-3 transition-shadow hover:shadow-md",
-      ].join(" ")}
-      title={item.title}
+      onClick={() => onPick(item)}
+      className="w-full text-left bg-gradient-to-b from-gray-600 to-gray-700 text-white rounded-xl border border-gray-700 px-4 py-3 shadow hover:from-gray-500 hover:to-gray-600 transition-colors"
     >
-      <span
-        className="font-semibold text-sm leading-snug w-full"
-        style={{
-          display: "-webkit-box",
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: "vertical",
-          overflow: "hidden",
-          wordBreak: "break-word",
-        }}
-      >
-        {item.title || "Demo"}
-      </span>
-
-      {item.description ? (
-        <div
-          className={[
-            "pointer-events-none absolute z-30 hidden group-hover:block",
-            "bottom-full mb-2",
-            tooltipAlign(idx),
-            "w-[95vw] max-w-[95vw] md:w-[200%] md:max-w-[200%]",
-            "rounded-lg border border-gray-300 bg-white text-black",
-            "px-3 py-2 text-xs leading-snug shadow-xl",
-          ].join(" ")}
-        >
-          {item.description}
-        </div>
+      <div className="font-extrabold text-base sm:text-lg">{item.title}</div>
+      {item.functions_text ? (
+        <div className="mt-1 text-xs sm:text-sm opacity-90">{item.functions_text}</div>
       ) : null}
     </button>
   );
 }
 
-/* --------------------------- Helpers for grouping ------------------------- */
-function cleanGroups(sections) {
-  if (!Array.isArray(sections)) return [];
-  return sections.filter((s) => {
-    const t = (s?.title || "").trim().toLowerCase();
-    return s?.kind !== "all" && t !== "all demos" && t !== "all demo" && t !== "all";
-  });
-}
-function orderGroups(sections) {
-  const filtered = cleanGroups(sections);
-  const inds = filtered
-    .filter((s) => s?.kind === "industry")
-    .sort((a, b) => (a.title || "").localeCompare(b.title || ""));
-  const sgs = filtered
-    .filter((s) => s?.kind === "supergroup")
-    .sort((a, b) => (a.title || "").localeCompare(b.title || ""));
-  const rest = filtered.filter((s) => s?.kind !== "industry" && s?.kind !== "supergroup");
-  return [...inds, ...sgs, ...rest];
-}
-function dedupeWithinGroup(list) {
-  const seen = new Set();
-  const out = [];
-  for (const b of list || []) {
-    const key = b?.id || `${b?.url || ""}|${b?.title || ""}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(b);
-  }
-  return out;
-}
-
-/* ---------------------- Shared grouped rendering widget ------------------- */
-function GroupedSections({ sections, onPick }) {
-  const ordered = orderGroups(sections);
-  if (!ordered.length) return null;
-
-  return (
-    <>
-      {ordered.map((s, secIdx) => {
-        const buttons = dedupeWithinGroup(
-          (Array.isArray(s.buttons) ? s.buttons : [])
-            .slice()
-            .sort((a, b) => (a.title || "").localeCompare(b.title || ""))
-        );
-        return (
-          <section key={`${s.kind || "sec"}-${s.title || secIdx}`} className="mb-6 text-left">
-            {/* Helper text only, bold + italic + medium gray; one blank line before/after */}
-            <p className="font-semibold italic text-gray-600 my-3">
-              Demos that talk about {s.title}:
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {buttons.map((b, idx) => (
-                <DemoButton
-                  key={`${b.id || b.url || b.title || idx}`}
-                  item={{ title: b.title, description: b.description }}
-                  idx={idx}
-                  onClick={() =>
-                    onPick?.({
-                      id: b.id || "",
-                      title: b.title || "",
-                      url: b.url || "",
-                      description: b.description || "",
-                    })
-                  }
-                />
-              ))}
-            </div>
-          </section>
-        );
-      })}
-    </>
-  );
-}
-
-/* ------------------------------- Browse tab ------------------------------ */
-function BrowseDemosPanel({ apiBase, botId, onLoaded, onPick }) {
-  const [sections, setSections] = useState([]);
-  const [demos, setDemos] = useState([]); // flat list for search / fallback
-  const [loading, setLoading] = useState(true);
-  const [q, setQ] = useState("");
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let cancel = false;
-    (async () => {
-      if (!botId) return;
-      setLoading(true);
-      setError("");
-      try {
-        const params = new URLSearchParams();
-        params.set("bot_id", botId);
-        const res = await fetch(`${apiBase}/browse-demos?${params.toString()}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        if (cancel) return;
-
-        let secs = Array.isArray(data?.sections) ? data.sections : [];
-        if (
-          secs.length === 0 &&
-          Array.isArray(data?.buttons) &&
-          data.buttons.length &&
-          Array.isArray(data.buttons[0]?.buttons)
-        ) {
-          secs = data.buttons;
-        }
-        secs = orderGroups(secs);
-
-        const flatRaw = Array.isArray(data?.demos)
-          ? data.demos
-          : secs.flatMap((g) => (Array.isArray(g.buttons) ? g.buttons : []));
-        const flat = dedupeWithinGroup(flatRaw)
-          .slice()
-          .sort((a, b) => (a.title || "").localeCompare(b.title || ""));
-
-        setSections(secs);
-        setDemos(flat);
-        onLoaded?.({ sections: secs, flat });
-      } catch (e) {
-        if (!cancel) setError(String(e.message || e));
-        if (!cancel) setSections([]);
-        if (!cancel) setDemos([]);
-        onLoaded?.({ sections: [], flat: [] });
-      } finally {
-        if (!cancel) setLoading(false);
-      }
-    })();
-    return () => {
-      cancel = true;
-    };
-  }, [apiBase, botId, onLoaded]);
-
-  const filtered = useMemo(() => {
-    if (!q.trim()) return demos;
-    const needle = q.toLowerCase();
-    return demos.filter((d) => (
-      (d.title || "").toLowerCase().includes(needle) ||
-      (d.description || "").toLowerCase().includes(needle)
-    ));
-  }, [demos, q]);
-
-  if (loading) return <p className="text-gray-500">Loading demos...</p>;
-  if (error) return <p className="text-red-600">Error: {error}</p>;
-
-  const searching = q.trim().length > 0;
-  const showFlatGrid = searching || sections.length === 0;
-  const gridItems = searching ? filtered : demos;
-
-  return (
-    <div className="text-left">
-      <p className="italic text-gray-700 mb-3">Here are all demos in our library. Just click on the one you want to view.</p>
-
-      <div className="mb-3">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search demos..."
-          className="w-full border border-gray-300 rounded-lg px-3 py-2"
-        />
-      </div>
-
-      {showFlatGrid ? (
-        <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-          {gridItems.map((d, idx) => (
-            <div key={d.id || d.url || d.title || idx} className="relative">
-              <DemoButton item={{ title: d.title, description: d.description }} idx={idx} onClick={() => onPick(d)} />
-            </div>
-          ))}
-          {gridItems.length === 0 && <p className="text-sm text-gray-500">No demos found.</p>}
-        </div>
-      ) : (
-        <GroupedSections sections={sections} onPick={onPick} />
-      )}
-    </div>
-  );
-}
-
-/* -------------------------------- Main UI -------------------------------- */
 export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-  const [mode, setMode] = useState("ask"); // "ask" | "browse" | "finished"
-
-  // Shared state
-  const [selectedDemo, setSelectedDemo] = useState(null);
-  const [selectionSource, setSelectionSource] = useState(null);
-
-  // Ask flow state
-  const [askButtons, setAskButtons] = useState([]);
-  const [askSections, setAskSections] = useState([]);
-
-  // Browse cache (grouped + flat) for fallback below video
-  const [browseSections, setBrowseSections] = useState([]);
-  const [browseFlat, setBrowseFlat] = useState([]);
-
-  const [input, setInput] = useState("");
-  const [lastQuestion, setLastQuestion] = useState("");
-  const [responseText, setResponseText] = useState(
-    "Hello. I am here to answer any questions you may have about what we offer or who we are. Please enter your question below to begin."
-  );
-  const [loading, setLoading] = useState(false);
-
-  // Scroll container ref (content between banner and question box)
-  const contentRef = useRef(null);
-
-  // Bot bootstrap
-  const alias = useMemo(() => {
-    const qs = new URLSearchParams(window.location.search);
-    return (qs.get("alias") || qs.get("a") || "").trim();
-  }, []);
   const [bot, setBot] = useState(null);
   const [botId, setBotId] = useState("");
   const [fatal, setFatal] = useState("");
 
+  const [mode, setMode] = useState("ask"); // ask | browse | finished
+  const [input, setInput] = useState("");
+  const [lastQuestion, setLastQuestion] = useState("");
+  const [responseText, setResponseText] = useState("Hello. Ask a question to get started.");
+  const [loading, setLoading] = useState(false);
+
+  const [items, setItems] = useState([]); // flat list from /demo-hal
+  const [browseItems, setBrowseItems] = useState([]); // flat list from /browse-demos
+  const [selected, setSelected] = useState(null); // {title,url,...}
+
+  const [showSearch, setShowSearch] = useState(false);
+  const [q, setQ] = useState("");
+
+  const contentRef = useRef(null);
+
+  // alias
+  const alias = useMemo(() => {
+    const qs = new URLSearchParams(window.location.search);
+    return (qs.get("alias") || qs.get("a") || "").trim();
+  }, []);
+
   useEffect(() => {
     let cancel = false;
     (async () => {
-      if (!alias) {
-        setFatal("Missing alias in URL.");
-        return;
-      }
+      if (!alias) { setFatal("Missing alias in URL."); return; }
       try {
         const res = await fetch(`${apiBase}/bot-by-alias?alias=${encodeURIComponent(alias)}`);
         if (!res.ok) throw new Error("Bad alias");
         const data = await res.json();
-        const b = data?.bot;
-        if (!b?.id) throw new Error("Bad alias");
-        if (!cancel) {
-          setBot(b);
-          setBotId(b.id);
-        }
+        if (!cancel) { setBot(data.bot); setBotId(data.bot?.id || ""); }
       } catch {
         if (!cancel) setFatal("Invalid or inactive alias.");
       }
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => { cancel = true; };
   }, [alias, apiBase]);
 
-  /* Tabs */
-  const tabs = useMemo(() => {
-    const list = [];
-    if (bot?.show_browse_demos) list.push({ key: "demos", label: "Browse Demos" });
-    if (bot?.show_schedule_meeting) list.push({ key: "meeting", label: "Schedule Meeting" });
-    list.push({ key: "finished", label: "Finished" });
-    return list;
-  }, [bot]);
-
-  const currentTab = mode === "browse" ? "demos" : mode === "finished" ? "finished" : null;
-
-  const handleTab = (key) => {
-    if (key === "demos") {
-      setMode("browse");
-      setSelectedDemo(null);
-      setSelectionSource(null);
-      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-      return;
-    }
-    if (key === "finished") {
-      setMode("finished");
-      setSelectedDemo(null);
-      setSelectionSource(null);
-      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-      return;
-    }
-  };
-
-  /* ------------------------------ ASK FLOW ------------------------------ */
   async function sendMessage() {
     if (!input.trim() || !botId) return;
     const outgoing = input.trim();
     setInput("");
+    setSelected(null);
     setMode("ask");
-    setSelectedDemo(null);
-    setSelectionSource(null);
-    setLastQuestion(outgoing);
-    setAskButtons([]);
-    setAskSections([]);
     setLoading(true);
-
     try {
-      const payload = { visitor_id: "local-ui", user_question: outgoing, bot_id: botId };
-      const res = await axios.post(`${apiBase}/demo-hal`, payload);
+      const res = await axios.post(`${apiBase}/demo-hal`, { bot_id: botId, user_question: outgoing });
       const data = res.data || {};
-
-      if (data.error_code || data.error) {
-        console.error("API error:", data.error_code || data.error, data.error_message || "");
-      }
-
       setResponseText(data.response_text || "");
-
-      let secs = Array.isArray(data.sections) ? data.sections : [];
-      if (secs.length === 0 && Array.isArray(data.buttons) && data.buttons.length && Array.isArray(data.buttons[0]?.buttons)) {
-        secs = data.buttons;
-      }
-      setAskSections(orderGroups(secs));
-
-      let raw = [];
-      if (Array.isArray(data.buttons) && data.buttons.length && !Array.isArray(data.buttons[0]?.buttons)) raw = data.buttons;
-      else if (Array.isArray(data.demos)) raw = data.demos;
-      else if (secs.length) raw = secs.flatMap((g) => (Array.isArray(g.buttons) ? g.buttons : []));
-      const normalized = raw.map((b) => ({ id: b.id ?? b.demo_id ?? "", title: b.title ?? b.name ?? "", url: b.url ?? b.value ?? "", description: b.description ?? "" }));
-      setAskButtons(dedupeWithinGroup(normalized).slice(0, 6));
-
+      const arr = Array.isArray(data.items) ? data.items : [];
+      setItems(arr);
+      setLastQuestion(outgoing);
       requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
     } catch (e) {
-      console.error("demo-hal failed:", e);
-      setResponseText("Sorry, something went wrong. Please try again.");
-      setAskButtons([]);
-      setAskSections([]);
-      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+      setResponseText("Sorry—something went wrong.");
+      setItems([]);
     } finally {
       setLoading(false);
     }
   }
 
-  function pickFromAsk(item) {
-    const next = { id: item.id || "", title: item.title || "", url: item.url || "", description: item.description || "" };
-    setSelectedDemo(next);
-    setSelectionSource("ask");
-    setMode("ask");
-    requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+  async function openBrowse() {
+    if (!botId) return;
+    setMode("browse");
+    setSelected(null);
+    try {
+      const res = await fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`);
+      const data = await res.json();
+      const arr = Array.isArray(data.items) ? data.items : [];
+      setBrowseItems(arr);
+      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+    } catch {
+      setBrowseItems([]);
+    }
   }
 
-  function pickFromBrowse(item) {
-    const next = { id: item.id || "", title: item.title || "", url: item.url || "", description: item.description || "" };
-    setSelectedDemo(next);
-    setSelectionSource("browse");
-    setMode("ask");
-    requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-  }
+  const filteredAsk = useMemo(() => {
+    if (!q.trim()) return items;
+    const needle = q.toLowerCase();
+    return items.filter((r) => (r.title || "").toLowerCase().includes(needle) || (r.functions_text || "").toLowerCase().includes(needle));
+  }, [items, q]);
 
-  const breadcrumb = selectedDemo ? (selectedDemo.title || "Selected Demo") : mode === "browse" ? "Browse All Demos" : "Ask the Assistant";
+  const filteredBrowse = useMemo(() => {
+    if (!q.trim()) return browseItems;
+    const needle = q.toLowerCase();
+    return browseItems.filter((r) => (r.title || "").toLowerCase().includes(needle) || (r.functions_text || "").toLowerCase().includes(needle));
+  }, [browseItems, q]);
+
+  const tabs = [
+    { key: "demos", label: "Browse Demos", onClick: openBrowse },
+    { key: "meeting", label: "Schedule Meeting", onClick: () => setMode("finished") },
+    { key: "finished", label: "Finished", onClick: () => setMode("finished") },
+  ];
+  const currentTab = mode === "browse" ? "demos" : mode === "finished" ? "finished" : null;
 
   if (fatal) {
     return (
@@ -418,7 +142,7 @@ export default function AskAssistant() {
         <div className="bg-black text-white px-4 sm:px-6">
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3"><img src={logo} alt="DemoHAL logo" className="h-10 object-contain" /></div>
-            <div className="text-lg sm:text-xl font-semibold text-white truncate max-w-[60%] text-right">{breadcrumb}</div>
+            <div className="text-lg sm:text-xl font-semibold text-white truncate max-w-[60%] text-right">{selected ? selected.title : mode === "browse" ? "Browse Demos" : "Ask the Assistant"}</div>
           </div>
 
           {/* Tabs */}
@@ -428,87 +152,66 @@ export default function AskAssistant() {
               return (
                 <button
                   key={t.key}
-                  onClick={() => handleTab(t.key)}
+                  onClick={t.onClick}
                   role="tab"
                   aria-selected={active}
-                  className={[
-                    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
-                    "rounded-t-md border border-b-0",
-                    active
-                      ? "bg-white text-black border-white -mb-px shadow-[0_2px_0_rgba(0,0,0,0.15)]"
-                      : "bg-gradient-to-b from-gray-600 to-gray-700 text-white border-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]",
-                  ].join(" ")}
-                >
-                  {t.label}
-                </button>
+                  className={["px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors","rounded-t-md border border-b-0",active?"bg-white text-black border-white -mb-px shadow-[0_2px_0_rgba(0,0,0,0.15)]":"bg-gradient-to-b from-gray-600 to-gray-700 text-white border-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]"].join(" ")}
+                >{t.label}</button>
               );
             })}
+            <button onClick={() => setShowSearch(!showSearch)} className="ml-auto px-3 py-1.5 text-sm rounded-t-md bg-white text-black border border-b-0 flex items-center gap-1">
+              <MagnifyingGlassIcon className="w-4 h-4"/> Search
+            </button>
           </nav>
         </div>
 
-        {/* Content (the whole area scrolls, including the video) */}
-        <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
-          {mode === "finished" ? (
-            <div className="flex-1 flex items-center justify-center"><p className="text-gray-600">Thanks for exploring! We will design this screen next.</p></div>
-          ) : mode === "browse" ? (
-            <BrowseDemosPanel
-              apiBase={apiBase}
-              botId={botId}
-              onLoaded={({ sections, flat }) => { setBrowseSections(sections); setBrowseFlat(flat); }}
-              onPick={pickFromBrowse}
-            />
-          ) : selectedDemo ? (
-            <div className="w-full flex-1 flex flex-col">
-              {/* Video */}
-              <div className="pt-2 pb-3 bg-white">
-                <iframe style={{ width: "100%", aspectRatio: "471 / 272" }} src={selectedDemo.url} title={selectedDemo.title || "Selected demo"} className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-              </div>
+        {/* Content */}
+        <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
+          {/* Search bar (toggle) */}
+          {showSearch && (
+            <div className="flex items-center gap-2">
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by title or function" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+              <button onClick={() => setQ("")} className="p-2 rounded bg-gray-200"><XMarkIcon className="w-5 h-5"/></button>
+            </div>
+          )}
 
-              {/* Below the player: if came from BROWSE -> grouped if present else flat fallback */}
-              {selectionSource === "browse" ? (
-                browseSections?.length ? (
-                  <GroupedSections sections={browseSections} onPick={pickFromBrowse} />
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {browseFlat.map((b, idx) => (
-                      <DemoButton key={`${b.id || b.url || b.title || idx}`} item={{ title: b.title, description: b.description }} idx={idx} onClick={() => pickFromBrowse(b)} />
-                    ))}
-                  </div>
-                )
-              ) : (
-                // Came from ASK -> grouped if present else flat fallback (recommended demos)
-                askSections?.length ? (
-                  <GroupedSections sections={askSections} onPick={pickFromAsk} />
-                ) : (
-                  <>
-                    <p className="text-base italic text-left mt-3 mb-1 text-gray-600">Recommended Demos</p>
-                    <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-                      {askButtons.map((b, idx) => (
-                        <div key={`${(b.id || b.url || b.title || "demo")}-${idx}`} className="relative">
-                          <DemoButton item={{ title: b.title, description: b.description }} idx={idx} onClick={() => pickFromAsk({ id: b.id, title: b.title, url: b.url, description: b.description })} />
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )
-              )}
+          {selected ? (
+            <div className="w-full flex-1 flex flex-col">
+              <div className="pt-2 pb-3 bg-white">
+                <iframe style={{ width: "100%", aspectRatio: "471 / 272" }} src={selected.url} title={selected.title} className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+              </div>
+              <div className="text-left text-sm text-gray-600 -mt-2">Recommended Demos</div>
+              <div className="flex flex-col gap-3">
+                {(mode === "browse" ? filteredBrowse : filteredAsk).map((it) => (
+                  <Row key={it.id || it.url || it.title} item={it} onPick={setSelected} />
+                ))}
+              </div>
+            </div>
+          ) : mode === "browse" ? (
+            <div className="w-full flex-1 flex flex-col">
+              <div className="flex flex-col gap-3">
+                {filteredBrowse.map((it) => (
+                  <Row key={it.id || it.url || it.title} item={it} onPick={setSelected} />
+                ))}
+              </div>
             </div>
           ) : (
             <div className="w-full flex-1 flex flex-col">
-              {!lastQuestion ? null : (<p className="text-base text-black italic">"{lastQuestion}"</p>)}
-              <div className="text-left mt-2">{loading ? (<p className="text-gray-500 font-semibold animate-pulse">Thinking...</p>) : (<p className="text-black text-base font-bold whitespace-pre-line">{responseText}</p>)}</div>
-              {askSections?.length ? (<GroupedSections sections={askSections} onPick={pickFromAsk} />) : askButtons?.length ? (
-                <>
-                  <p className="text-base italic text-left mt-3 mb-1 text-gray-600">Recommended Demos</p>
-                  <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {askButtons.map((b, idx) => (
-                      <div key={`${(b.id || b.url || b.title || "demo")}-${idx}`} className="relative">
-                        <DemoButton item={{ title: b.title, description: b.description }} idx={idx} onClick={() => pickFromAsk({ id: b.id, title: b.title, url: b.url, description: b.description })} />
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : null}
+              {!lastQuestion ? null : (
+                <p className="text-base text-black italic text-center">"{lastQuestion}"</p>
+              )}
+              <div className="text-left">
+                {loading ? (
+                  <p className="text-gray-500 font-semibold animate-pulse">Thinking...</p>
+                ) : (
+                  <p className="text-black text-base font-bold whitespace-pre-line">{responseText}</p>
+                )}
+              </div>
+              <div className="flex flex-col gap-3">
+                {filteredAsk.map((it) => (
+                  <Row key={it.id || it.url || it.title} item={it} onPick={setSelected} />
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -516,7 +219,14 @@ export default function AskAssistant() {
         {/* Input */}
         <div className="px-4 py-3 border-top border-gray-400 border-t">
           <div className="relative w-full">
-            <textarea rows={1} className="w-full border border-gray-400 rounded-lg px-4 py-2 pr-14 text-base text-black placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px]" placeholder="Ask your question here" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()} />
+            <textarea
+              rows={1}
+              className="w-full border border-gray-400 rounded-lg px-4 py-2 pr-14 text-base text-black placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px]"
+              placeholder="Ask your question here"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
+            />
             <button aria-label="Send" onClick={sendMessage} className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95">
               <ArrowUpCircleIcon className="w-8 h-8 text-red-600 hover:text-red-700" />
             </button>
