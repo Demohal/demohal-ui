@@ -1,9 +1,11 @@
-// src/components/AskAssistant.jsx — Spec-compliant grouping (Industry → Supergroup)
-// Implements UI specs:
-// 1) Groups by Industry (A→Z) then Supergroup (A→Z). Buttons within group sorted by demo title.
-// 2) Helper text only above each group: bold + italic + medium gray, with spacing; no other headings/icons.
-// 3) Dedupe within a group (allow same demo across different groups).
-// 4) Scroll behavior: anchor top under banner on first render and on every selection.
+// src/components/AskAssistant.jsx — Spec fixes per screenshot
+// Changes:
+// - Filter out "All demos" group (invalid per spec)
+// - Ensure grouping order: Industry (A→Z), then Supergroup (A→Z); buttons inside group sorted by title
+// - Helper text only above groups (bold + italic + medium gray)
+// - Scroll: video is NOT sticky; content (including video) scrolls between banner and question box
+// - Browse header copy set to dark gray
+// - Active tab style: light (bg-white, text-black); inactive stays dark; resets on ask
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -64,14 +66,20 @@ function DemoButton({ item, idx, onClick }) {
 }
 
 /* --------------------------- Helpers for grouping ------------------------- */
-function orderGroups(sections) {
+function cleanGroups(sections) {
   if (!Array.isArray(sections)) return [];
-  const inds = sections.filter((s) => s?.kind === "industry").sort((a, b) => (a.title || "").localeCompare(b.title || ""));
-  const sgs = sections.filter((s) => s?.kind === "supergroup").sort((a, b) => (a.title || "").localeCompare(b.title || ""));
-  const rest = sections.filter((s) => s?.kind !== "industry" && s?.kind !== "supergroup");
+  return sections.filter((s) => {
+    const t = (s?.title || "").trim().toLowerCase();
+    return s?.kind !== "all" && t !== "all demos" && t !== "all demo" && t !== "all";
+  });
+}
+function orderGroups(sections) {
+  const filtered = cleanGroups(sections);
+  const inds = filtered.filter((s) => s?.kind === "industry").sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+  const sgs = filtered.filter((s) => s?.kind === "supergroup").sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+  const rest = filtered.filter((s) => s?.kind !== "industry" && s?.kind !== "supergroup");
   return [...inds, ...sgs, ...rest];
 }
-
 function dedupeWithinGroup(list) {
   const seen = new Set();
   const out = [];
@@ -86,22 +94,22 @@ function dedupeWithinGroup(list) {
 
 /* ---------------------- Shared grouped rendering widget ------------------- */
 function GroupedSections({ sections, onPick }) {
-  if (!Array.isArray(sections) || sections.length === 0) return null;
-
   const ordered = orderGroups(sections);
+  if (!ordered.length) return null;
 
   return (
     <>
       {ordered.map((s, secIdx) => {
-        const buttons = dedupeWithinGroup((Array.isArray(s.buttons) ? s.buttons : []).slice().sort((a, b) => (a.title || "").localeCompare(b.title || "")));
+        const buttons = dedupeWithinGroup((Array.isArray(s.buttons) ? s.buttons : [])
+          .slice()
+          .sort((a, b) => (a.title || "").localeCompare(b.title || "")));
         return (
           <section key={`${s.kind || "sec"}-${s.title || secIdx}`} className="mb-6 text-left">
-            {/* Spec #2 helper text only, with spacing before/after */}
-            <p className="font-semibold italic text-gray-600 my-2">
+            {/* Helper text only, bold + italic + medium gray; one blank line before/after */}
+            <p className="font-semibold italic text-gray-600 my-3">
               Demos that talk about {s.title}:
             </p>
 
-            {/* Buttons grid — no other headings/icons per spec #4 */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {buttons.map((b, idx) => (
                 <DemoButton
@@ -166,7 +174,6 @@ function BrowseDemosPanel({ apiBase, botId, onPick, onSectionsLoaded }) {
         const data = await res.json();
         if (cancel) return;
 
-        // Accept groups via sections (preferred) or buttons (if grouped there)
         let secs = Array.isArray(data?.sections) ? data.sections : [];
         if (
           secs.length === 0 &&
@@ -178,7 +185,6 @@ function BrowseDemosPanel({ apiBase, botId, onPick, onSectionsLoaded }) {
         }
         secs = orderGroups(secs);
 
-        // Flat list for search fallback
         const flat = Array.isArray(data?.demos)
           ? data.demos
           : secs.flatMap((g) => Array.isArray(g.buttons) ? g.buttons : []);
@@ -202,23 +208,20 @@ function BrowseDemosPanel({ apiBase, botId, onPick, onSectionsLoaded }) {
   const filtered = useMemo(() => {
     if (!q.trim()) return demos;
     const needle = q.toLowerCase();
-    return demos.filter((d) => {
-      return (
-        (d.title || "").toLowerCase().includes(needle) ||
-        (d.description || "").toLowerCase().includes(needle)
-      );
-    });
+    return demos.filter((d) => (
+      (d.title || "").toLowerCase().includes(needle) ||
+      (d.description || "").toLowerCase().includes(needle)
+    ));
   }, [demos, q]);
 
   if (loading) return <p className="text-gray-500">Loading demos...</p>;
   if (error) return <p className="text-red-600">Error: {error}</p>;
 
-  // If user is searching, show flat filtered results; otherwise show grouped sections
   const searching = q.trim().length > 0;
 
   return (
     <div className="text-left">
-      <p className="italic mb-3">Here are all demos in our library. Just click on the one you want to view.</p>
+      <p className="italic text-gray-700 mb-3">Here are all demos in our library. Just click on the one you want to view.</p>
 
       <div className="mb-3">
         <input
@@ -255,17 +258,16 @@ function BrowseDemosPanel({ apiBase, botId, onPick, onSectionsLoaded }) {
 export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-  // "ask" | "browse" | "finished"
-  const [mode, setMode] = useState("ask");
+  const [mode, setMode] = useState("ask"); // "ask" | "browse" | "finished"
 
   // Shared state
   const [selectedDemo, setSelectedDemo] = useState(null); // {id,title,url,description}
   const [selectionSource, setSelectionSource] = useState(null); // "ask" | "browse" | null
 
   // Ask flow state
-  const [askButtons, setAskButtons] = useState([]); // fallback list from /demo-hal (deduped, max 6)
-  const [askSections, setAskSections] = useState([]); // grouped sections from /demo-hal or buttons
-  const [browseSections, setBrowseSections] = useState([]); // sections from /browse-demos
+  const [askButtons, setAskButtons] = useState([]); // fallback list
+  const [askSections, setAskSections] = useState([]); // grouped sections
+  const [browseSections, setBrowseSections] = useState([]); // grouped sections
 
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
@@ -274,7 +276,7 @@ export default function AskAssistant() {
   );
   const [loading, setLoading] = useState(false);
 
-  // Scroll container ref for anchoring content under the banner
+  // Scroll container ref (content between banner and question box)
   const contentRef = useRef(null);
 
   // Bot bootstrap
@@ -329,7 +331,6 @@ export default function AskAssistant() {
       setMode("browse");
       setSelectedDemo(null);
       setSelectionSource(null);
-      // Anchor to top when switching tabs as well
       requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
       return;
     }
@@ -366,7 +367,6 @@ export default function AskAssistant() {
 
       setResponseText(data.response_text || "");
 
-      // Accept grouped via sections (preferred) or buttons (if grouped there)
       let secs = Array.isArray(data.sections) ? data.sections : [];
       if (
         secs.length === 0 &&
@@ -378,7 +378,7 @@ export default function AskAssistant() {
       }
       setAskSections(orderGroups(secs));
 
-      // Fallback: Expect flat buttons/demos; normalize and DEDUPE; limit to 6
+      // Flat fallback for legacy outputs
       let raw = [];
       if (Array.isArray(data.buttons) && data.buttons.length && !Array.isArray(data.buttons[0]?.buttons)) {
         raw = data.buttons;
@@ -395,7 +395,6 @@ export default function AskAssistant() {
       }));
       setAskButtons(dedupeByIdAndUrl(normalized, 6));
 
-      // Anchor to top under banner after initial display (spec #5)
       requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
     } catch (e) {
       console.error("demo-hal failed:", e);
@@ -417,7 +416,7 @@ export default function AskAssistant() {
     };
     setSelectedDemo(next);
     setSelectionSource("ask");
-    setMode("ask"); // video view still lives in "ask" mode
+    setMode("ask");
     requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
   }
 
@@ -430,7 +429,7 @@ export default function AskAssistant() {
     };
     setSelectedDemo(next);
     setSelectionSource("browse");
-    setMode("ask"); // we show the player inside ask mode
+    setMode("ask");
     requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
   }
 
@@ -489,7 +488,7 @@ export default function AskAssistant() {
                     "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
                     "rounded-t-md border border-b-0",
                     active
-                      ? "bg-gradient-to-b from-red-500 to-red-700 text-white border-red-700 -mb-px shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_2px_0_rgba(0,0,0,0.15)]"
+                      ? "bg-white text-black border-white -mb-px shadow-[0_2px_0_rgba(0,0,0,0.15)]"
                       : "bg-gradient-to-b from-gray-600 to-gray-700 text-white border-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]",
                   ].join(" ")}
                 >
@@ -500,7 +499,7 @@ export default function AskAssistant() {
           </nav>
         </div>
 
-        {/* Content (scrolls between banner and question box) */}
+        {/* Content (the whole area scrolls, including the video) */}
         <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col text-center space-y-6 overflow-y-auto">
           {mode === "finished" ? (
             <div className="flex-1 flex items-center justify-center">
@@ -515,8 +514,8 @@ export default function AskAssistant() {
             />
           ) : selectedDemo ? (
             <div className="w-full flex-1 flex flex-col">
-              {/* Video anchored at top */}
-              <div className="sticky top-0 z-10 bg-white pt-2 pb-3">
+              {/* Video: NOT sticky; it will scroll with the buttons */}
+              <div className="pt-2 pb-3 bg-white">
                 <iframe
                   style={{ width: "100%", aspectRatio: "471 / 272" }}
                   src={selectedDemo.url}
@@ -527,7 +526,7 @@ export default function AskAssistant() {
                 />
               </div>
 
-              {/* Below the player: show grouped sections from source; fallback to flat */}
+              {/* Below the player: grouped sections; fallback to flat */}
               {selectionSource === "ask" ? (
                 askSections?.length ? (
                   <GroupedSections sections={askSections} onPick={pickFromAsk} />
@@ -555,12 +554,10 @@ export default function AskAssistant() {
             </div>
           ) : (
             <div className="w-full flex-1 flex flex-col">
-              {/* Show the user's question */}
               {!lastQuestion ? null : (
                 <p className="text-base text-black italic">"{lastQuestion}"</p>
               )}
 
-              {/* Assistant's response anchored under banner */}
               <div className="text-left mt-2">
                 {loading ? (
                   <p className="text-gray-500 font-semibold animate-pulse">Thinking...</p>
@@ -569,7 +566,6 @@ export default function AskAssistant() {
                 )}
               </div>
 
-              {/* Ask recommendations (grouped if available; otherwise flat fallback) */}
               {askSections?.length ? (
                 <GroupedSections sections={askSections} onPick={pickFromAsk} />
               ) : askButtons?.length ? (
