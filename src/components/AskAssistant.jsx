@@ -65,16 +65,12 @@ function DemoButton({ item, idx, onClick }) {
 /* ---------------------- Shared grouped rendering widget ------------------- */
 function GroupedSections({ sections, onPick }) {
   if (!Array.isArray(sections) || sections.length === 0) return null;
+
   return (
     <>
       {sections.map((s, secIdx) => {
-        const label = s.kind === "industry"
-          ? `Demos tailored for the ${s.title} industry.`
-          : s.kind === "supergroup"
-          ? `Related demos by topic: ${s.title}.`
-          : s.help_text || s.title || "Demos";
-
         const buttons = Array.isArray(s.buttons) ? s.buttons : [];
+
         return (
           <section key={`${s.kind || "sec"}-${s.title || secIdx}`} className="mb-6">
             <div className="mb-2">
@@ -91,7 +87,7 @@ function GroupedSections({ sections, onPick }) {
                     : "Browse available demos.")}
               </p>
             </div>
-          
+
             <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
               {buttons.map((b, idx) => (
                 <div key={`${b.id || b.url || b.title || idx}`} className="relative">
@@ -111,28 +107,6 @@ function GroupedSections({ sections, onPick }) {
               ))}
             </div>
           </section>
-
-
-  <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-    {buttons.map((b, idx) => (
-      <div key={`${b.id || b.url || b.title || idx}`} className="relative">
-        <DemoButton
-          item={{ title: b.title, description: b.description }}
-          idx={idx}
-          onClick={() =>
-            onPick?.({
-              id: b.id || "",
-              title: b.title || "",
-              url: b.url || "",
-              description: b.description || "",
-            })
-          }
-        />
-      </div>
-    ))}
-  </div>
-</section>
-
         );
       })}
     </>
