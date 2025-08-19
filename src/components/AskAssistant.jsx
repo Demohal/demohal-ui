@@ -1,4 +1,4 @@
-// src/components/AskAssistant.jsx — MVP: flat list of demos with functions_text (one per row)
+// src/components/AskAssistant.jsx — MVP: flat list + anchored video + inline search tooltip
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -9,11 +9,14 @@ function Row({ item, onPick }) {
   return (
     <button
       onClick={() => onPick(item)}
-      className="w-full text-left bg-gradient-to-b from-gray-600 to-gray-700 text-white rounded-xl border border-gray-700 px-4 py-3 shadow hover:from-gray-500 hover:to-gray-600 transition-colors"
+      className="w-full text-center bg-gradient-to-b from-gray-600 to-gray-700 text-white rounded-xl border border-gray-700 px-4 py-3 shadow hover:from-gray-500 hover:to-gray-600 transition-colors"
     >
-      <div className="font-extrabold text-base sm:text-lg">{item.title}</div>
+      {/* Title reduced ~25% and centered */}
+      <div className="font-extrabold text-xs sm:text-sm">{item.title}</div>
       {item.functions_text ? (
-        <div className="mt-1 text-xs sm:text-sm opacity-90">{item.functions_text}</div>
+        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">
+          {item.functions_text}
+        </div>
       ) : null}
     </button>
   );
@@ -36,8 +39,13 @@ export default function AskAssistant() {
   const [browseItems, setBrowseItems] = useState([]); // flat list from /browse-demos
   const [selected, setSelected] = useState(null); // {title,url,...}
 
+  // Anchoring logic
+  const [isAnchored, setIsAnchored] = useState(false);
+
+  // Inline search tooltip state
   const [showSearch, setShowSearch] = useState(false);
   const [q, setQ] = useState("");
+  const searchInputRef = useRef(null);
 
   const contentRef = useRef(null);
 
@@ -62,6 +70,22 @@ export default function AskAssistant() {
     })();
     return () => { cancel = true; };
   }, [alias, apiBase]);
+
+  // When anchored, release on first scroll
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el || !selected) return;
+    const onScroll = () => {
+      if (el.scrollTop > 8 && isAnchored) setIsAnchored(false);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [selected, isAnchored]);
+
+  // Focus search input when tooltip opens
+  useEffect(() => {
+    if (showSearch) searchInputRef.current?.focus();
+  }, [showSearch]);
 
   async function sendMessage() {
     if (!input.trim() || !botId) return;
@@ -135,6 +159,35 @@ export default function AskAssistant() {
     );
   }
 
+  const SearchControl = ({ align = "right" }) => (
+    <div className="relative">
+      <button
+        aria-label="Search demos"
+        onClick={() => setShowSearch((v) => !v)}
+        className="p-1.5"
+      >
+        <MagnifyingGlassIcon className="w-5 h-5 text-blue-600" />
+      </button>
+      {showSearch && (
+        <div className={`absolute ${align === "right" ? "right-0" : "left-0"} mt-2 bg-white border border-gray-300 rounded-lg shadow-lg p-2 w-64`}>
+          <div className="flex items-center gap-2">
+            <input
+              ref={searchInputRef}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) setShowSearch(false);
+              }}
+              placeholder="Search by title or function"
+              className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-black placeholder-gray-400"
+            />
+            <button onClick={() => setQ("")} className="p-2 rounded bg-gray-300 text-gray-700"><XMarkIcon className="w-4 h-4"/></button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-2 sm:p-0">
       <div className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300" style={{ width: "min(720px, 100vw - 16px)", height: "auto", minHeight: 450, maxHeight: "90vh" }}>
@@ -145,7 +198,7 @@ export default function AskAssistant() {
             <div className="text-lg sm:text-xl font-semibold text-white truncate max-w-[60%] text-right">{selected ? selected.title : mode === "browse" ? "Browse Demos" : "Ask the Assistant"}</div>
           </div>
 
-          {/* Tabs */}
+          {/* Tabs (search moved inline with Recommended demos) */}
           <nav className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
             {tabs.map((t) => {
               const active = currentTab === t.key;
@@ -159,39 +212,48 @@ export default function AskAssistant() {
                 >{t.label}</button>
               );
             })}
-            <button onClick={() => setShowSearch(!showSearch)} className="ml-auto px-3 py-1.5 text-sm rounded-t-md bg-white text-black border border-b-0 flex items-center gap-1">
-              <MagnifyingGlassIcon className="w-4 h-4"/> Search
-            </button>
           </nav>
         </div>
 
         {/* Content */}
         <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
-          {/* Search bar (toggle) */}
-          {showSearch && (
-            <div className="flex items-center gap-2">
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by title or function" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
-              <button onClick={() => setQ("")} className="p-2 rounded bg-gray-200"><XMarkIcon className="w-5 h-5"/></button>
-            </div>
-          )}
-
           {selected ? (
             <div className="w-full flex-1 flex flex-col">
-              <div className="pt-2 pb-3 bg-white">
+              {/* Video: anchor initially, then release on scroll */}
+              <div className={`${isAnchored ? "sticky top-0 z-10" : ""} bg-white pt-2 pb-3`}>
                 <iframe style={{ width: "100%", aspectRatio: "471 / 272" }} src={selected.url} title={selected.title} className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
               </div>
-              <div className="text-left text-sm text-gray-600 -mt-2">Recommended Demos</div>
+
+              {/* Help + right-justified blue search icon */}
+              <div className="flex items-center justify-between mt-2 mb-3">
+                <p className="italic text-gray-600">Recommended demos</p>
+                <SearchControl align="right" />
+              </div>
+
               <div className="flex flex-col gap-3">
                 {(mode === "browse" ? filteredBrowse : filteredAsk).map((it) => (
-                  <Row key={it.id || it.url || it.title} item={it} onPick={setSelected} />
+                  <Row key={it.id || it.url || it.title} item={it} onPick={(val) => {
+                    setSelected(val);
+                    setIsAnchored(true); // re-anchor on selection
+                    requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+                  }} />
                 ))}
               </div>
             </div>
           ) : mode === "browse" ? (
             <div className="w-full flex-1 flex flex-col">
+              {/* Help + search */}
+              <div className="flex items-center justify-between mt-2 mb-3">
+                <p className="italic text-gray-600">Recommended demos</p>
+                <SearchControl align="right" />
+              </div>
               <div className="flex flex-col gap-3">
                 {filteredBrowse.map((it) => (
-                  <Row key={it.id || it.url || it.title} item={it} onPick={setSelected} />
+                  <Row key={it.id || it.url || it.title} item={it} onPick={(val) => {
+                    setSelected(val);
+                    setIsAnchored(true);
+                    requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+                  }} />
                 ))}
               </div>
             </div>
@@ -207,9 +269,20 @@ export default function AskAssistant() {
                   <p className="text-black text-base font-bold whitespace-pre-line">{responseText}</p>
                 )}
               </div>
+
+              {/* Space + help text + search */}
+              <div className="flex items-center justify-between mt-4 mb-3">
+                <p className="italic text-gray-600">Recommended demos</p>
+                <SearchControl align="right" />
+              </div>
+
               <div className="flex flex-col gap-3">
                 {filteredAsk.map((it) => (
-                  <Row key={it.id || it.url || it.title} item={it} onPick={setSelected} />
+                  <Row key={it.id || it.url || it.title} item={it} onPick={(val) => {
+                    setSelected(val);
+                    setIsAnchored(true);
+                    requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+                  }} />
                 ))}
               </div>
             </div>
