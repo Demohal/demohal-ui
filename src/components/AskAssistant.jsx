@@ -76,8 +76,22 @@ function GroupedSections({ sections, onPick }) {
 
         const buttons = Array.isArray(s.buttons) ? s.buttons : [];
         return (
-          <section key={`${s.kind || "sec"}-${s.title || secIdx}`} className="mb-5">
-            <h3 className="text-left italic text-gray-700 mb-2">{label}</h3>
+          <section key={`${s.kind || "sec"}-${s.title || secIdx}`} className="mb-6">
+            <div className="mb-2">
+              <span className="inline-block rounded-md px-2 py-1 text-xs uppercase tracking-wide bg-gray-900 text-white">
+                {s.kind === "industry" ? "Industry" : s.kind === "supergroup" ? "Supergroup" : "All"}
+              </span>
+              <h3 className="mt-2 text-lg font-semibold text-black">{s.title || "Demos"}</h3>
+              <p className="text-sm text-gray-600 italic">
+                {s.help_text ||
+                  (s.kind === "industry"
+                    ? `Demos tailored for the ${s.title} industry.`
+                    : s.kind === "supergroup"
+                    ? `Related demos by topic: ${s.title}.`
+                    : "Browse available demos.")}
+              </p>
+            </div>
+          
             <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
               {buttons.map((b, idx) => (
                 <div key={`${b.id || b.url || b.title || idx}`} className="relative">
@@ -97,6 +111,28 @@ function GroupedSections({ sections, onPick }) {
               ))}
             </div>
           </section>
+
+
+  <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
+    {buttons.map((b, idx) => (
+      <div key={`${b.id || b.url || b.title || idx}`} className="relative">
+        <DemoButton
+          item={{ title: b.title, description: b.description }}
+          idx={idx}
+          onClick={() =>
+            onPick?.({
+              id: b.id || "",
+              title: b.title || "",
+              url: b.url || "",
+              description: b.description || "",
+            })
+          }
+        />
+      </div>
+    ))}
+  </div>
+</section>
+
         );
       })}
     </>
@@ -550,12 +586,13 @@ export default function AskAssistant() {
           <div className="relative w-full">
             <textarea
               rows={1}
-              className="w-full border border-gray-400 rounded-lg px-4 py-2 pr-14 text-base resize-y min-h-[3rem] max-h-[160px]"
+              className="w-full border border-gray-400 rounded-lg px-4 py-2 pr-14 text-base text-black placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px]"
               placeholder="Ask your question here"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
             />
+
             <button
               aria-label="Send"
               onClick={sendMessage}
