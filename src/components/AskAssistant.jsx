@@ -1,5 +1,8 @@
-// src/components/AskAssistant.jsx
-// New UI
+// src/components/AskAssistant.jsx — App v3 (Grouped buttons: Industry → Supergroup)
+// - Renders grouped sections returned by /demo-hal and /browse-demos
+// - Skips "General Business" on the server; UI just renders provided sections
+// - Falls back to flat buttons if sections are missing
+
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
@@ -58,90 +61,44 @@ function DemoButton({ item, idx, onClick }) {
   );
 }
 
-/* ------------------ Browse-only grouped recommendations ------------------ */
-function GroupedRecommendationsPanel({ apiBase, botId, demoId, onPick, limit = 8 }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (!apiBase || !botId || !demoId) return;
-    const ac = new AbortController();
-    (async () => {
-      setLoading(true);
-      setError("");
-      try {
-        const qs = new URLSearchParams();
-        qs.set("bot_id", botId);
-        qs.set("demo_video_id", demoId);
-        qs.set("limit", String(limit));
-        const res = await fetch(`${apiBase}/recommend-demos?${qs.toString()}`, { signal: ac.signal });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        setData(json || {});
-      } catch (e) {
-        if (e.name !== "AbortError") setError(String(e.message || e));
-      } finally {
-        setLoading(false);
-      }
-    })();
-    return () => ac.abort();
-  }, [apiBase, botId, demoId, limit]);
-
-  const items = (rows = []) =>
-    rows.map((d) => ({
-      id: d.id,
-      title: d.title || "Untitled demo",
-      url: d.url || "",
-      description: d.description || "",
-    }));
-
-  if (!botId || !demoId) return null;
-
+/* ---------------------- Shared grouped rendering widget ------------------- */
+function GroupedSections({ sections, onPick }) {
+  if (!Array.isArray(sections) || sections.length === 0) return null;
   return (
-    <div className="mt-2">
-      {loading && <p className="text-gray-600">Loading recommendations…</p>}
-      {error && <p className="text-red-600">Error: {error}</p>}
+    <>
+      {sections.map((s, secIdx) => {
+        const label = s.kind === "industry"
+          ? `Demos tailored for the ${s.title} industry.`
+          : s.kind === "supergroup"
+          ? `Related demos by topic: ${s.title}.`
+          : s.help_text || s.title || "Demos";
 
-      {!loading && !error && data && (
-        <>
-          {(data.industries || []).map((g) => (
-            <section key={`ind-${g.bot_industry_id}`} className="mb-5">
-              {/* darker gray helper text */}
-              <h3 className="text-left italic text-gray-700 mb-2">
-                Demos that talk about the {g.title} Industry:
-              </h3>
-              <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-                {items(g.demos).map((d, idx) => (
-                  <div key={`${d.id}-${idx}`} className="relative">
-                    <DemoButton item={{ title: d.title }} idx={idx} onClick={() => onPick?.(d)} />
-                  </div>
-                ))}
-              </div>
-            </section>
-          ))}
-
-          {(data.supergroups || []).map((g) => (
-            <section key={`sg-${g.bot_function_supergroup_id}`} className="mb-5">
-              {/* darker gray helper text */}
-              <h3 className="text-left italic text-gray-700 mb-2">Demos that talk about {g.title}:</h3>
-              <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-                {items(g.demos).map((d, idx) => (
-                  <div key={`${d.id}-${idx}`} className="relative">
-                    <DemoButton item={{ title: d.title }} idx={idx} onClick={() => onPick?.(d)} />
-                  </div>
-                ))}
-              </div>
-            </section>
-          ))}
-
-          {(!data.industries || data.industries.length === 0) &&
-            (!data.supergroups || data.supergroups.length === 0) && (
-              <p className="text-sm text-gray-500 text-left">No recommendations yet.</p>
-            )}
-        </>
-      )}
-    </div>
+        const buttons = Array.isArray(s.buttons) ? s.buttons : [];
+        return (
+          <section key={`${s.kind || "sec"}-${s.title || secIdx}`} className="mb-5">
+            <h3 className="text-left italic text-gray-700 mb-2">{label}</h3>
+            <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
+              {buttons.map((b, idx) => (
+                <div key={`${b.id || b.url || b.title || idx}`} className="relative">
+                  <DemoButton
+                    item={{ title: b.title, description: b.description }}
+                    idx={idx}
+                    onClick={() =>
+                      onPick?.({
+                        id: b.id || "",
+                        title: b.title || "",
+                        url: b.url || "",
+                        description: b.description || "",
+                      })
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+          </section>
+        );
+      })}
+    </>
   );
 }
 
@@ -164,23 +121,34 @@ function dedupeByIdAndUrl(list, limit = 6) {
 }
 
 /* ------------------------------- Browse tab ------------------------------ */
-function BrowseDemosPanel({ apiBase, botId, onPick }) {
-  const [demos, setDemos] = useState([]);
+function BrowseDemosPanel({ apiBase, botId, onPick, onSectionsLoaded }) {
+  const [sections, setSections] = useState([]);
+  const [demos, setDemos] = useState([]); // flat list for search fallback
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let cancel = false;
     (async () => {
       if (!botId) return;
       setLoading(true);
+      setError("");
       try {
         const params = new URLSearchParams();
         params.set("bot_id", botId);
         const res = await fetch(`${apiBase}/browse-demos?${params.toString()}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        if (!cancel) setDemos(Array.isArray(data?.demos) ? data.demos : []);
-      } catch {
+        if (cancel) return;
+        const secs = Array.isArray(data?.sections) ? data.sections : [];
+        const flat = Array.isArray(data?.demos) ? data.demos : [];
+        setSections(secs);
+        setDemos(flat);
+        onSectionsLoaded?.(secs);
+      } catch (e) {
+        if (!cancel) setError(String(e.message || e));
+        if (!cancel) setSections([]);
         if (!cancel) setDemos([]);
       } finally {
         if (!cancel) setLoading(false);
@@ -189,7 +157,7 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
     return () => {
       cancel = true;
     };
-  }, [apiBase, botId]);
+  }, [apiBase, botId, onSectionsLoaded]);
 
   const filtered = useMemo(() => {
     if (!q.trim()) return demos;
@@ -203,13 +171,14 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
   }, [demos, q]);
 
   if (loading) return <p className="text-gray-500">Loading demos...</p>;
-  if (!demos.length) return <p className="text-gray-500">No demos available.</p>;
+  if (error) return <p className="text-red-600">Error: {error}</p>;
+
+  // If user is searching, show flat filtered results; otherwise show grouped sections
+  const searching = q.trim().length > 0;
 
   return (
     <div className="text-left">
-      <p className="italic mb-3">
-        Here are all demos in our library. Just click on the one you want to view.
-      </p>
+      <p className="italic mb-3">Here are all demos in our library. Just click on the one you want to view.</p>
 
       <div className="mb-3">
         <input
@@ -220,17 +189,24 @@ function BrowseDemosPanel({ apiBase, botId, onPick }) {
         />
       </div>
 
-      <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-        {filtered.map((d, idx) => (
-          <div key={d.id || d.url || d.title} className="relative">
-            <DemoButton
-              item={{ title: d.title, description: d.description }}
-              idx={idx}
-              onClick={() => onPick(d)}
-            />
-          </div>
-        ))}
-      </div>
+      {searching ? (
+        <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
+          {filtered.map((d, idx) => (
+            <div key={d.id || d.url || d.title || idx} className="relative">
+              <DemoButton
+                item={{ title: d.title, description: d.description }}
+                idx={idx}
+                onClick={() => onPick(d)}
+              />
+            </div>
+          ))}
+          {filtered.length === 0 && (
+            <p className="text-sm text-gray-500">No demos match your search.</p>
+          )}
+        </div>
+      ) : (
+        <GroupedSections sections={sections} onPick={onPick} />
+      )}
     </div>
   );
 }
@@ -243,11 +219,14 @@ export default function AskAssistant() {
   const [mode, setMode] = useState("ask");
 
   // Shared state
-  const [selectedDemo, setSelectedDemo] = useState(null);  // {id,title,url,description}
+  const [selectedDemo, setSelectedDemo] = useState(null); // {id,title,url,description}
   const [selectionSource, setSelectionSource] = useState(null); // "ask" | "browse" | null
 
   // Ask flow state
-  const [askButtons, setAskButtons] = useState([]);        // list from /demo-hal (deduped, max 6)
+  const [askButtons, setAskButtons] = useState([]); // fallback list from /demo-hal (deduped, max 6)
+  const [askSections, setAskSections] = useState([]); // NEW grouped sections from /demo-hal
+  const [browseSections, setBrowseSections] = useState([]); // sections from /browse-demos
+
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
   const [responseText, setResponseText] = useState(
@@ -327,6 +306,7 @@ export default function AskAssistant() {
     setSelectionSource(null);
     setLastQuestion(outgoing);
     setAskButtons([]);
+    setAskSections([]);
     setLoading(true);
 
     try {
@@ -340,7 +320,11 @@ export default function AskAssistant() {
 
       setResponseText(data.response_text || "");
 
-      // Expect buttons or demos; normalize and DEDUPE; limit to 6
+      // NEW: Use grouped sections if available
+      const secs = Array.isArray(data.sections) ? data.sections : [];
+      setAskSections(secs);
+
+      // Fallback: Expect buttons or demos; normalize and DEDUPE; limit to 6
       const raw = Array.isArray(data.buttons)
         ? data.buttons
         : Array.isArray(data.demos)
@@ -357,13 +341,13 @@ export default function AskAssistant() {
       console.error("demo-hal failed:", e);
       setResponseText("Sorry, something went wrong. Please try again.");
       setAskButtons([]);
+      setAskSections([]);
     } finally {
       setLoading(false);
     }
   }
 
   function pickFromAsk(item) {
-    // Item already contains id/url/title from the assistant
     const next = {
       id: item.id || "",
       title: item.title || "",
@@ -460,7 +444,12 @@ export default function AskAssistant() {
               <p className="text-gray-600">Thanks for exploring! We will design this screen next.</p>
             </div>
           ) : mode === "browse" ? (
-            <BrowseDemosPanel apiBase={apiBase} botId={botId} onPick={pickFromBrowse} />
+            <BrowseDemosPanel
+              apiBase={apiBase}
+              botId={botId}
+              onPick={pickFromBrowse}
+              onSectionsLoaded={setBrowseSections}
+            />
           ) : selectedDemo ? (
             <div className="w-full flex-1 flex flex-col">
               {/* Video */}
@@ -476,45 +465,37 @@ export default function AskAssistant() {
               </div>
 
               {/* Under the player:
-                  - if selection came from ASK → show the same askButtons again
-                  - if selection came from BROWSE → show grouped panel (industries/supergroups)
-              */}
+                  - if selection came from ASK → show ASK sections (grouped)
+                  - if selection came from BROWSE → show BROWSE sections (grouped)
+                  - fallback to askButtons if sections empty */}
               {selectionSource === "ask" ? (
-                <>
-                  <p className="text-base italic text-left mt-3 mb-1 text-gray-600">Recommended Demos</p>
-                  <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {askButtons.map((b, idx) => (
-                      <div key={`${(b.id || b.url || b.title || "demo")}-${idx}`} className="relative">
-                        <DemoButton
-                          item={{ title: b.title, description: b.description }}
-                          idx={idx}
-                          onClick={() =>
-                            pickFromAsk({
-                              id: b.id,
-                              title: b.title,
-                              url: b.url,
-                              description: b.description,
-                            })
-                          }
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </>
+                askSections?.length ? (
+                  <GroupedSections sections={askSections} onPick={pickFromAsk} />
+                ) : (
+                  <>
+                    <p className="text-base italic text-left mt-3 mb-1 text-gray-600">Recommended Demos</p>
+                    <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {askButtons.map((b, idx) => (
+                        <div key={`${(b.id || b.url || b.title || "demo")}-${idx}`} className="relative">
+                          <DemoButton
+                            item={{ title: b.title, description: b.description }}
+                            idx={idx}
+                            onClick={() =>
+                              pickFromAsk({
+                                id: b.id,
+                                title: b.title,
+                                url: b.url,
+                                description: b.description,
+                              })
+                            }
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )
               ) : (
-                <GroupedRecommendationsPanel
-                  apiBase={apiBase}
-                  botId={botId}
-                  demoId={selectedDemo.id}
-                  onPick={(d) =>
-                    pickFromBrowse({
-                      id: d.id,
-                      title: d.title,
-                      url: d.url,
-                      description: d.description,
-                    })
-                  }
-                />
+                <GroupedSections sections={browseSections} onPick={pickFromBrowse} />
               )}
             </div>
           ) : (
@@ -533,8 +514,10 @@ export default function AskAssistant() {
                 )}
               </div>
 
-              {/* Ask recommendations (from assistant JSON, not Browse) */}
-              {askButtons?.length ? (
+              {/* Ask recommendations (grouped if available; otherwise fallback to flat */}
+              {askSections?.length ? (
+                <GroupedSections sections={askSections} onPick={pickFromAsk} />
+              ) : askButtons?.length ? (
                 <>
                   <p className="text-base italic text-left mt-3 mb-1 text-gray-600">Recommended Demos</p>
                   <div className="relative overflow-hidden grid grid-cols-1 md:grid-cols-3 gap-3">
