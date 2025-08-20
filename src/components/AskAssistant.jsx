@@ -1,4 +1,4 @@
-// src/components/AskAssistant.jsx — MVP: primary-only under video; search removed from banner
+// src/components/AskAssistant.jsx — MVP: primary + industry matches under video (exclude selected), no banner search
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -36,9 +36,9 @@ export default function AskAssistant() {
   const [responseText, setResponseText] = useState(INITIAL_MSG);
   const [loading, setLoading] = useState(false);
 
-  const [items, setItems] = useState([]); // /demo-hal items (flat)
+  const [items, setItems] = useState([]);       // /demo-hal items (flat)
   const [browseItems, setBrowseItems] = useState([]); // /browse-demos items (flat)
-  const [selected, setSelected] = useState(null); // {id,title,url,primary_function_id,...}
+  const [selected, setSelected] = useState(null);     // selected item (row)
 
   // Video anchoring
   const [isAnchored, setIsAnchored] = useState(false);
@@ -50,12 +50,6 @@ export default function AskAssistant() {
     const qs = new URLSearchParams(window.location.search);
     return (qs.get("alias") || qs.get("a") || "").trim();
   }, []);
-
-  // IDs of functions on the selected video (from selected.functions[])
-  const selectedFunctionIds = useMemo(() => {
-    const ids = (selected?.functions || []).map(f => f?.id).filter(Boolean);
-    return new Set(ids);
-  }, [selected]);
 
   useEffect(() => {
     let cancel = false;
@@ -139,19 +133,50 @@ export default function AskAssistant() {
     }
   }
 
-  // Primary-only list under video: demos whose primary_function_id is in the selected video's functions
+  // Functions/Industries sets for the selected video (from item payload)
+  const selectedFunctionIds = useMemo(() => {
+    const ids = (selected?.functions || []).map((f) => f?.id).filter(Boolean);
+    return new Set(ids);
+  }, [selected]);
+
+  const selectedIndustryIds = useMemo(() => {
+    const ids = (selected?.industry_ids || []).filter(Boolean);
+    return new Set(ids);
+  }, [selected]);
+
+  // Build list under video: primaries (by function) first, then industry matches. Always exclude selected.
   const listSource = mode === "browse" ? browseItems : items;
 
-  const visibleUnderVideo = selected
-    ? (selectedFunctionIds.size > 0
+  const primaryMatches =
+    selected && selectedFunctionIds.size > 0
       ? listSource.filter(
           (it) =>
-            it.id !== selected.id &&                      // omit the selected demo
+            it.id !== selected.id &&
             it.primary_function_id &&
-            selectedFunctionIds.has(it.primary_function_id) // primary ∈ selected's functions
+            selectedFunctionIds.has(it.primary_function_id)
         )
-      : [])                                               // no functions on selected → show none (MVP strict)
-    : listSource;                                           // no video selected → show normal list
+      : [];
+
+  const industryMatches =
+    selected && selectedIndustryIds.size > 0
+      ? listSource.filter((it) => {
+          if (it.id === selected.id) return false;
+          const ids = (it.industry_ids || []).filter(Boolean);
+          if (!ids.length) return false;
+          // intersect
+          for (const x of ids) {
+            if (selectedIndustryIds.has(x)) return !primaryMatches.some((p) => p.id === it.id);
+          }
+          return false;
+        })
+      : [];
+
+  primaryMatches.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+  industryMatches.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+
+  const visibleUnderVideo = selected
+    ? [...primaryMatches, ...industryMatches]
+    : listSource;
 
   // Hide helper on welcome
   const showAskMeta = Boolean(lastQuestion) || (items && items.length > 0);
@@ -201,7 +226,7 @@ export default function AskAssistant() {
             </div>
           </div>
 
-          {/* Tabs (no search in banner) */}
+          {/* Tabs */}
           <nav
             className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             role="tablist"
