@@ -1,4 +1,4 @@
-// src/components/AskAssistant.jsx — MVP: primary + industry matches under video (exclude selected), no banner search
+// src/components/AskAssistant.jsx — MVP: helper text only renders when buttons exist; tags balanced
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -92,7 +92,7 @@ export default function AskAssistant() {
     return { listSource: source || [], visibleUnderVideo: visible || [] };
   }, [items, selected]);
 
-  // Hide helper on welcome; only show “Recommended demos” if there are items
+  // Helper visibility: only show "Recommended demos" when there are items
   const showAskMeta = Array.isArray(items) && items.length > 0;
 
   const tabs = [
@@ -106,6 +106,7 @@ export default function AskAssistant() {
     setIsAnchored(false);
     inputRef.current?.focus();
   }
+
   async function openBrowse() {
     if (!botId) return;
     setMode("browse");
@@ -323,9 +324,7 @@ export default function AskAssistant() {
                 {browseItems.length > 0 && (
                   <>
                     <div className="flex items-center justify-between mt-2 mb-3">
-                      <p className="italic text-gray-600">
-                        Select a demo to view it
-                      </p>
+                      <p className="italic text-gray-600">Select a demo to view it</p>
                       <span />
                     </div>
                     <div className="flex flex-col gap-3">
@@ -353,36 +352,34 @@ export default function AskAssistant() {
               <div className="text-gray-500">Unknown mode.</div>
             )}
           </div>
+        </div> {/* end Left / Main Column */}
+      </div>   {/* end Body flex */}
+
+      {/* Footer / Input */}
+      <div className="border-t bg-white p-2 sm:p-3">
+        <div className="flex items-center gap-2">
+          <input
+            ref={inputRef}
+            className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
+            placeholder="Type your question…"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                submitFromInput();
+              }
+            }}
+          />
+          <button
+            onClick={submitFromInput}
+            className="inline-flex items-center gap-2 bg-gray-900 text-white px-3 py-2 rounded-lg hover:bg-gray-800"
+          >
+            <ArrowUpCircleIcon className="h-5 w-5" />
+            <span className="hidden sm:inline">Send</span>
+          </button>
         </div>
-      </div>
-    );
-  }
-        {/* Footer / Input */}
-        <div className="border-t bg-white p-2 sm:p-3">
-          <div className="flex items-center gap-2">
-            <input
-              ref={inputRef}
-              className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-              placeholder="Type your question…"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  submitFromInput();
-                }
-              }}
-            />
-            <button
-              onClick={submitFromInput}
-              className="inline-flex items-center gap-2 bg-gray-900 text-white px-3 py-2 rounded-lg hover:bg-gray-800"
-            >
-              <ArrowUpCircleIcon className="h-5 w-5" />
-              <span className="hidden sm:inline">Send</span>
-            </button>
-          </div>
-          {error ? (
-            <div className="text-red-600 text-sm mt-2">{error}</div>
-          ) : null}
-        </div>
+        {error ? (
+          <div className="text-red-600 text-sm mt-2">{error}</div>
+        ) : null}
       </div>
     </div>
   );
