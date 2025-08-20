@@ -1,6 +1,5 @@
-// src/components/AskAssistant.jsx — Sequenced Ask UX:
-// 1) mirror question immediately, 2) show Thinking…, 3) show response,
-// 4) show helper header, 5) finally render buttons. Also preserves card layout.
+// src/components/AskAssistant.jsx — Sequenced Ask UX with alias default + robust /bot-by-alias parsing
+// Sequence on ask: mirror → Thinking… → response → helper header → buttons
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -31,9 +30,9 @@ export default function AskAssistant() {
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
   const [responseText, setResponseText] = useState("Hello. Ask a question to get started.");
-  const [loading, setLoading] = useState(false); // Thinking… flag
+  const [loading, setLoading] = useState(false);
 
-  const [items, setItems] = useState([]); // recommendations/buttons
+  const [items, setItems] = useState([]);
   const [browseItems, setBrowseItems] = useState([]);
   const [selected, setSelected] = useState(null);
 
@@ -43,31 +42,44 @@ export default function AskAssistant() {
   const [isAnchored, setIsAnchored] = useState(false);
   const contentRef = useRef(null);
 
-  // Resolve alias
+  // Resolve alias — default to "demo" to match previous working behavior
   const alias = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
-    return (qs.get("alias") || qs.get("a") || "").trim();
+    return (qs.get("alias") || "demo").trim();
   }, []);
+
+  // Extract bot id from various backend shapes
+  function extractBotId(payload) {
+    if (!payload || typeof payload !== "object") return null;
+    if (payload.bot && payload.bot.id) return payload.bot.id;
+    if (payload.id) return payload.id;
+    if (payload.data && payload.data.id) return payload.data.id;
+    if (Array.isArray(payload.data) && payload.data[0] && payload.data[0].id) return payload.data[0].id;
+    if (Array.isArray(payload.rows) && payload.rows[0] && payload.rows[0].id) return payload.rows[0].id;
+    return null;
+  }
 
   // Load bot by alias
   useEffect(() => {
     let cancel = false;
     (async () => {
-      if (!alias) {
-        setFatal("Missing alias in URL.");
-        return;
-      }
       try {
         const res = await fetch(`${apiBase}/bot-by-alias?alias=${encodeURIComponent(alias)}`);
         const data = await res.json();
-        if (!cancel) {
-          if (data?.ok && data?.bot?.id) {
-            setBotId(data.bot.id);
-          } else {
-            setFatal("Invalid or inactive alias.");
-          }
+        if (cancel) return;
+        const id = extractBotId(data);
+        if (id) {
+          setBotId(id);
+          setFatal("");
+        } else if (!res.ok || data?.ok === false) {
+          // only fatal if backend signals not found/bad
+          setFatal("Invalid or inactive alias.");
+        } else {
+          // backend returned 200 but shape unexpected; don't hard-fail
+          console.warn("/bot-by-alias returned unexpected shape", data);
+          setBotId("");
         }
-      } catch {
+      } catch (e) {
         if (!cancel) setFatal("Invalid or inactive alias.");
       }
     })();
@@ -91,21 +103,19 @@ export default function AskAssistant() {
     if (!input.trim() || !botId) return;
     const outgoing = input.trim();
 
-    // Sequence start: mirror immediately
+    // 1) mirror immediately
     setMode("ask");
     setLastQuestion(outgoing);
-
-    // clear input AFTER mirroring so the user never sees a blank state
     setInput("");
 
-    // reset visible area state
+    // reset state for new ask
     setSelected(null);
     setIsAnchored(false);
-    setResponseText(""); // clear previous answer immediately
-    setHelperPhase("hidden"); // hide helper until we decide to show
-    setItems([]); // clear previous buttons
+    setResponseText("");
+    setHelperPhase("hidden");
+    setItems([]);
 
-    // Show Thinking…
+    // 2) Thinking…
     setLoading(true);
 
     try {
@@ -118,14 +128,13 @@ export default function AskAssistant() {
       const text = data?.response_text || "";
       const recs = Array.isArray(data?.items) ? data.items : [];
 
-      // 3) show response
+      // 3) response
       setResponseText(text);
-      setLoading(false); // Thinking… off
+      setLoading(false);
 
-      // 4) show helper header (only if we have recs)
+      // 4) helper header then 5) buttons
       if (recs.length > 0) {
         setHelperPhase("header");
-        // 5) render buttons shortly after header to make the sequence visible
         setTimeout(() => {
           setItems(recs);
           setHelperPhase("buttons");
@@ -135,7 +144,6 @@ export default function AskAssistant() {
         setItems([]);
       }
 
-      // keep scroll at top for new answer
       requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
     } catch (e) {
       setLoading(false);
