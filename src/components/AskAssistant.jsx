@@ -1,10 +1,18 @@
-// src/components/AskAssistant.jsx — alias loader fix + server-side browse recs
+// src/components/AskAssistant.jsx — alias loader fix + server-side browse recs + quoted/truncated helper
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
 
-// --- Similarity not needed now (server handles Browse recs) ---
+// Sanitize long questions for helper header on video screen
+function sanitizeQuestion(q, maxLen = 120) {
+  if (!q) return "";
+  let s = String(q).replace(/\s+/g, " ").trim();
+  if (s.length > maxLen) s = s.slice(0, maxLen - 3) + "...";
+  // Escape interior double-quotes so they don't collide with outer quotes
+  s = s.replace(/"/g, '\\"');
+  return s;
+}
 
 // Robust extractor for various {bot} response shapes
 function extractBotId(payload) {
@@ -16,10 +24,19 @@ function extractBotId(payload) {
     }
     if (payload.id) return payload.id;
     if (payload.data) {
-      if (Array.isArray(payload.data) && payload.data[0]) return payload.data[0].id || payload.data[0].bot_id || payload.data[0].uuid || null;
-      if (typeof payload.data === "object") return payload.data.id || payload.data.bot_id || payload.data.uuid || null;
+      if (Array.isArray(payload.data) && payload.data[0]) {
+        const b = payload.data[0];
+        return b.id || b.bot_id || b.uuid || null;
+      }
+      if (typeof payload.data === "object") {
+        const b = payload.data;
+        return b.id || b.bot_id || b.uuid || null;
+      }
     }
-    if (payload.rows && Array.isArray(payload.rows) && payload.rows[0]) return payload.rows[0].id || payload.rows[0].bot_id || payload.rows[0].uuid || null;
+    if (Array.isArray(payload.rows) && payload.rows[0]) {
+      const b = payload.rows[0];
+      return b.id || b.bot_id || b.uuid || null;
+    }
     return null;
   } catch {
     return null;
@@ -29,22 +46,28 @@ function extractBotId(payload) {
 // Normalize results to the UI's expected shape
 function normalizeList(arr) {
   if (!Array.isArray(arr)) return [];
-  return arr.map((it) => {
-    const id = it.id ?? it.button_id ?? it.value ?? it.url ?? it.title;
-    const title =
-      it.title ?? it.button_title ?? (typeof it.label === "string" ? it.label.replace(/^Watch the \"|\" demo$/g, "") : it.label) ?? "";
-    const url = it.url ?? it.value ?? it.button_value ?? "";
-    const description = it.description ?? it.summary ?? it.functions_text ?? "";
-    return {
-      id,
-      title,
-      url,
-      description,
-      functions_text: it.functions_text ?? description,
-      action: it.action ?? it.button_action ?? "demo",
-      label: it.label ?? it.button_label ?? (title ? `Watch the "${title}" demo` : ""),
-    };
-  }).filter((x) => x.title && x.url);
+  return arr
+    .map((it) => {
+      const id = it.id ?? it.button_id ?? it.value ?? it.url ?? it.title;
+      const title =
+        it.title ??
+        it.button_title ??
+        (typeof it.label === "string" ? it.label.replace(/^Watch the \"|\" demo$/g, "") : it.label) ??
+        "";
+      const url = it.url ?? it.value ?? it.button_value ?? "";
+      const description = it.description ?? it.summary ?? it.functions_text ?? "";
+      return {
+        id,
+        title,
+        url,
+        description,
+        // Keep legacy props in case other components rely on them
+        functions_text: it.functions_text ?? description,
+        action: it.action ?? it.button_action ?? "demo",
+        label: it.label ?? it.button_label ?? (title ? `Watch the "${title}" demo` : ""),
+      };
+    })
+    .filter((x) => x.title && x.url);
 }
 
 function Row({ item, onPick }) {
@@ -75,7 +98,7 @@ export default function AskAssistant() {
   const [responseText, setResponseText] = useState("Hello. Ask a question to get started.");
   const [loading, setLoading] = useState(false);
 
-  const [items, setItems] = useState([]);          // Ask recommendations from bot
+  const [items, setItems] = useState([]);            // Ask recommendations from bot
   const [browseItems, setBrowseItems] = useState([]); // All demos for Browse
   const [browseRecs, setBrowseRecs] = useState([]);   // Server-side top-4 for selected in Browse
   const [selected, setSelected] = useState(null);
@@ -83,6 +106,8 @@ export default function AskAssistant() {
   const [helperPhase, setHelperPhase] = useState("hidden");
   const [isAnchored, setIsAnchored] = useState(false);
   const contentRef = useRef(null);
+
+  const safeQuestion = useMemo(() => sanitizeQuestion(lastQuestion, 120), [lastQuestion]);
 
   // Resolve alias — default to "demo"
   const alias = useMemo(() => {
@@ -98,7 +123,7 @@ export default function AskAssistant() {
         const res = await fetch(`${apiBase}/bot-by-alias?alias=${encodeURIComponent(alias)}`);
         const text = await res.text();
         let data = {};
-        try { data = JSON.parse(text); } catch { /* keep data as {} */ }
+        try { data = JSON.parse(text); } catch { /* ignore */ }
         if (cancel) return;
 
         if (!res.ok) {
@@ -112,7 +137,6 @@ export default function AskAssistant() {
           setFatal("");
         } else {
           console.warn("/bot-by-alias unexpected payload:", { status: res.status, data });
-          // Keep a non-fatal state to allow retry, rather than locking the UI
           setBotId("");
           setFatal("");
         }
@@ -140,16 +164,19 @@ export default function AskAssistant() {
     if (!input.trim() || !botId) return;
     const outgoing = input.trim();
 
+    // 1) mirror immediately
     setMode("ask");
     setLastQuestion(outgoing);
     setInput("");
 
+    // reset state for new ask
     setSelected(null);
     setIsAnchored(false);
     setResponseText("");
     setHelperPhase("hidden");
     setItems([]);
 
+    // 2) Thinking…
     setLoading(true);
 
     try {
@@ -160,12 +187,15 @@ export default function AskAssistant() {
 
       const data = res?.data || {};
       const text = data?.response_text || "";
+      // Back-compat: accept either {items} or {buttons}
       const recSource = Array.isArray(data?.items) ? data.items : (Array.isArray(data?.buttons) ? data.buttons : []);
       const recs = normalizeList(recSource);
 
+      // 3) response
       setResponseText(text);
       setLoading(false);
 
+      // 4) helper header then 5) buttons
       if (recs.length > 0) {
         setHelperPhase("header");
         setTimeout(() => {
@@ -193,6 +223,7 @@ export default function AskAssistant() {
     try {
       const res = await fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`);
       const data = await res.json();
+      // Back-compat: accept either {items} or {buttons}
       const src = Array.isArray(data?.items) ? data.items : (Array.isArray(data?.buttons) ? data.buttons : []);
       setBrowseItems(normalizeList(src));
       requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
@@ -201,6 +232,7 @@ export default function AskAssistant() {
     }
   }
 
+  // Under-video lists
   const listSource = mode === "browse" ? browseItems : items;
 
   // Ask: reuse same bot rec list (minus selected). Browse: use server-picked /recommend-for
@@ -237,13 +269,11 @@ export default function AskAssistant() {
   }, [mode, selected, botId, apiBase]);
 
   const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : browseRecs) : listSource;
-
   const videoHelperText = (mode === "ask" && selected)
-    ? (lastQuestion ? `Because you asked ${lastQuestion}` : "Recommended demos")
+    ? (safeQuestion ? `Because you asked "${safeQuestion}"` : "Recommended demos")
     : "Recommended demos";
 
-
-  // Tabs — Browse Demos, Schedule Meeting, Finished
+  // Tabs — EXACTLY as requested: Browse Demos, Schedule Meeting, Finished
   const tabs = [
     { key: "demos", label: "Browse Demos", onClick: openBrowse },
     { key: "meeting", label: "Schedule Meeting", onClick: () => setMode("finished") },
@@ -372,10 +402,12 @@ export default function AskAssistant() {
             </div>
           ) : (
             <div className="w-full flex-1 flex flex-col">
-              {/* Mirror, Thinking, Response, Helper, Buttons */}
+              {/* 1) Mirror the question immediately */}
               {lastQuestion ? (
                 <p className="text-base text-black italic text-center mb-2">"{lastQuestion}"</p>
               ) : null}
+
+              {/* 2) Thinking… or 3) Response */}
               <div className="text-left mt-2">
                 {loading ? (
                   <p className="text-gray-500 font-semibold animate-pulse">Thinking…</p>
@@ -383,12 +415,16 @@ export default function AskAssistant() {
                   <p className="text-black text-base font-bold whitespace-pre-line">{responseText}</p>
                 )}
               </div>
+
+              {/* 4) Helper header (phase===header or buttons) */}
               {helperPhase !== "hidden" && (
                 <div className="flex items-center justify-between mt-3 mb-2">
                   <p className="italic text-gray-600">Recommended demos</p>
                   <span />
                 </div>
               )}
+
+              {/* 5) Buttons only when phase === buttons */}
               {helperPhase === "buttons" && items.length > 0 && (
                 <div className="flex flex-col gap-3">
                   {items.map((it) => (
@@ -419,8 +455,8 @@ export default function AskAssistant() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
+                  e.preventDefault();
+                  sendMessage();
                 }
               }}
             />
