@@ -135,14 +135,15 @@ export default function AskAssistant() {
 
   // Primary-only logic when a video is selected (MVP rule)
   const listSource = mode === "browse" ? browseItems : items;
-  const visibleUnderVideo =
-    selected && selected.primary_function_id
+  const visibleUnderVideo = selected
+  ? (selected.primary_function_id
       ? listSource.filter(
           (it) =>
             it.primary_function_id &&
             it.primary_function_id === selected.primary_function_id
         )
-      : listSource;
+      : [])
+  : listSource;
 
   // Hide helper on welcome
   const showAskMeta = Boolean(lastQuestion) || (items && items.length > 0);
