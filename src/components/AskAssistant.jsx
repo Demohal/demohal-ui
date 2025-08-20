@@ -238,6 +238,11 @@ export default function AskAssistant() {
 
   const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : browseRecs) : listSource;
 
+  const videoHelperText = (mode === "ask" && selected)
+    ? (lastQuestion ? `Because you asked ${lastQuestion}` : "Recommended demos")
+    : "Recommended demos";
+
+
   // Tabs — Browse Demos, Schedule Meeting, Finished
   const tabs = [
     { key: "demos", label: "Browse Demos", onClick: openBrowse },
@@ -322,7 +327,7 @@ export default function AskAssistant() {
               {visibleUnderVideo.length > 0 && (
                 <>
                   <div className="flex items-center justify-between mt-1 mb-3">
-                    <p className="italic text-gray-600">Recommended demos</p>
+                    <p className="italic text-gray-600">{videoHelperText}</p>
                     <span />
                   </div>
                   <div className="flex flex-col gap-3">
