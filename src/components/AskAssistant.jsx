@@ -1,8 +1,12 @@
-// src/components/AskAssistant.jsx — MVP: flat list + anchored video + inline search tooltip (rev2)
+// src/components/AskAssistant.jsx — MVP: flat list + anchored video + inline search tooltip (rev3)
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
-import { ArrowUpCircleIcon, MagnifyingGlassCircleIcon, XMarkIcon } from "@heroicons/react/24/solid";
+import {
+  ArrowUpCircleIcon,
+  MagnifyingGlassCircleIcon,
+  XMarkIcon,
+} from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
 
 function Row({ item, onPick }) {
@@ -23,7 +27,8 @@ function Row({ item, onPick }) {
 }
 
 export default function AskAssistant() {
-  const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
+  const apiBase =
+    import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
   const [bot, setBot] = useState(null);
   const [botId, setBotId] = useState("");
@@ -43,7 +48,7 @@ export default function AskAssistant() {
   // Anchoring logic
   const [isAnchored, setIsAnchored] = useState(false);
 
-  // Inline search tooltip state
+  // Search tooltip state
   const [showSearch, setShowSearch] = useState(false);
   const [q, setQ] = useState(""); // committed query
   const [searchDraft, setSearchDraft] = useState(""); // type-ahead buffer
@@ -60,17 +65,27 @@ export default function AskAssistant() {
   useEffect(() => {
     let cancel = false;
     (async () => {
-      if (!alias) { setFatal("Missing alias in URL."); return; }
+      if (!alias) {
+        setFatal("Missing alias in URL.");
+        return;
+      }
       try {
-        const res = await fetch(`${apiBase}/bot-by-alias?alias=${encodeURIComponent(alias)}`);
+        const res = await fetch(
+          `${apiBase}/bot-by-alias?alias=${encodeURIComponent(alias)}`
+        );
         if (!res.ok) throw new Error("Bad alias");
         const data = await res.json();
-        if (!cancel) { setBot(data.bot); setBotId(data.bot?.id || ""); }
+        if (!cancel) {
+          setBot(data.bot);
+          setBotId(data.bot?.id || "");
+        }
       } catch {
         if (!cancel) setFatal("Invalid or inactive alias.");
       }
     })();
-    return () => { cancel = true; };
+    return () => {
+      cancel = true;
+    };
   }, [alias, apiBase]);
 
   // When anchored, release on first scroll
@@ -97,13 +112,18 @@ export default function AskAssistant() {
     setMode("ask");
     setLoading(true);
     try {
-      const res = await axios.post(`${apiBase}/demo-hal`, { bot_id: botId, user_question: outgoing });
+      const res = await axios.post(`${apiBase}/demo-hal`, {
+        bot_id: botId,
+        user_question: outgoing,
+      });
       const data = res.data || {};
       setResponseText(data.response_text || "");
       const arr = Array.isArray(data.items) ? data.items : [];
       setItems(arr);
       setLastQuestion(outgoing);
-      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+      requestAnimationFrame(() =>
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+      );
     } catch (e) {
       setResponseText("Sorry—something went wrong.");
       setItems([]);
@@ -117,11 +137,15 @@ export default function AskAssistant() {
     setMode("browse");
     setSelected(null);
     try {
-      const res = await fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`);
+      const res = await fetch(
+        `${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`
+      );
       const data = await res.json();
       const arr = Array.isArray(data.items) ? data.items : [];
       setBrowseItems(arr);
-      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+      requestAnimationFrame(() =>
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+      );
     } catch {
       setBrowseItems([]);
     }
@@ -130,13 +154,21 @@ export default function AskAssistant() {
   const filteredAsk = useMemo(() => {
     if (!q.trim()) return items;
     const needle = q.toLowerCase();
-    return items.filter((r) => (r.title || "").toLowerCase().includes(needle) || (r.functions_text || "").toLowerCase().includes(needle));
+    return items.filter(
+      (r) =>
+        (r.title || "").toLowerCase().includes(needle) ||
+        (r.functions_text || "").toLowerCase().includes(needle)
+    );
   }, [items, q]);
 
   const filteredBrowse = useMemo(() => {
     if (!q.trim()) return browseItems;
     const needle = q.toLowerCase();
-    return browseItems.filter((r) => (r.title || "").toLowerCase().includes(needle) || (r.functions_text || "").toLowerCase().includes(needle));
+    return browseItems.filter(
+      (r) =>
+        (r.title || "").toLowerCase().includes(needle) ||
+        (r.functions_text || "").toLowerCase().includes(needle)
+    );
   }, [browseItems, q]);
 
   const tabs = [
@@ -146,32 +178,54 @@ export default function AskAssistant() {
   ];
   const currentTab = mode === "browse" ? "demos" : mode === "finished" ? "finished" : null;
 
-  // Should we show helper/search on Ask screen? (hide on welcome)
+  // Hide helper/search on welcome
   const showAskMeta = Boolean(lastQuestion) || filteredAsk.length > 0;
 
   const SearchControl = ({ align = "right" }) => (
     <div className="relative">
       <button
         aria-label="Search demos"
-        onClick={() => setShowSearch((v) => { const nv = !v; if (!v) setSearchDraft(q); return nv; })}
+        onClick={() =>
+          setShowSearch((v) => {
+            const nv = !v;
+            if (!v) setSearchDraft(q);
+            return nv;
+          })
+        }
         className="p-1.5"
       >
         <MagnifyingGlassCircleIcon className="w-8 h-8 text-blue-600" />
       </button>
       {showSearch && (
-        <div className={`absolute ${align === "right" ? "right-0" : "left-0"} mt-2 bg-white border border-gray-300 rounded-lg shadow-lg p-2 w-64`}>
+        <div
+          className={`absolute ${
+            align === "right" ? "right-0" : "left-0"
+          } mt-2 bg-white border border-gray-300 rounded-lg shadow-lg p-2 w-64`}
+        >
           <div className="flex items-center gap-2">
             <input
               ref={searchInputRef}
               value={searchDraft}
               onChange={(e) => setSearchDraft(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) { setQ(searchDraft); setShowSearch(false); }
+                if (e.key === "Enter" && !e.shiftKey) {
+                  setQ(searchDraft);
+                  setShowSearch(false); // collapse on Enter
+                }
               }}
               placeholder="Search by title or function"
               className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-black placeholder-gray-400"
             />
-            <button onClick={() => { setSearchDraft(""); setQ(""); setShowSearch(false); }} className="p-2 rounded bg-gray-300 text-gray-700"><XMarkIcon className="w-4 h-4"/></button>
+            <button
+              onClick={() => {
+                setSearchDraft("");
+                setQ("");
+                setShowSearch(false); // collapse on X
+              }}
+              className="p-2 rounded bg-gray-300 text-gray-700"
+            >
+              <XMarkIcon className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}
@@ -195,16 +249,31 @@ export default function AskAssistant() {
 
   return (
     <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-2 sm:p-0">
-      <div className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300" style={{ width: "min(720px, 100vw - 16px)", height: "auto", minHeight: 450, maxHeight: "90vh" }}>
+      <div
+        className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300"
+        style={{
+          width: "min(720px, 100vw - 16px)",
+          height: "auto",
+          minHeight: 450,
+          maxHeight: "90vh",
+        }}
+      >
         {/* Header */}
         <div className="bg-black text-white px-4 sm:px-6">
           <div className="flex items-center justify-between w-full py-3">
-            <div className="flex items-center gap-3"><img src={logo} alt="DemoHAL logo" className="h-10 object-contain" /></div>
-            <div className="text-lg sm:text-xl font-semibold text-white truncate max-w-[60%] text-right">{selected ? selected.title : mode === "browse" ? "Browse Demos" : "Ask the Assistant"}</div>
+            <div className="flex items-center gap-3">
+              <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
+            </div>
+            <div className="text-lg sm:text-xl font-semibold text-white truncate max-w-[60%] text-right">
+              {selected ? selected.title : mode === "browse" ? "Browse Demos" : "Ask the Assistant"}
+            </div>
           </div>
 
           {/* Tabs */}
-          <nav className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
+          <nav
+            className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            role="tablist"
+          >
             {tabs.map((t) => {
               const active = currentTab === t.key;
               return (
@@ -213,23 +282,41 @@ export default function AskAssistant() {
                   onClick={t.onClick}
                   role="tab"
                   aria-selected={active}
-                  className={["px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors","rounded-t-md border border-b-0",active?"bg-white text-black border-white -mb-px shadow-[0_2px_0_rgba(0,0,0,0.15)]":"bg-gradient-to-b from-gray-600 to-gray-700 text-white border-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]"].join(" ")}
-                >{t.label}</button>
+                  className={[
+                    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
+                    "rounded-t-md border border-b-0",
+                    active
+                      ? "bg-white text-black border-white -mb-px shadow-[0_2px_0_rgba(0,0,0,0.15)]"
+                      : "bg-gradient-to-b from-gray-600 to-gray-700 text-white border-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]",
+                  ].join(" ")}
+                >
+                  {t.label}
+                </button>
               );
             })}
           </nav>
         </div>
 
         {/* Content */}
-        <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
+        <div
+          ref={contentRef}
+          className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto"
+        >
           {selected ? (
             <div className="w-full flex-1 flex flex-col">
               {/* Video: anchor initially, then release on scroll */}
               <div className={`${isAnchored ? "sticky top-0 z-10" : ""} bg-white pt-2 pb-3`}>
-                <iframe style={{ width: "100%", aspectRatio: "471 / 272" }} src={selected.url} title={selected.title} className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                <iframe
+                  style={{ width: "100%", aspectRatio: "471 / 272" }}
+                  src={selected.url}
+                  title={selected.title}
+                  className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
               </div>
 
-              {/* Help + right-justified blue search icon; 50% less space from video */}
+              {/* Help + right-justified blue search icon; tighter space to video */}
               <div className="flex items-center justify-between mt-1 mb-3">
                 <p className="italic text-gray-600">Recommended demos</p>
                 <SearchControl align="right" />
@@ -237,26 +324,40 @@ export default function AskAssistant() {
 
               <div className="flex flex-col gap-3">
                 {(mode === "browse" ? filteredBrowse : filteredAsk).map((it) => (
-                  <Row key={it.id || it.url || it.title} item={it} onPick={(val) => {
-                    setSelected(val);
-                    setIsAnchored(true); // re-anchor on selection
-                    requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-                  }} />
+                  <Row
+                    key={it.id || it.url || it.title}
+                    item={it}
+                    onPick={(val) => {
+                      setSelected(val);
+                      setIsAnchored(true); // re-anchor on selection
+                      requestAnimationFrame(() =>
+                        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+                      );
+                    }}
+                  />
                 ))}
               </div>
             </div>
           ) : mode === "browse" ? (
             <div className="w-full flex-1 flex flex-col">
-              $1Select a demo to view it$2
+              {/* Browse helper + search */}
+              <div className="flex items-center justify-between mt-2 mb-3">
+                <p className="italic text-gray-600">Select a demo to view it</p>
                 <SearchControl align="right" />
               </div>
               <div className="flex flex-col gap-3">
                 {filteredBrowse.map((it) => (
-                  <Row key={it.id || it.url || it.title} item={it} onPick={(val) => {
-                    setSelected(val);
-                    setIsAnchored(true);
-                    requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-                  }} />
+                  <Row
+                    key={it.id || it.url || it.title}
+                    item={it}
+                    onPick={(val) => {
+                      setSelected(val);
+                      setIsAnchored(true);
+                      requestAnimationFrame(() =>
+                        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+                      );
+                    }}
+                  />
                 ))}
               </div>
             </div>
@@ -270,7 +371,9 @@ export default function AskAssistant() {
                 {loading ? (
                   <p className="text-gray-500 font-semibold animate-pulse">Thinking...</p>
                 ) : (
-                  <p className="text-black text-base font-bold whitespace-pre-line">{responseText}</p>
+                  <p className="text-black text-base font-bold whitespace-pre-line">
+                    {responseText}
+                  </p>
                 )}
               </div>
 
@@ -283,11 +386,17 @@ export default function AskAssistant() {
                   </div>
                   <div className="flex flex-col gap-3">
                     {filteredAsk.map((it) => (
-                      <Row key={it.id || it.url || it.title} item={it} onPick={(val) => {
-                        setSelected(val);
-                        setIsAnchored(true);
-                        requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-                      }} />
+                      <Row
+                        key={it.id || it.url || it.title}
+                        item={it}
+                        onPick={(val) => {
+                          setSelected(val);
+                          setIsAnchored(true);
+                          requestAnimationFrame(() =>
+                            contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+                          );
+                        }}
+                      />
                     ))}
                   </div>
                 </>
@@ -308,7 +417,11 @@ export default function AskAssistant() {
               onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
             />
             {/* Send button centered inside the textarea vertically & visually */}
-            <button aria-label="Send" onClick={sendMessage} className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95">
+            <button
+              aria-label="Send"
+              onClick={sendMessage}
+              className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
+            >
               <ArrowUpCircleIcon className="w-8 h-8 text-red-600 hover:text-red-700" />
             </button>
           </div>
