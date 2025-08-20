@@ -1,5 +1,6 @@
-// src/components/AskAssistant.jsx — Tabs fixed: Browse Demos, Schedule Meeting, Finished
-// Sequenced Ask UX preserved (mirror → Thinking… → response → helper → buttons)
+// src/components/AskAssistant.jsx — Back-compat with {items} or {buttons}
+// Tabs: Browse Demos, Schedule Meeting, Finished
+// Sequenced Ask UX: mirror → Thinking… → response → helper → buttons
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -13,7 +14,9 @@ function Row({ item, onPick }) {
       className="w-full text-center bg-gradient-to-b from-gray-600 to-gray-700 text-white rounded-xl border border-gray-700 px-4 py-3 shadow hover:from-gray-500 hover:to-gray-600 transition-colors"
     >
       <div className="font-extrabold text-xs sm:text-sm">{item.title}</div>
-      {item.functions_text ? (
+      {item.description ? (
+        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">{item.description}</div>
+      ) : item.functions_text ? (
         <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">{item.functions_text}</div>
       ) : null}
     </button>
@@ -57,6 +60,28 @@ export default function AskAssistant() {
     if (Array.isArray(payload.data) && payload.data[0] && payload.data[0].id) return payload.data[0].id;
     if (Array.isArray(payload.rows) && payload.rows[0] && payload.rows[0].id) return payload.rows[0].id;
     return null;
+  }
+
+  // Normalize results to the UI's expected shape
+  function normalizeList(arr) {
+    if (!Array.isArray(arr)) return [];
+    return arr.map((it) => {
+      const id = it.id ?? it.button_id ?? it.value ?? it.url ?? it.title;
+      const title =
+        it.title ?? it.button_title ?? (typeof it.label === "string" ? it.label.replace(/^Watch the \"|\" demo$/g, "") : it.label) ?? "";
+      const url = it.url ?? it.value ?? it.button_value ?? "";
+      const description = it.description ?? it.summary ?? it.functions_text ?? "";
+      return {
+        id,
+        title,
+        url,
+        description,
+        // Keep legacy props in case other components rely on them
+        functions_text: it.functions_text ?? description,
+        action: it.action ?? it.button_action ?? "demo",
+        label: it.label ?? it.button_label ?? (title ? `Watch the "${title}" demo` : ""),
+      };
+    }).filter((x) => x.title && x.url);
   }
 
   // Load bot by alias
@@ -124,7 +149,9 @@ export default function AskAssistant() {
 
       const data = res?.data || {};
       const text = data?.response_text || "";
-      const recs = Array.isArray(data?.items) ? data.items : [];
+      // Back-compat: accept either {items} or {buttons}
+      const recSource = Array.isArray(data?.items) ? data.items : (Array.isArray(data?.buttons) ? data.buttons : []);
+      const recs = normalizeList(recSource);
 
       // 3) response
       setResponseText(text);
@@ -158,14 +185,16 @@ export default function AskAssistant() {
     try {
       const res = await fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`);
       const data = await res.json();
-      setBrowseItems(Array.isArray(data?.items) ? data.items : []);
+      // Back-compat: accept either {items} or {buttons}
+      const src = Array.isArray(data?.items) ? data.items : (Array.isArray(data?.buttons) ? data.buttons : []);
+      setBrowseItems(normalizeList(src));
       requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
     } catch {
       setBrowseItems([]);
     }
   }
 
-  // Under-video lists (primary/industry) from current source
+  // Under-video lists (primary/industry) — legacy support: safely becomes empty in new flow
   const listSource = mode === "browse" ? browseItems : items;
 
   const selectedFunctionIds = useMemo(() => new Set((selected?.functions || []).map((f) => f?.id).filter(Boolean)), [selected]);
