@@ -353,7 +353,9 @@ export default function AskAssistant() {
               <div className="text-gray-500">Unknown mode.</div>
             )}
           </div>
-
+        </div>
+      </div>
+        
         {/* Footer / Input */}
         <div className="border-t bg-white p-2 sm:p-3">
           <div className="flex items-center gap-2">
