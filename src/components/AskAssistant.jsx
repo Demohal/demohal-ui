@@ -1,5 +1,5 @@
-// src/components/AskAssistant.jsx — Sequenced Ask UX with alias default + robust /bot-by-alias parsing
-// Sequence on ask: mirror → Thinking… → response → helper header → buttons
+// src/components/AskAssistant.jsx — Tabs fixed: Browse Demos, Schedule Meeting, Finished
+// Sequenced Ask UX preserved (mirror → Thinking… → response → helper → buttons)
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -42,7 +42,7 @@ export default function AskAssistant() {
   const [isAnchored, setIsAnchored] = useState(false);
   const contentRef = useRef(null);
 
-  // Resolve alias — default to "demo" to match previous working behavior
+  // Resolve alias — default to "demo"
   const alias = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     return (qs.get("alias") || "demo").trim();
@@ -72,10 +72,8 @@ export default function AskAssistant() {
           setBotId(id);
           setFatal("");
         } else if (!res.ok || data?.ok === false) {
-          // only fatal if backend signals not found/bad
           setFatal("Invalid or inactive alias.");
         } else {
-          // backend returned 200 but shape unexpected; don't hard-fail
           console.warn("/bot-by-alias returned unexpected shape", data);
           setBotId("");
         }
@@ -194,6 +192,14 @@ export default function AskAssistant() {
 
   const visibleUnderVideo = selected ? [...primaryMatches, ...industryMatches] : listSource;
 
+  // Tabs — EXACTLY as requested: Browse Demos, Schedule Meeting, Finished
+  const tabs = [
+    { key: "demos", label: "Browse Demos", onClick: openBrowse },
+    { key: "meeting", label: "Schedule Meeting", onClick: () => setMode("finished") },
+    { key: "finished", label: "Finished", onClick: () => setMode("finished") },
+  ];
+  const currentTab = mode === "browse" ? "demos" : mode === "finished" ? "finished" : null;
+
   if (fatal) {
     return (
       <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
@@ -228,11 +234,8 @@ export default function AskAssistant() {
 
           {/* Tabs */}
           <nav className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
-            {[
-              { key: "demos", label: "Browse Demos", onClick: openBrowse },
-              { key: "ask", label: "Ask a Question", onClick: () => setMode("ask") },
-            ].map((t) => {
-              const active = (t.key === "demos" && mode === "browse") || (t.key === "ask" && mode === "ask");
+            {tabs.map((t) => {
+              const active = currentTab === t.key;
               return (
                 <button
                   key={t.key}
