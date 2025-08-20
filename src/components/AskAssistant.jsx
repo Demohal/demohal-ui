@@ -1,4 +1,4 @@
-// src/components/AskAssistant.jsx — MVP: flat list + anchored video + inline search tooltip (rev)
+// src/components/AskAssistant.jsx — MVP: flat list + anchored video + inline search tooltip (rev2)
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -45,7 +45,8 @@ export default function AskAssistant() {
 
   // Inline search tooltip state
   const [showSearch, setShowSearch] = useState(false);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(""); // committed query
+  const [searchDraft, setSearchDraft] = useState(""); // type-ahead buffer
   const searchInputRef = useRef(null);
 
   const contentRef = useRef(null);
@@ -152,7 +153,7 @@ export default function AskAssistant() {
     <div className="relative">
       <button
         aria-label="Search demos"
-        onClick={() => setShowSearch((v) => !v)}
+        onClick={() => setShowSearch((v) => { const nv = !v; if (!v) setSearchDraft(q); return nv; })}
         className="p-1.5"
       >
         <MagnifyingGlassCircleIcon className="w-8 h-8 text-blue-600" />
@@ -162,15 +163,15 @@ export default function AskAssistant() {
           <div className="flex items-center gap-2">
             <input
               ref={searchInputRef}
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
+              value={searchDraft}
+              onChange={(e) => setSearchDraft(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) setShowSearch(false);
+                if (e.key === "Enter" && !e.shiftKey) { setQ(searchDraft); setShowSearch(false); }
               }}
               placeholder="Search by title or function"
               className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-black placeholder-gray-400"
             />
-            <button onClick={() => setQ("")} className="p-2 rounded bg-gray-300 text-gray-700"><XMarkIcon className="w-4 h-4"/></button>
+            <button onClick={() => { setSearchDraft(""); setQ(""); setShowSearch(false); }} className="p-2 rounded bg-gray-300 text-gray-700"><XMarkIcon className="w-4 h-4"/></button>
           </div>
         </div>
       )}
@@ -228,8 +229,8 @@ export default function AskAssistant() {
                 <iframe style={{ width: "100%", aspectRatio: "471 / 272" }} src={selected.url} title={selected.title} className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
               </div>
 
-              {/* Help + right-justified blue search icon */}
-              <div className="flex items-center justify-between mt-2 mb-3">
+              {/* Help + right-justified blue search icon; 50% less space from video */}
+              <div className="flex items-center justify-between mt-1 mb-3">
                 <p className="italic text-gray-600">Recommended demos</p>
                 <SearchControl align="right" />
               </div>
@@ -246,9 +247,7 @@ export default function AskAssistant() {
             </div>
           ) : mode === "browse" ? (
             <div className="w-full flex-1 flex flex-col">
-              {/* Help + search */}
-              <div className="flex items-center justify-between mt-2 mb-3">
-                <p className="italic text-gray-600">Recommended demos</p>
+              $1Select a demo to view it$2
                 <SearchControl align="right" />
               </div>
               <div className="flex flex-col gap-3">
@@ -264,9 +263,10 @@ export default function AskAssistant() {
           ) : (
             <div className="w-full flex-1 flex flex-col">
               {!lastQuestion ? null : (
-                <p className="text-base text-black italic text-center">"{lastQuestion}"</p>
+                <p className="text-base text-black italic text-center mb-4">"{lastQuestion}"</p>
               )}
-              <div className="text-left">
+              {/* More space between mirrored question and response */}
+              <div className="text-left mt-4">
                 {loading ? (
                   <p className="text-gray-500 font-semibold animate-pulse">Thinking...</p>
                 ) : (
@@ -274,10 +274,10 @@ export default function AskAssistant() {
                 )}
               </div>
 
-              {/* Hide helper/search on welcome; show after first ask */}
+              {/* Slightly less space below response; hide on welcome */}
               {showAskMeta && (
                 <>
-                  <div className="flex items-center justify-between mt-4 mb-3">
+                  <div className="flex items-center justify-between mt-2 mb-2">
                     <p className="italic text-gray-600">Recommended demos</p>
                     <SearchControl align="right" />
                   </div>
