@@ -1,4 +1,4 @@
-// src/components/AskAssistant.jsx — MVP: flat list + anchored video + inline search input on helper line (rev5)
+// src/components/AskAssistant.jsx — MVP: header search pill (stable focus)
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -13,9 +13,7 @@ function Row({ item, onPick }) {
     >
       <div className="font-extrabold text-xs sm:text-sm">{item.title}</div>
       {item.functions_text ? (
-        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">
-          {item.functions_text}
-        </div>
+        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">{item.functions_text}</div>
       ) : null}
     </button>
   );
@@ -35,19 +33,21 @@ export default function AskAssistant() {
   const [responseText, setResponseText] = useState(INITIAL_MSG);
   const [loading, setLoading] = useState(false);
 
-  const [items, setItems] = useState([]);
-  const [browseItems, setBrowseItems] = useState([]);
-  const [selected, setSelected] = useState(null);
+  const [items, setItems] = useState([]); // /demo-hal items
+  const [browseItems, setBrowseItems] = useState([]); // /browse-demos items
+  const [selected, setSelected] = useState(null); // {title,url,...}
 
+  // Video anchoring
   const [isAnchored, setIsAnchored] = useState(false);
 
-  // Inline search state (always on helper line, right-justified)
-  const [q, setQ] = useState(""); // committed query
-  const [searchDraft, setSearchDraft] = useState(""); // type-ahead buffer
+  // Header search pill (stable)
+  const [q, setQ] = useState(""); // committed query used for filtering
+  const [searchDraft, setSearchDraft] = useState(""); // controlled input text
   const searchRef = useRef(null);
 
   const contentRef = useRef(null);
 
+  // alias
   const alias = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     return (qs.get("alias") || qs.get("a") || "").trim();
@@ -69,6 +69,7 @@ export default function AskAssistant() {
     return () => { cancel = true; };
   }, [alias, apiBase]);
 
+  // Release anchor on first scroll
   useEffect(() => {
     const el = contentRef.current;
     if (!el || !selected) return;
@@ -113,6 +114,7 @@ export default function AskAssistant() {
     }
   }
 
+  // Derived lists filtered by committed query
   const filteredAsk = useMemo(() => {
     if (!q.trim()) return items;
     const needle = q.toLowerCase();
@@ -132,28 +134,32 @@ export default function AskAssistant() {
   ];
   const currentTab = mode === "browse" ? "demos" : mode === "finished" ? "finished" : null;
 
+  // Hide helper on welcome
   const showAskMeta = Boolean(lastQuestion) || filteredAsk.length > 0;
 
-  const HelperWithSearch = ({ text }) => (
-    <div className="flex items-center justify-between mt-2 mb-3">
-      <p className="italic text-gray-600">{text}</p>
-      <div className="flex items-center gap-2 w-56 sm:w-64">
-        <input
-          ref={searchRef}
-          value={searchDraft}
-          onChange={(e) => setSearchDraft(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { setQ(searchDraft); } }}
-          placeholder="Search by title or function"
-          className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-black placeholder-gray-400"
-        />
-        <button
-          onClick={() => { setSearchDraft(""); setQ(""); }}
-          className="p-2 rounded bg-gray-300 text-gray-700"
-          aria-label="Clear search"
-        >
-          <XMarkIcon className="w-4 h-4" />
-        </button>
-      </div>
+  // Header search pill: always mounted, right side of tabs
+  const HeaderSearch = () => (
+    <div className="ml-auto flex items-center gap-2">
+      <input
+        ref={searchRef}
+        value={searchDraft}
+        onChange={(e) => setSearchDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            setQ(searchDraft);
+          }
+        }}
+        placeholder="Search demos or functions"
+        className="w-40 sm:w-64 border border-gray-300 rounded px-3 py-1.5 text-sm text-black placeholder-gray-400 bg-white"
+      />
+      <button
+        onClick={() => { setSearchDraft(""); setQ(""); searchRef.current?.focus(); }}
+        className="p-2 rounded bg-gray-300 text-gray-700"
+        aria-label="Clear search"
+      >
+        <XMarkIcon className="w-4 h-4" />
+      </button>
     </div>
   );
 
@@ -182,8 +188,8 @@ export default function AskAssistant() {
             <div className="text-lg sm:text-xl font-semibold text-white truncate max-w-[60%] text-right">{selected ? selected.title : mode === "browse" ? "Browse Demos" : "Ask the Assistant"}</div>
           </div>
 
-          {/* Tabs */}
-          <nav className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
+          {/* Tabs + header search pill */}
+          <nav className="flex items-center gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
             {tabs.map((t) => {
               const active = currentTab === t.key;
               return (
@@ -196,6 +202,7 @@ export default function AskAssistant() {
                 >{t.label}</button>
               );
             })}
+            <HeaderSearch />
           </nav>
         </div>
 
@@ -208,7 +215,11 @@ export default function AskAssistant() {
                 <iframe style={{ width: "100%", aspectRatio: "471 / 272" }} src={selected.url} title={selected.title} className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
               </div>
 
-              <HelperWithSearch text="Recommended demos" />
+              {/* Helper only */}
+              <div className="flex items-center justify-between mt-1 mb-3">
+                <p className="italic text-gray-600">Recommended demos</p>
+                <span />
+              </div>
 
               <div className="flex flex-col gap-3">
                 {(mode === "browse" ? filteredBrowse : filteredAsk).map((it) => (
@@ -218,7 +229,10 @@ export default function AskAssistant() {
             </div>
           ) : mode === "browse" ? (
             <div className="w-full flex-1 flex flex-col">
-              <HelperWithSearch text="Select a demo to view it" />
+              <div className="flex items-center justify-between mt-2 mb-3">
+                <p className="italic text-gray-600">Select a demo to view it</p>
+                <span />
+              </div>
               <div className="flex flex-col gap-3">
                 {filteredBrowse.map((it) => (
                   <Row key={it.id || it.url || it.title} item={it} onPick={(val) => { setSelected(val); setIsAnchored(true); requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" })); }} />
@@ -230,6 +244,7 @@ export default function AskAssistant() {
               {!lastQuestion ? null : (
                 <p className="text-base text-black italic text-center mb-2">"{lastQuestion}"</p>
               )}
+              {/* Closer spacing */}
               <div className="text-left mt-2">
                 {loading ? (
                   <p className="text-gray-500 font-semibold animate-pulse">Thinking...</p>
@@ -240,7 +255,10 @@ export default function AskAssistant() {
 
               {showAskMeta && (
                 <>
-                  <HelperWithSearch text="Recommended demos" />
+                  <div className="flex items-center justify-between mt-2 mb-2">
+                    <p className="italic text-gray-600">Recommended demos</p>
+                    <span />
+                  </div>
                   <div className="flex flex-col gap-3">
                     {filteredAsk.map((it) => (
                       <Row key={it.id || it.url || it.title} item={it} onPick={(val) => { setSelected(val); setIsAnchored(true); requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" })); }} />
