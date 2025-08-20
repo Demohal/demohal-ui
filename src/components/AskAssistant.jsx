@@ -1,8 +1,8 @@
-// src/components/AskAssistant.jsx — MVP: flat list + anchored video + inline search tooltip
+// src/components/AskAssistant.jsx — MVP: flat list + anchored video + inline search tooltip (rev)
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
-import { ArrowUpCircleIcon, MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/24/solid";
+import { ArrowUpCircleIcon, MagnifyingGlassCircleIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
 
 function Row({ item, onPick }) {
@@ -32,7 +32,8 @@ export default function AskAssistant() {
   const [mode, setMode] = useState("ask"); // ask | browse | finished
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
-  const [responseText, setResponseText] = useState("Hello. Ask a question to get started.");
+  const INITIAL_MSG = "Hello. Ask a question to get started.";
+  const [responseText, setResponseText] = useState(INITIAL_MSG);
   const [loading, setLoading] = useState(false);
 
   const [items, setItems] = useState([]); // flat list from /demo-hal
@@ -144,20 +145,8 @@ export default function AskAssistant() {
   ];
   const currentTab = mode === "browse" ? "demos" : mode === "finished" ? "finished" : null;
 
-  if (fatal) {
-    return (
-      <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
-        <div className="text-red-600 font-semibold">{fatal}</div>
-      </div>
-    );
-  }
-  if (!botId) {
-    return (
-      <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
-        <div className="text-gray-700">Loading...</div>
-      </div>
-    );
-  }
+  // Should we show helper/search on Ask screen? (hide on welcome)
+  const showAskMeta = Boolean(lastQuestion) || filteredAsk.length > 0;
 
   const SearchControl = ({ align = "right" }) => (
     <div className="relative">
@@ -166,7 +155,7 @@ export default function AskAssistant() {
         onClick={() => setShowSearch((v) => !v)}
         className="p-1.5"
       >
-        <MagnifyingGlassIcon className="w-5 h-5 text-blue-600" />
+        <MagnifyingGlassCircleIcon className="w-8 h-8 text-blue-600" />
       </button>
       {showSearch && (
         <div className={`absolute ${align === "right" ? "right-0" : "left-0"} mt-2 bg-white border border-gray-300 rounded-lg shadow-lg p-2 w-64`}>
@@ -188,6 +177,21 @@ export default function AskAssistant() {
     </div>
   );
 
+  if (fatal) {
+    return (
+      <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
+        <div className="text-red-600 font-semibold">{fatal}</div>
+      </div>
+    );
+  }
+  if (!botId) {
+    return (
+      <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
+        <div className="text-gray-700">Loading...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-2 sm:p-0">
       <div className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300" style={{ width: "min(720px, 100vw - 16px)", height: "auto", minHeight: 450, maxHeight: "90vh" }}>
@@ -198,7 +202,7 @@ export default function AskAssistant() {
             <div className="text-lg sm:text-xl font-semibold text-white truncate max-w-[60%] text-right">{selected ? selected.title : mode === "browse" ? "Browse Demos" : "Ask the Assistant"}</div>
           </div>
 
-          {/* Tabs (search moved inline with Recommended demos) */}
+          {/* Tabs */}
           <nav className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
             {tabs.map((t) => {
               const active = currentTab === t.key;
@@ -270,21 +274,24 @@ export default function AskAssistant() {
                 )}
               </div>
 
-              {/* Space + help text + search */}
-              <div className="flex items-center justify-between mt-4 mb-3">
-                <p className="italic text-gray-600">Recommended demos</p>
-                <SearchControl align="right" />
-              </div>
-
-              <div className="flex flex-col gap-3">
-                {filteredAsk.map((it) => (
-                  <Row key={it.id || it.url || it.title} item={it} onPick={(val) => {
-                    setSelected(val);
-                    setIsAnchored(true);
-                    requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-                  }} />
-                ))}
-              </div>
+              {/* Hide helper/search on welcome; show after first ask */}
+              {showAskMeta && (
+                <>
+                  <div className="flex items-center justify-between mt-4 mb-3">
+                    <p className="italic text-gray-600">Recommended demos</p>
+                    <SearchControl align="right" />
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    {filteredAsk.map((it) => (
+                      <Row key={it.id || it.url || it.title} item={it} onPick={(val) => {
+                        setSelected(val);
+                        setIsAnchored(true);
+                        requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+                      }} />
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -300,6 +307,7 @@ export default function AskAssistant() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
             />
+            {/* Send button centered inside the textarea vertically & visually */}
             <button aria-label="Send" onClick={sendMessage} className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95">
               <ArrowUpCircleIcon className="w-8 h-8 text-red-600 hover:text-red-700" />
             </button>
