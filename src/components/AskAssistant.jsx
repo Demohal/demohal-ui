@@ -139,13 +139,11 @@ export default function AskAssistant() {
     }
   }
 
-  // Primary-only logic when a video is selected (MVP rule)
-  const listSource = mode === "browse" ? browseItems : items;
   // Primary-only list under video: demos whose primary_function_id is in the selected video's functions
-const listSource = mode === "browse" ? browseItems : items;
+  const listSource = mode === "browse" ? browseItems : items;
 
-const visibleUnderVideo = selected
-  ? (selectedFunctionIds.size > 0
+  const visibleUnderVideo = selected
+    ? (selectedFunctionIds.size > 0
       ? listSource.filter(
           (it) =>
             it.id !== selected.id &&                      // omit the selected demo
@@ -153,7 +151,7 @@ const visibleUnderVideo = selected
             selectedFunctionIds.has(it.primary_function_id) // primary ∈ selected's functions
         )
       : [])                                               // no functions on selected → show none (MVP strict)
-  : listSource;                                           // no video selected → show normal list
+    : listSource;                                           // no video selected → show normal list
 
   // Hide helper on welcome
   const showAskMeta = Boolean(lastQuestion) || (items && items.length > 0);
