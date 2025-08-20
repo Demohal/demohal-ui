@@ -1,4 +1,4 @@
-// src/components/AskAssistant.jsx — MVP: helper text only renders when buttons exist; tags balanced
+// src/components/AskAssistant.jsx — Restored card layout + helper text gated to only show with buttons
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -9,7 +9,7 @@ function Row({ item, onPick }) {
   return (
     <button
       onClick={() => onPick(item)}
-      className="w-full text-center bg-gradient-to-b from-gray-600 to-gray-700 text-white rounded-xl px-4 py-3 shadow hover:from-gray-500 hover:to-gray-600 transition-colors"
+      className="w-full text-center bg-gradient-to-b from-gray-600 to-gray-700 text-white rounded-xl border border-gray-700 px-4 py-3 shadow hover:from-gray-500 hover:to-gray-600 transition-colors"
     >
       <div className="font-extrabold text-xs sm:text-sm">{item.title}</div>
       {item.functions_text ? (
@@ -17,137 +17,94 @@ function Row({ item, onPick }) {
           {item.functions_text}
         </div>
       ) : null}
-      {item.description ? (
-        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-80 italic">
-          {item.description}
-        </div>
-      ) : null}
     </button>
   );
 }
 
 export default function AskAssistant() {
-  const apiBase =
-    import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
+  const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
+  const [bot, setBot] = useState(null);
   const [botId, setBotId] = useState("");
-  const [mode, setMode] = useState("welcome"); // 'welcome' | 'ask' | 'browse'
-  const [isAnchored, setIsAnchored] = useState(false);
+  const [fatal, setFatal] = useState("");
+
+  const [mode, setMode] = useState("ask"); // ask | browse | finished
+  const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
-  const [responseText, setResponseText] = useState("");
-  const [items, setItems] = useState([]); // recommended demos for Ask mode
-  const [browseItems, setBrowseItems] = useState([]); // all demos for Browse mode
+  const INITIAL_MSG = "Hello. Ask a question to get started.";
+  const [responseText, setResponseText] = useState(INITIAL_MSG);
   const [loading, setLoading] = useState(false);
-  const [selected, setSelected] = useState(null);
-  const [error, setError] = useState("");
+
+  const [items, setItems] = useState([]); // /demo-hal items (flat)
+  const [browseItems, setBrowseItems] = useState([]); // /browse-demos items (flat)
+  const [selected, setSelected] = useState(null); // selected item (row)
+
+  // Video anchoring
+  const [isAnchored, setIsAnchored] = useState(false);
 
   const contentRef = useRef(null);
-  const inputRef = useRef(null);
 
-  // Fetch bot by alias on mount
+  // alias
+  const alias = useMemo(() => {
+    const qs = new URLSearchParams(window.location.search);
+    return (qs.get("alias") || qs.get("a") || "").trim();
+  }, []);
+
   useEffect(() => {
-    async function loadBot() {
-      try {
-        const alias =
-          new URLSearchParams(window.location.search).get("alias") || "demo";
-        const res = await fetch(`${apiBase}/bot-by-alias?alias=${alias}`);
-        const data = await res.json();
-        if (data?.ok && data.bot?.id) {
-          setBotId(data.bot.id);
-        } else {
-          // keep botId empty to avoid UUID cast errors
-          setBotId("");
-        }
-      } catch (e) {
-        setBotId("");
+    let cancel = false;
+    (async () => {
+      if (!alias) {
+        setFatal("Missing alias in URL.");
+        return;
       }
-    }
-    loadBot();
-  }, [apiBase]);
+      try {
+        const res = await fetch(`${apiBase}/bot-by-alias?alias=${encodeURIComponent(alias)}`);
+        if (!res.ok) throw new Error("Bad alias");
+        const data = await res.json();
+        if (!cancel) {
+          setBot(data.bot);
+          setBotId(data.bot?.id || "");
+        }
+      } catch {
+        if (!cancel) setFatal("Invalid or inactive alias.");
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [alias, apiBase]);
 
-  // Derived lists for under-video recs vs. list source
-  const { listSource, visibleUnderVideo } = useMemo(() => {
-    const source = selected ? [] : items;
+  // Release anchor on first scroll
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el || !selected) return;
+    const onScroll = () => {
+      if (el.scrollTop > 8 && isAnchored) setIsAnchored(false);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [selected, isAnchored]);
 
-    const primaryMatches = (source || []).filter((x) => x.match_type === "primary");
-    const industryMatches = (source || []).filter((x) => x.match_type === "industry");
-
-    // Exclude the currently selected video from matches
-    const selectedId = selected?.id;
-    const excludeSelected = (arr) =>
-      Array.isArray(arr)
-        ? arr.filter((it) => {
-            if (!selectedId) return true;
-            return (it.id || it.demo_video_id) !== selectedId;
-          })
-        : [];
-
-    const pm = excludeSelected(primaryMatches);
-    const im = excludeSelected(industryMatches);
-
-    pm.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
-    im.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
-
-    const visible = selected ? [...pm, ...im] : source;
-    return { listSource: source || [], visibleUnderVideo: visible || [] };
-  }, [items, selected]);
-
-  // Helper visibility: only show "Recommended demos" when there are items
-  const showAskMeta = Array.isArray(items) && items.length > 0;
-
-  const tabs = [
-    { key: "demos", label: "Browse Demos" },
-    { key: "ask", label: "Ask a Question" },
-  ];
-
-  function openAsk() {
+  async function sendMessage() {
+    if (!input.trim() || !botId) return;
+    const outgoing = input.trim();
+    setInput("");
+    setSelected(null);
     setMode("ask");
-    setSelected(null);
-    setIsAnchored(false);
-    inputRef.current?.focus();
-  }
-
-  async function openBrowse() {
-    if (!botId) return;
-    setMode("browse");
-    setSelected(null);
-    try {
-      const res = await fetch(
-        `${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`
-      );
-      const data = await res.json();
-      setBrowseItems(Array.isArray(data?.items) ? data.items : []);
-    } catch (e) {
-      setBrowseItems([]);
-    }
-  }
-
-  async function submitAsk(question) {
-    if (!question || !question.trim()) return;
     setLoading(true);
-    setError("");
-    setMode("ask");
-    setSelected(null);
-    setIsAnchored(false);
-    setLastQuestion(question);
-
     try {
-      const payload = {
-        question,
-        bot_id: botId || undefined,
-      };
-      const res = await axios.post(`${apiBase}/ask`, payload, {
-        timeout: 30000,
+      const res = await axios.post(`${apiBase}/demo-hal`, {
+        bot_id: botId,
+        user_question: outgoing,
       });
-      const data = res?.data || {};
-      const text = data?.messages?.[0]?.text || "";
-      setResponseText(text || "");
-      const recs = Array.isArray(data?.recommendations)
-        ? data.recommendations
-        : [];
-      setItems(recs);
+      const data = res.data || {};
+      setResponseText(data.response_text || "");
+      setItems(Array.isArray(data.items) ? data.items : []);
+      setLastQuestion(outgoing);
+      requestAnimationFrame(() =>
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+      );
     } catch (e) {
-      setError("Sorry—something went wrong.");
       setResponseText("Sorry—something went wrong.");
       setItems([]);
     } finally {
@@ -155,231 +112,271 @@ export default function AskAssistant() {
     }
   }
 
-  async function submitFromInput() {
-    const val = inputRef.current?.value || "";
-    if (!val.trim()) return;
-    inputRef.current.value = "";
-    await submitAsk(val);
+  async function openBrowse() {
+    if (!botId) return;
+    setMode("browse");
+    setSelected(null);
+    try {
+      const res = await fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`);
+      const data = await res.json();
+      setBrowseItems(Array.isArray(data.items) ? data.items : []);
+      requestAnimationFrame(() =>
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+      );
+    } catch {
+      setBrowseItems([]);
+    }
+  }
+
+  // Functions/Industries sets for the selected video (from item payload)
+  const selectedFunctionIds = useMemo(() => {
+    const ids = (selected?.functions || []).map((f) => f?.id).filter(Boolean);
+    return new Set(ids);
+  }, [selected]);
+
+  const selectedIndustryIds = useMemo(() => {
+    const ids = (selected?.industry_ids || []).filter(Boolean);
+    return new Set(ids);
+  }, [selected]);
+
+  // Build list under video: primaries (by function) first, then industry matches. Always exclude selected.
+  const listSource = mode === "browse" ? browseItems : items;
+
+  const primaryMatches =
+    selected && selectedFunctionIds.size > 0
+      ? listSource.filter(
+          (it) =>
+            it.id !== selected.id &&
+            it.primary_function_id &&
+            selectedFunctionIds.has(it.primary_function_id)
+        )
+      : [];
+
+  const industryMatches =
+    selected && selectedIndustryIds.size > 0
+      ? listSource.filter((it) => {
+          if (it.id === selected.id) return false;
+          const ids = (it.industry_ids || []).filter(Boolean);
+          if (!ids.length) return false;
+          // intersect
+          for (const x of ids) {
+            if (selectedIndustryIds.has(x)) return !primaryMatches.some((p) => p.id === it.id);
+          }
+          return false;
+        })
+      : [];
+
+  primaryMatches.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+  industryMatches.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+
+  const visibleUnderVideo = selected ? [...primaryMatches, ...industryMatches] : listSource;
+
+  // Helper visibility — ONLY when there are items
+  const showAskMeta = Array.isArray(items) && items.length > 0;
+
+  const tabs = [
+    { key: "demos", label: "Browse Demos", onClick: openBrowse },
+    { key: "meeting", label: "Schedule Meeting", onClick: () => setMode("finished") },
+    { key: "finished", label: "Finished", onClick: () => setMode("finished") },
+  ];
+  const currentTab = mode === "browse" ? "demos" : mode === "finished" ? "finished" : null;
+
+  if (fatal) {
+    return (
+      <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
+        <div className="text-red-600 font-semibold">{fatal}</div>
+      </div>
+    );
+  }
+  if (!botId) {
+    return (
+      <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
+        <div className="text-gray-700">Loading...</div>
+      </div>
+    );
   }
 
   return (
-    <div className="w-full h-full flex flex-col bg-gradient-to-b from-gray-50 to-white">
-      {/* Header */}
-      <div className="flex items-center justify-between p-2 sm:p-3 bg-white border-b">
-        <div className="flex items-center gap-2">
-          <img src={logo} alt="logo" className="h-6 w-6" />
-          <div className="font-bold text-sm sm:text-base">DemoHAL</div>
-        </div>
-        <div className="flex items-center gap-2">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => (t.key === "demos" ? openBrowse() : openAsk())}
-              className={`px-3 py-1 rounded-md text-sm font-semibold ${
-                (t.key === "demos" && mode === "browse") ||
-                (t.key === "ask" && (mode === "ask" || mode === "welcome"))
-                  ? "bg-gray-900 text-white"
-                  : "bg-gray-200 text-gray-800 hover:bg-gray-300"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Body */}
-      <div className="flex-1 overflow-hidden flex">
-        {/* Left / Main Column */}
-        <div className="flex-1 flex flex-col">
-          {/* Conversation/Content area */}
-          <div
-            ref={contentRef}
-            className="flex-1 overflow-auto px-3 sm:px-4 py-3 sm:py-4"
-          >
-            {mode === "welcome" ? (
-              <div className="text-center text-gray-700">
-                <div className="text-lg font-semibold">
-                  Welcome to DemoHAL for WAC
-                </div>
-                <div className="mt-2 text-sm opacity-80">
-                  Ask a question about WAC or Acumatica, or browse demos.
-                </div>
-              </div>
-            ) : mode === "ask" ? (
-              <div className="flex flex-col gap-3">
-                {/* Question + Answer */}
-                {lastQuestion ? (
-                  <div className="bg-white border rounded-xl p-3 shadow-sm">
-                    <div className="text-xs uppercase tracking-wide text-gray-500">
-                      Your question
-                    </div>
-                    <div className="mt-1 font-semibold">{lastQuestion}</div>
-                  </div>
-                ) : null}
-
-                {loading ? (
-                  <div className="bg-white border rounded-xl p-3 shadow-sm">
-                    <div className="animate-pulse text-gray-500">Thinking…</div>
-                  </div>
-                ) : responseText ? (
-                  <div className="bg-white border rounded-xl p-3 shadow-sm">
-                    <div className="text-xs uppercase tracking-wide text-gray-500">
-                      Answer
-                    </div>
-                    <div className="mt-1 whitespace-pre-wrap leading-relaxed">
-                      {responseText}
-                    </div>
-                  </div>
-                ) : null}
-
-                {/* Selected video (if any) */}
-                {selected ? (
-                  <div className="bg-white border rounded-xl p-3 shadow-sm">
-                    <div className="text-xs uppercase tracking-wide text-gray-500">
-                      Now playing
-                    </div>
-                    <div className="mt-2">
-                      <div className="font-extrabold">{selected.title}</div>
-                      {selected.description ? (
-                        <div className="text-sm opacity-80 mt-1">
-                          {selected.description}
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="mt-3">
-                      <div className="relative w-full h-0 pb-[56.25%] overflow-hidden rounded-lg">
-                        <iframe
-                          src={selected.url}
-                          title={selected.title}
-                          className="absolute inset-0 w-full h-full rounded-lg"
-                          frameBorder="0"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                        />
-                      </div>
-                    </div>
-
-                    {/* Helper + list (only when we have items) */}
-                    {visibleUnderVideo.length > 0 && (
-                      <>
-                        <div className="flex items-center justify-between mt-1 mb-3">
-                          <p className="italic text-gray-600">Recommended demos</p>
-                          <span />
-                        </div>
-
-                        <div className="flex flex-col gap-3">
-                          {visibleUnderVideo.map((it) => (
-                            <Row
-                              key={it.id || it.url || it.title}
-                              item={it}
-                              onPick={(val) => {
-                                setSelected(val);
-                                setIsAnchored(true);
-                                requestAnimationFrame(() =>
-                                  contentRef.current?.scrollTo({
-                                    top: 0,
-                                    behavior: "auto",
-                                  })
-                                );
-                              }}
-                            />
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ) : null}
-
-                {/* Ask-meta list (only when items exist) */}
-                {showAskMeta && (
-                  <>
-                    <div className="flex items-center justify-between mt-2 mb-2">
-                      <p className="italic text-gray-600">Recommended demos</p>
-                      <span />
-                    </div>
-                    <div className="flex flex-col gap-3">
-                      {items.map((it) => (
-                        <Row
-                          key={it.id || it.url || it.title}
-                          item={it}
-                          onPick={(val) => {
-                            setSelected(val);
-                            setIsAnchored(true);
-                            requestAnimationFrame(() =>
-                              contentRef.current?.scrollTo({
-                                top: 0,
-                                behavior: "auto",
-                              })
-                            );
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            ) : mode === "browse" ? (
-              <div className="w-full flex-1 flex flex-col">
-                {browseItems.length > 0 && (
-                  <>
-                    <div className="flex items-center justify-between mt-2 mb-3">
-                      <p className="italic text-gray-600">Select a demo to view it</p>
-                      <span />
-                    </div>
-                    <div className="flex flex-col gap-3">
-                      {browseItems.map((it) => (
-                        <Row
-                          key={it.id || it.url || it.title}
-                          item={it}
-                          onPick={(val) => {
-                            setSelected(val);
-                            setIsAnchored(true);
-                            requestAnimationFrame(() =>
-                              contentRef.current?.scrollTo({
-                                top: 0,
-                                behavior: "auto",
-                              })
-                            );
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            ) : (
-              <div className="text-gray-500">Unknown mode.</div>
-            )}
+    <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-2 sm:p-0">
+      <div
+        className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300"
+        style={{
+          width: "min(720px, 100vw - 16px)",
+          height: "auto",
+          minHeight: 450,
+          maxHeight: "90vh",
+        }}
+      >
+        {/* Header */}
+        <div className="bg-black text-white px-4 sm:px-6">
+          <div className="flex items-center justify-between w-full py-3">
+            <div className="flex items-center gap-3">
+              <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
+            </div>
+            <div className="text-lg sm:text-xl font-semibold text-white truncate max-w-[60%] text-right">
+              {selected ? selected.title : mode === "browse" ? "Browse Demos" : "Ask the Assistant"}
+            </div>
           </div>
-        </div> {/* end Left / Main Column */}
-      </div>   {/* end Body flex */}
 
-      {/* Footer / Input */}
-      <div className="border-t bg-white p-2 sm:p-3">
-        <div className="flex items-center gap-2">
-          <input
-            ref={inputRef}
-            className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400"
-            placeholder="Type your question…"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                submitFromInput();
-              }
-            }}
-          />
-          <button
-            onClick={submitFromInput}
-            className="inline-flex items-center gap-2 bg-gray-900 text-white px-3 py-2 rounded-lg hover:bg-gray-800"
+          {/* Tabs */}
+          <nav
+            className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            role="tablist"
           >
-            <ArrowUpCircleIcon className="h-5 w-5" />
-            <span className="hidden sm:inline">Send</span>
-          </button>
+            {tabs.map((t) => {
+              const active = currentTab === t.key;
+              return (
+                <button
+                  key={t.key}
+                  onClick={t.onClick}
+                  role="tab"
+                  aria-selected={active}
+                  className={[
+                    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
+                    "rounded-t-md border border-b-0",
+                    active
+                      ? "bg-white text-black border-white -mb-px shadow-[0_2px_0_rgba(0,0,0,0.15)]"
+                      : "bg-gradient-to-b from-gray-600 to-gray-700 text-white border-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]",
+                  ].join(" ")}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
+          </nav>
         </div>
-        {error ? (
-          <div className="text-red-600 text-sm mt-2">{error}</div>
-        ) : null}
+
+        {/* Content */}
+        <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
+          {selected ? (
+            <div className="w-full flex-1 flex flex-col">
+              {/* Video: anchor initially, then release on scroll */}
+              <div className={`${isAnchored ? "sticky top-0 z-10" : ""} bg-white pt-2 pb-2`}>
+                <iframe
+                  style={{ width: "100%", aspectRatio: "471 / 272" }}
+                  src={selected.url}
+                  title={selected.title}
+                  className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+
+              {/* Helper + list ONLY if we have items */}
+              {visibleUnderVideo.length > 0 && (
+                <>
+                  <div className="flex items-center justify-between mt-1 mb-3">
+                    <p className="italic text-gray-600">Recommended demos</p>
+                    <span />
+                  </div>
+
+                  <div className="flex flex-col gap-3">
+                    {visibleUnderVideo.map((it) => (
+                      <Row
+                        key={it.id || it.url || it.title}
+                        item={it}
+                        onPick={(val) => {
+                          setSelected(val);
+                          setIsAnchored(true);
+                          requestAnimationFrame(() =>
+                            contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+                          );
+                        }}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : mode === "browse" ? (
+            <div className="w-full flex-1 flex flex-col">
+              {/* Browse helper + list ONLY if we have items */}
+              {browseItems.length > 0 && (
+                <>
+                  <div className="flex items-center justify-between mt-2 mb-3">
+                    <p className="italic text-gray-600">Select a demo to view it</p>
+                    <span />
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    {browseItems.map((it) => (
+                      <Row
+                        key={it.id || it.url || it.title}
+                        item={it}
+                        onPick={(val) => {
+                          setSelected(val);
+                          setIsAnchored(true);
+                          requestAnimationFrame(() =>
+                            contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+                          );
+                        }}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="w-full flex-1 flex flex-col">
+              {!lastQuestion ? null : (
+                <p className="text-base text-black italic text-center mb-2">"{lastQuestion}"</p>
+              )}
+              {/* Close spacing */}
+              <div className="text-left mt-2">
+                {loading ? (
+                  <p className="text-gray-500 font-semibold animate-pulse">Thinking...</p>
+                ) : (
+                  <p className="text-black text-base font-bold whitespace-pre-line">{responseText}</p>
+                )}
+              </div>
+
+              {/* Ask helper + list ONLY if we have items */}
+              {showAskMeta && (
+                <>
+                  <div className="flex items-center justify-between mt-2 mb-2">
+                    <p className="italic text-gray-600">Recommended demos</p>
+                    <span />
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    {items.map((it) => (
+                      <Row
+                        key={it.id || it.url || it.title}
+                        item={it}
+                        onPick={(val) => {
+                          setSelected(val);
+                          setIsAnchored(true);
+                          requestAnimationFrame(() =>
+                            contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+                          );
+                        }}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Input */}
+        <div className="px-4 py-3 border-top border-gray-400 border-t">
+          <div className="relative w-full">
+            <textarea
+              rows={1}
+              className="w-full border border-gray-400 rounded-lg px-4 py-2 pr-14 text-base text-black placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px]"
+              placeholder="Ask your question here"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
+            />
+            <button
+              aria-label="Send"
+              onClick={sendMessage}
+              className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
+            >
+              <ArrowUpCircleIcon className="w-8 h-8 text-red-600 hover:text-red-700" />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
