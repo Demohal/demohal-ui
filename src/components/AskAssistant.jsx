@@ -197,29 +197,16 @@ export default function AskAssistant() {
   // Under-video lists (primary/industry) — legacy support: safely becomes empty in new flow
   const listSource = mode === "browse" ? browseItems : items;
 
-  const selectedFunctionIds = useMemo(() => new Set((selected?.functions || []).map((f) => f?.id).filter(Boolean)), [selected]);
-  const selectedIndustryIds = useMemo(() => new Set((selected?.industry_ids || []).filter(Boolean)), [selected]);
+  // New behavior:
+  // - Ask mode: keep and reuse the same recommended list that the bot returned.
+  // - Browse mode: (pending) will implement after confirming prod behavior; empty for now.
+  const askUnderVideo = useMemo(() => {
+    if (!selected) return items;
+    const selId = selected.id ?? selected.url ?? selected.title;
+    return (items || []).filter((it) => (it.id ?? it.url ?? it.title) !== selId);
+  }, [selected, items]);
 
-  const primaryMatches = selected && selectedFunctionIds.size > 0
-    ? listSource.filter((it) => it.id !== selected.id && it.primary_function_id && selectedFunctionIds.has(it.primary_function_id))
-    : [];
-
-  const industryMatches = selected && selectedIndustryIds.size > 0
-    ? listSource.filter((it) => {
-        if (it.id === selected.id) return false;
-        const ids = (it.industry_ids || []).filter(Boolean);
-        if (!ids.length) return false;
-        for (const x of ids) {
-          if (selectedIndustryIds.has(x)) return !primaryMatches.some((p) => p.id === it.id);
-        }
-        return false;
-      })
-    : [];
-
-  primaryMatches.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
-  industryMatches.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
-
-  const visibleUnderVideo = selected ? [...primaryMatches, ...industryMatches] : listSource;
+  const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
 
   // Tabs — EXACTLY as requested: Browse Demos, Schedule Meeting, Finished
   const tabs = [
