@@ -39,7 +39,9 @@ export default function AskAssistant() {
   const [browseItems, setBrowseItems] = useState([]);
   const [selected, setSelected] = useState(null);
 
-  // Helper phasing for Ask: "hidden" → "header" → "buttons"
+  
+  const [browseRecs, setBrowseRecs] = useState([]);
+// Helper phasing for Ask: "hidden" → "header" → "buttons"
   const [helperPhase, setHelperPhase] = useState("hidden");
 
   const [isAnchored, setIsAnchored] = useState(false);
@@ -90,6 +92,33 @@ export default function AskAssistant() {
     (async () => {
       try {
         const res = await fetch(`${apiBase}/bot-by-alias?alias=${encodeURIComponent(alias)}`);
+
+  // Fetch server-side recommendations for Browse mode when a video is selected
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        if (mode === "browse" && selected && botId) {
+          const demoId = selected.id ?? selected.url ?? selected.title;
+          const res = await fetch(`${apiBase}/recommend-for`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ bot_id: botId, demo_id: demoId }),
+          });
+          const data = await res.json();
+          if (cancelled) return;
+          const recs = normalizeList(Array.isArray(data?.buttons) ? data.buttons : []);
+          setBrowseRecs(recs);
+        } else {
+          setBrowseRecs([]);
+        }
+      } catch (e) {
+        if (!cancelled) setBrowseRecs([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [mode, selected, botId, apiBase]);
+
         const data = await res.json();
         if (cancel) return;
         const id = extractBotId(data);
@@ -195,18 +224,16 @@ export default function AskAssistant() {
   }
 
   // Under-video lists (primary/industry) — legacy support: safely becomes empty in new flow
-  const listSource = mode === "browse" ? browseItems : items;
-
-  // New behavior:
-  // - Ask mode: keep and reuse the same recommended list that the bot returned.
-  // - Browse mode: (pending) will implement after confirming prod behavior; empty for now.
+  const listSource = mode === "browse" ? browseItems : items;  // New behavior:
+  // - Ask mode: reuse the same recommendations returned by the bot (minus the selected).
+  // - Browse mode: show server-picked top 4 from /recommend-for.
   const askUnderVideo = useMemo(() => {
     if (!selected) return items;
     const selId = selected.id ?? selected.url ?? selected.title;
     return (items || []).filter((it) => (it.id ?? it.url ?? it.title) !== selId);
   }, [selected, items]);
 
-  const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
+  const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : browseRecs) : listSource;
 
   // Tabs — EXACTLY as requested: Browse Demos, Schedule Meeting, Finished
   const tabs = [
