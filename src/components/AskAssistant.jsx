@@ -1,74 +1,62 @@
-// src/components/AskAssistant.jsx — alias loader fix + server-side browse recs + quoted/truncated helper
+// src/components/AskAssistant.jsx — Back-compat with {items} or {buttons}
+// Tabs: Browse Demos, Schedule Meeting, Finished
+// Sequenced Ask UX: mirror → Thinking… → response → helper → buttons
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
+
 
 // Sanitize long questions for helper header on video screen
 function sanitizeQuestion(q, maxLen = 120) {
   if (!q) return "";
   let s = String(q).replace(/\s+/g, " ").trim();
   if (s.length > maxLen) s = s.slice(0, maxLen - 3) + "...";
-  // Escape interior double-quotes so they don't collide with outer quotes
-  s = s.replace(/"/g, '\\"');
+  s = s.replace(/"/g, '\"');
   return s;
 }
 
-// Robust extractor for various {bot} response shapes
-function extractBotId(payload) {
-  try {
-    if (!payload || typeof payload !== "object") return null;
-    if (payload.bot && typeof payload.bot === "object") {
-      const b = payload.bot;
-      return b.id || b.bot_id || b.uuid || null;
+// Lightweight keyword helpers for per-button rationales (Browse only)
+function kwTokens(s) {
+  if (!s) return [];
+  return String(s)
+    .toLowerCase()
+    .match(/[A-Za-z][A-Za-z0-9\-']+/g)?.filter(w => !new Set([
+      "a","an","and","the","of","for","to","in","on","at","by","with","or","as","is","it","be","are","was","were","from","into","within","using","while","via","per",
+      "more","most","other","another","over","under","up","down","out","very","can","could","should","would","may","might","will","shall","than","then","just","also",
+      "not","yes","no","etc","overview","intro","introduction","video","demo"
+    ]).has(w)) || [];
+}
+function collapsePhrases(toks) {
+  const out = [];
+  for (let i=0;i<toks.length;i++) {
+    const a=toks[i], b=toks[i+1];
+    const bigram = (a && b) ? `${a} ${b}` : "";
+    if (bigram==="general ledger" || bigram==="financial reporting" || bigram==="return authorization" || bigram==="chart of") {
+      if (bigram==="chart of" && toks[i+2]==="accounts") { out.push("chart of accounts"); i+=2; continue; }
+      out.push(bigram); i+=1; continue;
     }
-    if (payload.id) return payload.id;
-    if (payload.data) {
-      if (Array.isArray(payload.data) && payload.data[0]) {
-        const b = payload.data[0];
-        return b.id || b.bot_id || b.uuid || null;
-      }
-      if (typeof payload.data === "object") {
-        const b = payload.data;
-        return b.id || b.bot_id || b.uuid || null;
-      }
-    }
-    if (Array.isArray(payload.rows) && payload.rows[0]) {
-      const b = payload.rows[0];
-      return b.id || b.bot_id || b.uuid || null;
-    }
-    return null;
-  } catch {
-    return null;
+    if ((a==="bills" && b==="of" && toks[i+2] && toks[i+2].startsWith("material"))) { out.push("bills of material (BOM)"); i+=2; continue; }
+    out.push(a);
   }
+  const seen=new Set(), uniq=[];
+  for (const t of out) { if (!seen.has(t)) { seen.add(t); uniq.push(t);} }
+  return uniq;
+}
+function makeReason(selected, candidate) {
+  const selText = `${selected?.title||""} ${selected?.description||selected?.functions_text||""}`.trim();
+  const candText = `${candidate?.title||""} ${candidate?.description||candidate?.functions_text||""}`.trim();
+  const s = collapsePhrases(kwTokens(selText));
+  const c = collapsePhrases(kwTokens(candText));
+  const overlap = c.filter(x => s.includes(x));
+  const selFocus = s.find(x => ["financial reporting","general ledger","return authorization","bills of material (BOM)"].includes(x)) || s[0];
+  const bits = (overlap.length ? overlap.slice(0,3) : c.slice(0,2)).filter(Boolean);
+  if (selFocus && bits.length) return `Because you're viewing ${selFocus}, it also covers ${bits.join(", ")}.`;
+  if (bits.length) return `Recommended for related topics like ${bits.join(", ")}.`;
+  return "Recommended as a closely related topic.";
 }
 
-// Normalize results to the UI's expected shape
-function normalizeList(arr) {
-  if (!Array.isArray(arr)) return [];
-  return arr
-    .map((it) => {
-      const id = it.id ?? it.button_id ?? it.value ?? it.url ?? it.title;
-      const title =
-        it.title ??
-        it.button_title ??
-        (typeof it.label === "string" ? it.label.replace(/^Watch the \"|\" demo$/g, "") : it.label) ??
-        "";
-      const url = it.url ?? it.value ?? it.button_value ?? "";
-      const description = it.description ?? it.summary ?? it.functions_text ?? "";
-      return {
-        id,
-        title,
-        url,
-        description,
-        // Keep legacy props in case other components rely on them
-        functions_text: it.functions_text ?? description,
-        action: it.action ?? it.button_action ?? "demo",
-        label: it.label ?? it.button_label ?? (title ? `Watch the "${title}" demo` : ""),
-      };
-    })
-    .filter((x) => x.title && x.url);
-}
 
 function Row({ item, onPick }) {
   return (
@@ -98,16 +86,15 @@ export default function AskAssistant() {
   const [responseText, setResponseText] = useState("Hello. Ask a question to get started.");
   const [loading, setLoading] = useState(false);
 
-  const [items, setItems] = useState([]);            // Ask recommendations from bot
-  const [browseItems, setBrowseItems] = useState([]); // All demos for Browse
-  const [browseRecs, setBrowseRecs] = useState([]);   // Server-side top-4 for selected in Browse
+  const [items, setItems] = useState([]);
+  const [browseItems, setBrowseItems] = useState([]);
   const [selected, setSelected] = useState(null);
 
+  // Helper phasing for Ask: "hidden" → "header" → "buttons"
   const [helperPhase, setHelperPhase] = useState("hidden");
+
   const [isAnchored, setIsAnchored] = useState(false);
   const contentRef = useRef(null);
-
-  const safeQuestion = useMemo(() => sanitizeQuestion(lastQuestion, 120), [lastQuestion]);
 
   // Resolve alias — default to "demo"
   const alias = useMemo(() => {
@@ -115,30 +102,56 @@ export default function AskAssistant() {
     return (qs.get("alias") || "demo").trim();
   }, []);
 
-  // Load bot by alias — show fatal ONLY on non-200 or network error; otherwise warn to console
+  // Extract bot id from various backend shapes
+  function extractBotId(payload) {
+    if (!payload || typeof payload !== "object") return null;
+    if (payload.bot && payload.bot.id) return payload.bot.id;
+    if (payload.id) return payload.id;
+    if (payload.data && payload.data.id) return payload.data.id;
+    if (Array.isArray(payload.data) && payload.data[0] && payload.data[0].id) return payload.data[0].id;
+    if (Array.isArray(payload.rows) && payload.rows[0] && payload.rows[0].id) return payload.rows[0].id;
+    return null;
+  }
+
+  // Normalize results to the UI's expected shape
+  function normalizeList(arr) {
+    if (!Array.isArray(arr)) return [];
+    return arr.map((it) => {
+      const id = it.id ?? it.button_id ?? it.value ?? it.url ?? it.title;
+      const title =
+        it.title ?? it.button_title ?? (typeof it.label === "string" ? it.label.replace(/^Watch the \"|\" demo$/g, "") : it.label) ?? "";
+      const url = it.url ?? it.value ?? it.button_value ?? "";
+      const description = it.description ?? it.summary ?? it.functions_text ?? "";
+      return {
+        id,
+        title,
+        url,
+        description,
+        // Keep legacy props in case other components rely on them
+        functions_text: it.functions_text ?? description,
+        action: it.action ?? it.button_action ?? "demo",
+        label: it.label ?? it.button_label ?? (title ? `Watch the "${title}" demo` : ""),
+      };
+    }).filter((x) => x.title && x.url);
+  }
+
+  // Load bot by alias
   useEffect(() => {
     let cancel = false;
     (async () => {
       try {
         const res = await fetch(`${apiBase}/bot-by-alias?alias=${encodeURIComponent(alias)}`);
-        const text = await res.text();
-        let data = {};
-        try { data = JSON.parse(text); } catch { /* ignore */ }
+        const data = await res.json();
         if (cancel) return;
-
-        if (!res.ok) {
-          setFatal("Invalid or inactive alias.");
-          return;
-        }
-
         const id = extractBotId(data);
         if (id) {
-          setBotId(String(id));
+          setBotId(id);
           setFatal("");
+        } else if (!res.ok || data?.ok === false) {
+          setFatal("Invalid or inactive alias.");
         } else {
-          console.warn("/bot-by-alias unexpected payload:", { status: res.status, data });
+          console.warn("/bot-by-alias returned unexpected shape", data);
           setBotId("");
-          setFatal("");
         }
       } catch (e) {
         if (!cancel) setFatal("Invalid or inactive alias.");
@@ -232,46 +245,32 @@ export default function AskAssistant() {
     }
   }
 
-  // Under-video lists
+  // Under-video lists (primary/industry) — legacy support: safely becomes empty in new flow
   const listSource = mode === "browse" ? browseItems : items;
 
-  // Ask: reuse same bot rec list (minus selected). Browse: use server-picked /recommend-for
-  const askUnderVideo = useMemo(() => {
-    if (!selected) return items;
-    const selId = selected.id ?? selected.url ?? selected.title;
-    return (items || []).filter((it) => (it.id ?? it.url ?? it.title) !== selId);
-  }, [selected, items]);
+  const selectedFunctionIds = useMemo(() => new Set((selected?.functions || []).map((f) => f?.id).filter(Boolean)), [selected]);
+  const selectedIndustryIds = useMemo(() => new Set((selected?.industry_ids || []).filter(Boolean)), [selected]);
 
-  // Fetch server-side recommendations for Browse mode when a video is selected
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        if (mode === "browse" && selected && botId) {
-          const demoId = selected.id ?? selected.url ?? selected.title;
-          const res = await fetch(`${apiBase}/recommend-for`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ bot_id: botId, demo_id: demoId }),
-          });
-          const data = await res.json();
-          if (cancelled) return;
-          const recs = normalizeList(Array.isArray(data?.buttons) ? data.buttons : []);
-          setBrowseRecs(recs);
-        } else {
-          setBrowseRecs([]);
+  const primaryMatches = selected && selectedFunctionIds.size > 0
+    ? listSource.filter((it) => it.id !== selected.id && it.primary_function_id && selectedFunctionIds.has(it.primary_function_id))
+    : [];
+
+  const industryMatches = selected && selectedIndustryIds.size > 0
+    ? listSource.filter((it) => {
+        if (it.id === selected.id) return false;
+        const ids = (it.industry_ids || []).filter(Boolean);
+        if (!ids.length) return false;
+        for (const x of ids) {
+          if (selectedIndustryIds.has(x)) return !primaryMatches.some((p) => p.id === it.id);
         }
-      } catch (e) {
-        if (!cancelled) setBrowseRecs([]);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [mode, selected, botId, apiBase]);
+        return false;
+      })
+    : [];
 
-  const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : browseRecs) : listSource;
-  const videoHelperText = (mode === "ask" && selected)
-    ? (safeQuestion ? `Because you asked "${safeQuestion}"` : "Recommended demos")
-    : "Recommended demos";
+  primaryMatches.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+  industryMatches.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+
+  const visibleUnderVideo = selected ? [...primaryMatches, ...industryMatches] : listSource;
 
   // Tabs — EXACTLY as requested: Browse Demos, Schedule Meeting, Finished
   const tabs = [
@@ -357,7 +356,7 @@ export default function AskAssistant() {
               {visibleUnderVideo.length > 0 && (
                 <>
                   <div className="flex items-center justify-between mt-1 mb-3">
-                    <p className="italic text-gray-600">{videoHelperText}</p>
+                    <p className="italic text-gray-600">Recommended demos</p>
                     <span />
                   </div>
                   <div className="flex flex-col gap-3">
