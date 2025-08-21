@@ -29,15 +29,18 @@ export default function AskAssistant() {
   const [botId, setBotId] = useState("");
   const [fatal, setFatal] = useState("");
 
-  const [mode, setMode] = useState("ask"); // ask | browse | docs | price | meeting | finished
+  // Modes: ask | browse | docs | price | meeting | finished
+  const [mode, setMode] = useState("ask");
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
-  const [responseText, setResponseText] = useState("Welcome to DemoHAL where you can Let Your Product Sell Itself. From here you can ask technical or business related questions, watch short video demos based on your interest, review the document library for technical specifications, case studies, and other materials, book a meeting, or even get a  price quote. You can get started by watching this short video, or simply by asking your first question.");
+  const [responseText, setResponseText] = useState(
+    "Welcome to DemoHAL where you can Let Your Product Sell Itself. From here you can ask technical or business related questions, watch short video demos based on your interest, review the document library for technical specifications, case studies, and other materials, book a meeting, or even get a  price quote. You can get started by watching this short video, or simply by asking your first question."
+  );
   const [loading, setLoading] = useState(false);
 
-  const [items, setItems] = useState([]);            // Ask recommendations from bot
-  const [browseItems, setBrowseItems] = useState([]); // All demos for Browse
-  const [browseDocs, setBrowseDocs] = useState([]);   // All docs for Browse Documents
+  const [items, setItems] = useState([]);           // Ask recommendations from bot
+  const [browseItems, setBrowseItems] = useState([]); // Demos for Browse
+  const [browseDocs, setBrowseDocs] = useState([]);   // Docs for Browse Documents
   const [selected, setSelected] = useState(null);
 
   // Helper phasing for Ask: "hidden" → "header" → "buttons"
@@ -90,7 +93,6 @@ export default function AskAssistant() {
           title,
           url,
           description,
-          // Keep legacy props in case other components rely on them
           functions_text: it.functions_text ?? description,
           action: it.action ?? it.button_action ?? "demo",
           label: it.label ?? it.button_label ?? (title ? `Watch the "${title}" demo` : ""),
@@ -204,7 +206,6 @@ export default function AskAssistant() {
     try {
       const res = await fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`);
       const data = await res.json();
-      // Back-compat: accept either {items} or {buttons}
       const src = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
       setBrowseItems(normalizeList(src));
       requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
@@ -243,17 +244,15 @@ export default function AskAssistant() {
   // - Ask: show askUnderVideo
   // - Browse/Docs: none
   // - Price/Meeting/Finished: none (screen is blanked with Coming Soon)
-  const visibleUnderVideo = selected
-    ? (mode === "ask" ? askUnderVideo : [])
-    : listSource;
+  const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
 
   // Tabs — Browse Demos, Browse Documents, Price Estimate, Schedule Meeting, Finished
   const tabs = [
     { key: "demos", label: "Browse Demos", onClick: openBrowse },
     { key: "docs", label: "Browse Documents", onClick: openBrowseDocs },
-    { key: "price", label: "Price Estimate", onClick: () => setMode("price") },
-    { key: "meeting", label: "Schedule Meeting", onClick: () => setMode("meeting") },
-    { key: "finished", label: "Finished", onClick: () => setMode("finished") },
+    { key: "price", label: "Price Estimate", onClick: () => { setSelected(null); setMode("price"); } },
+    { key: "meeting", label: "Schedule Meeting", onClick: () => { setSelected(null); setMode("meeting"); } },
+    { key: "finished", label: "Finished", onClick: () => { setSelected(null); setMode("finished"); } },
   ];
   const currentTab =
     mode === "browse" ? "demos"
@@ -450,16 +449,35 @@ export default function AskAssistant() {
             </div>
           ) : (
             <div className="w-full flex-1 flex flex-col">
-              {/* 1) Mirror the question immediately */}
+              {/* Initial Ask screen (no question yet): show welcome + Vimeo */}
+              {!lastQuestion && !loading && (
+                <div className="space-y-3">
+                  {/* the message is already in responseText */}
+                  <div className="text-black text-base font-bold whitespace-pre-line">{responseText}</div>
+                  {/* Vimeo responsive embed */}
+                  <div style={{ position: "relative", paddingTop: "56.25%" }}>
+                    <iframe
+                      src="https://player.vimeo.com/video/1102303359?badge=0&autopause=0&player_id=0&app_id=58479"
+                      title="DemoHAL Intro Video"
+                      frameBorder="0"
+                      allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
+                      referrerPolicy="strict-origin-when-cross-origin"
+                      style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 1) Mirror the question immediately (after first ask) */}
               {lastQuestion ? <p className="text-base text-black italic text-center mb-2">"{lastQuestion}"</p> : null}
 
               {/* 2) Thinking… or 3) Response */}
               <div className="text-left mt-2">
                 {loading ? (
                   <p className="text-gray-500 font-semibold animate-pulse">Thinking…</p>
-                ) : (
+                ) : lastQuestion ? (
                   <p className="text-black text-base font-bold whitespace-pre-line">{responseText}</p>
-                )}
+                ) : null}
               </div>
 
               {/* 4) Helper header (phase===header or buttons) */}
