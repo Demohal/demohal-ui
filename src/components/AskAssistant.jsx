@@ -32,7 +32,7 @@ export default function AskAssistant() {
   const [mode, setMode] = useState("ask"); // ask | browse | docs | price | meeting | finished
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
-  const [responseText, setResponseText] = useState("Hello. Ask a question to get started.");
+  const [responseText, setResponseText] = useState("Welcome to DemoHAL where you can Let Your Product Sell Itself. From here you can ask technical or business related questions, watch short video demos based on your interest, review the document library for technical specifications, case studies, and other materials, book a meeting, or even get a  price quote. You can get started by watching this short video, or simply by asking your first question.");
   const [loading, setLoading] = useState(false);
 
   const [items, setItems] = useState([]);            // Ask recommendations from bot
