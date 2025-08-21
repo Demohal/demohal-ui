@@ -45,7 +45,16 @@ export default function AskAssistant() {
   const [isAnchored, setIsAnchored] = useState(false);
   const contentRef = useRef(null);
 
-  // Resolve alias — default to "demo"
+  
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [input]);
+// Resolve alias — default to "demo"
   const alias = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     return (qs.get("alias") || "demo").trim();
@@ -395,12 +404,12 @@ export default function AskAssistant() {
         {/* Input */}
         <div className="px-4 py-3 border-top border-gray-400 border-t">
           <div className="relative w-full">
-            <textarea
-              rows={1}
+            <textarea ref={inputRef} rows={1}
               className="w-full border border-gray-400 rounded-lg px-4 py-2 pr-14 text-base text-black placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px]"
               placeholder="Ask your question here"
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onInput={(e) => { e.currentTarget.style.height = "auto"; e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`; }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
