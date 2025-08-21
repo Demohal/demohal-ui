@@ -57,6 +57,15 @@ function makeReason(selected, candidate) {
   return "Recommended as a closely related topic.";
 }
 
+function simScore(a, b) {
+  const A = new Set(kwTokens(a));
+  const B = new Set(kwTokens(b));
+  if (A.size === 0 || B.size === 0) return 0;
+  let overlap = 0;
+  for (const w of A) if (B.has(w)) overlap++;
+  return overlap / Math.sqrt(A.size * B.size);
+}
+
 
 function Row({ item, onPick }) {
   return (
