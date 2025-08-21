@@ -7,66 +7,6 @@ import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
 
-
-// Sanitize long questions for helper header on video screen
-function sanitizeQuestion(q, maxLen = 120) {
-  if (!q) return "";
-  let s = String(q).replace(/\s+/g, " ").trim();
-  if (s.length > maxLen) s = s.slice(0, maxLen - 3) + "...";
-  s = s.replace(/"/g, '\"');
-  return s;
-}
-
-// Lightweight keyword helpers for per-button rationales (Browse only)
-function kwTokens(s) {
-  if (!s) return [];
-  return String(s)
-    .toLowerCase()
-    .match(/[A-Za-z][A-Za-z0-9\-']+/g)?.filter(w => !new Set([
-      "a","an","and","the","of","for","to","in","on","at","by","with","or","as","is","it","be","are","was","were","from","into","within","using","while","via","per",
-      "more","most","other","another","over","under","up","down","out","very","can","could","should","would","may","might","will","shall","than","then","just","also",
-      "not","yes","no","etc","overview","intro","introduction","video","demo"
-    ]).has(w)) || [];
-}
-function collapsePhrases(toks) {
-  const out = [];
-  for (let i=0;i<toks.length;i++) {
-    const a=toks[i], b=toks[i+1];
-    const bigram = (a && b) ? `${a} ${b}` : "";
-    if (bigram==="general ledger" || bigram==="financial reporting" || bigram==="return authorization" || bigram==="chart of") {
-      if (bigram==="chart of" && toks[i+2]==="accounts") { out.push("chart of accounts"); i+=2; continue; }
-      out.push(bigram); i+=1; continue;
-    }
-    if ((a==="bills" && b==="of" && toks[i+2] && toks[i+2].startsWith("material"))) { out.push("bills of material (BOM)"); i+=2; continue; }
-    out.push(a);
-  }
-  const seen=new Set(), uniq=[];
-  for (const t of out) { if (!seen.has(t)) { seen.add(t); uniq.push(t);} }
-  return uniq;
-}
-function makeReason(selected, candidate) {
-  const selText = `${selected?.title||""} ${selected?.description||selected?.functions_text||""}`.trim();
-  const candText = `${candidate?.title||""} ${candidate?.description||candidate?.functions_text||""}`.trim();
-  const s = collapsePhrases(kwTokens(selText));
-  const c = collapsePhrases(kwTokens(candText));
-  const overlap = c.filter(x => s.includes(x));
-  const selFocus = s.find(x => ["financial reporting","general ledger","return authorization","bills of material (BOM)"].includes(x)) || s[0];
-  const bits = (overlap.length ? overlap.slice(0,3) : c.slice(0,2)).filter(Boolean);
-  if (selFocus && bits.length) return `Because you're viewing ${selFocus}, it also covers ${bits.join(", ")}.`;
-  if (bits.length) return `Recommended for related topics like ${bits.join(", ")}.`;
-  return "Recommended as a closely related topic.";
-}
-
-function simScore(a, b) {
-  const A = new Set(kwTokens(a));
-  const B = new Set(kwTokens(b));
-  if (A.size === 0 || B.size === 0) return 0;
-  let overlap = 0;
-  for (const w of A) if (B.has(w)) overlap++;
-  return overlap / Math.sqrt(A.size * B.size);
-}
-
-
 function Row({ item, onPick }) {
   return (
     <button
