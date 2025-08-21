@@ -1,5 +1,5 @@
 // src/components/AskAssistant.jsx — Back-compat with {items} or {buttons}
-// Tabs: Browse Demos, Schedule Meeting, Finished
+// Tabs: Browse Demos, Browse Documents, Price Estimate, Schedule Meeting, Finished
 // Sequenced Ask UX: mirror → Thinking… → response → helper → buttons
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -29,17 +29,16 @@ export default function AskAssistant() {
   const [botId, setBotId] = useState("");
   const [fatal, setFatal] = useState("");
 
-  const [mode, setMode] = useState("ask"); // ask | browse | finished
+  const [mode, setMode] = useState("ask"); // ask | browse | docs | price | finished
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
   const [responseText, setResponseText] = useState("Hello. Ask a question to get started.");
   const [loading, setLoading] = useState(false);
 
-  const [items, setItems] = useState([]);
-  const [browseItems, setBrowseItems] = useState([]);
-  
-  const [browseDocs, setBrowseDocs] = useState([]);
-const [selected, setSelected] = useState(null);
+  const [items, setItems] = useState([]);          // Ask recommendations from bot
+  const [browseItems, setBrowseItems] = useState([]); // All demos for Browse
+  const [browseDocs, setBrowseDocs] = useState([]);   // All docs for Browse Documents
+  const [selected, setSelected] = useState(null);
 
   // Helper phasing for Ask: "hidden" → "header" → "buttons"
   const [helperPhase, setHelperPhase] = useState("hidden");
@@ -47,16 +46,16 @@ const [selected, setSelected] = useState(null);
   const [isAnchored, setIsAnchored] = useState(false);
   const contentRef = useRef(null);
 
-  
+  // Autosize the question box
   const inputRef = useRef(null);
-
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
-// Resolve alias — default to "demo"
+
+  // Resolve alias — default to "demo"
   const alias = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     return (qs.get("alias") || "demo").trim();
@@ -76,23 +75,28 @@ const [selected, setSelected] = useState(null);
   // Normalize results to the UI's expected shape
   function normalizeList(arr) {
     if (!Array.isArray(arr)) return [];
-    return arr.map((it) => {
-      const id = it.id ?? it.button_id ?? it.value ?? it.url ?? it.title;
-      const title =
-        it.title ?? it.button_title ?? (typeof it.label === "string" ? it.label.replace(/^Watch the \"|\" demo$/g, "") : it.label) ?? "";
-      const url = it.url ?? it.value ?? it.button_value ?? "";
-      const description = it.description ?? it.summary ?? it.functions_text ?? "";
-      return {
-        id,
-        title,
-        url,
-        description,
-        // Keep legacy props in case other components rely on them
-        functions_text: it.functions_text ?? description,
-        action: it.action ?? it.button_action ?? "demo",
-        label: it.label ?? it.button_label ?? (title ? `Watch the "${title}" demo` : ""),
-      };
-    }).filter((x) => x.title && x.url);
+    return arr
+      .map((it) => {
+        const id = it.id ?? it.button_id ?? it.value ?? it.url ?? it.title;
+        const title =
+          it.title ??
+          it.button_title ??
+          (typeof it.label === "string" ? it.label.replace(/^Watch the \"|\" demo$/g, "") : it.label) ??
+          "";
+        const url = it.url ?? it.value ?? it.button_value ?? "";
+        const description = it.description ?? it.summary ?? it.functions_text ?? "";
+        return {
+          id,
+          title,
+          url,
+          description,
+          // Keep legacy props in case other components rely on them
+          functions_text: it.functions_text ?? description,
+          action: it.action ?? it.button_action ?? "demo",
+          label: it.label ?? it.button_label ?? (title ? `Watch the "${title}" demo` : ""),
+        };
+      })
+      .filter((x) => x.title && x.url);
   }
 
   // Load bot by alias
@@ -122,7 +126,7 @@ const [selected, setSelected] = useState(null);
     };
   }, [alias, apiBase]);
 
-  // Release anchor on scroll (video view)
+  // Release anchor on scroll (video/doc view)
   useEffect(() => {
     const el = contentRef.current;
     if (!el || !selected) return;
@@ -153,15 +157,19 @@ const [selected, setSelected] = useState(null);
     setLoading(true);
 
     try {
-      const res = await axios.post(`${apiBase}/demo-hal`, {
-        bot_id: botId,
-        user_question: outgoing,
-      }, { timeout: 30000 });
+      const res = await axios.post(
+        `${apiBase}/demo-hal`,
+        {
+          bot_id: botId,
+          user_question: outgoing,
+        },
+        { timeout: 30000 }
+      );
 
       const data = res?.data || {};
       const text = data?.response_text || "";
       // Back-compat: accept either {items} or {buttons}
-      const recSource = Array.isArray(data?.items) ? data.items : (Array.isArray(data?.buttons) ? data.buttons : []);
+      const recSource = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
       const recs = normalizeList(recSource);
 
       // 3) response
@@ -197,14 +205,13 @@ const [selected, setSelected] = useState(null);
       const res = await fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`);
       const data = await res.json();
       // Back-compat: accept either {items} or {buttons}
-      const src = Array.isArray(data?.items) ? data.items : (Array.isArray(data?.buttons) ? data.buttons : []);
+      const src = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
       setBrowseItems(normalizeList(src));
       requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
     } catch {
       setBrowseItems([]);
     }
   }
-
 
   async function openBrowseDocs() {
     if (!botId) return;
@@ -213,7 +220,7 @@ const [selected, setSelected] = useState(null);
     try {
       const res = await fetch(`${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`);
       const data = await res.json();
-      const src = Array.isArray(data?.items) ? data.items : (Array.isArray(data?.buttons) ? data.buttons : []);
+      const src = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
       setBrowseDocs(normalizeList(src));
       requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
     } catch {
@@ -221,41 +228,35 @@ const [selected, setSelected] = useState(null);
     }
   }
 
-  // Under-video lists (primary/industry) — legacy support: safely becomes empty in new flow
+  // Source for lists when nothing selected
   const listSource = mode === "browse" ? browseItems : items;
 
-  const selectedFunctionIds = useMemo(() => new Set((selected?.functions || []).map((f) => f?.id).filter(Boolean)), [selected]);
-  const selectedIndustryIds = useMemo(() => new Set((selected?.industry_ids || []).filter(Boolean)), [selected]);
+  // Ask-mode under-video list: reuse the same recommendations the bot returned,
+  // minus the currently selected item. (Sea Change: no functions/industries.)
+  const askUnderVideo = useMemo(() => {
+    if (!selected) return items;
+    const selKey = selected.id ?? selected.url ?? selected.title;
+    return (items || []).filter((it) => (it.id ?? it.url ?? it.title) !== selKey);
+  }, [selected, items]);
 
-  const primaryMatches = selected && selectedFunctionIds.size > 0
-    ? listSource.filter((it) => it.id !== selected.id && it.primary_function_id && selectedFunctionIds.has(it.primary_function_id))
-    : [];
+  // Visible under-video rows:
+  // - Ask: show askUnderVideo
+  // - Browse: (empty) — no legacy function/industry logic
+  // - Docs: (empty) — no recommendations under PDF viewer
+  const visibleUnderVideo = selected
+    ? (mode === "ask" ? askUnderVideo : [])
+    : listSource;
 
-  const industryMatches = selected && selectedIndustryIds.size > 0
-    ? listSource.filter((it) => {
-        if (it.id === selected.id) return false;
-        const ids = (it.industry_ids || []).filter(Boolean);
-        if (!ids.length) return false;
-        for (const x of ids) {
-          if (selectedIndustryIds.has(x)) return !primaryMatches.some((p) => p.id === it.id);
-        }
-        return false;
-      })
-    : [];
-
-  primaryMatches.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
-  industryMatches.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
-
-  const visibleUnderVideo = selected ? [...primaryMatches, ...industryMatches] : listSource;
-
-  // Tabs — EXACTLY as requested: Browse Demos, Schedule Meeting, Finished
+  // Tabs — Browse Demos, Browse Documents, Price Estimate, Schedule Meeting, Finished
   const tabs = [
     { key: "demos", label: "Browse Demos", onClick: openBrowse },
     { key: "docs", label: "Browse Documents", onClick: openBrowseDocs },
+    { key: "price", label: "Price Estimate", onClick: () => setMode("price") },
     { key: "meeting", label: "Schedule Meeting", onClick: () => setMode("finished") },
     { key: "finished", label: "Finished", onClick: () => setMode("finished") },
   ];
-  const currentTab = mode === "browse" ? "demos" : mode === "docs" ? "docs" : mode === "finished" ? "finished" : null;
+  const currentTab =
+    mode === "browse" ? "demos" : mode === "docs" ? "docs" : mode === "price" ? "price" : mode === "finished" ? "finished" : null;
 
   if (fatal) {
     return (
@@ -285,12 +286,23 @@ const [selected, setSelected] = useState(null);
               <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
             </div>
             <div className="text-lg sm:text-xl font-semibold text-white truncate max-w-[60%] text-right">
-              {selected ? selected.title : mode === "browse" ? "Browse Demos" : mode === "docs" ? "Browse Documents" : "Ask the Assistant"}
+              {selected
+                ? selected.title
+                : mode === "browse"
+                ? "Browse Demos"
+                : mode === "docs"
+                ? "Browse Documents"
+                : mode === "price"
+                ? "Price Estimate"
+                : "Ask the Assistant"}
             </div>
           </div>
 
           {/* Tabs */}
-          <nav className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
+          <nav
+            className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            role="tablist"
+          >
             {tabs.map((t) => {
               const active = currentTab === t.key;
               return (
@@ -336,7 +348,7 @@ const [selected, setSelected] = useState(null);
                     className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
-                    />
+                  />
                 </div>
               )}
 
@@ -410,12 +422,15 @@ const [selected, setSelected] = useState(null);
                 </>
               )}
             </div>
+          ) : mode === "price" ? (
+            <div className="w-full flex-1 flex flex-col items-center justify-center text-gray-600">
+              <div className="text-lg font-semibold mb-1">Price Estimate</div>
+              <div className="text-sm">Coming soon.</div>
+            </div>
           ) : (
             <div className="w-full flex-1 flex flex-col">
               {/* 1) Mirror the question immediately */}
-              {lastQuestion ? (
-                <p className="text-base text-black italic text-center mb-2">"{lastQuestion}"</p>
-              ) : null}
+              {lastQuestion ? <p className="text-base text-black italic text-center mb-2">"{lastQuestion}"</p> : null}
 
               {/* 2) Thinking… or 3) Response */}
               <div className="text-left mt-2">
@@ -457,12 +472,17 @@ const [selected, setSelected] = useState(null);
         {/* Input */}
         <div className="px-4 py-3 border-top border-gray-400 border-t">
           <div className="relative w-full">
-            <textarea ref={inputRef} rows={1}
+            <textarea
+              ref={inputRef}
+              rows={1}
               className="w-full border border-gray-400 rounded-lg px-4 py-2 pr-14 text-base text-black placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px]"
               placeholder="Ask your question here"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onInput={(e) => { e.currentTarget.style.height = "auto"; e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`; }}
+              onInput={(e) => {
+                e.currentTarget.style.height = "auto";
+                e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
