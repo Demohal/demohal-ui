@@ -29,13 +29,13 @@ export default function AskAssistant() {
   const [botId, setBotId] = useState("");
   const [fatal, setFatal] = useState("");
 
-  const [mode, setMode] = useState("ask"); // ask | browse | docs | price | finished
+  const [mode, setMode] = useState("ask"); // ask | browse | docs | price | meeting | finished
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
   const [responseText, setResponseText] = useState("Hello. Ask a question to get started.");
   const [loading, setLoading] = useState(false);
 
-  const [items, setItems] = useState([]);          // Ask recommendations from bot
+  const [items, setItems] = useState([]);            // Ask recommendations from bot
   const [browseItems, setBrowseItems] = useState([]); // All demos for Browse
   const [browseDocs, setBrowseDocs] = useState([]);   // All docs for Browse Documents
   const [selected, setSelected] = useState(null);
@@ -241,8 +241,8 @@ export default function AskAssistant() {
 
   // Visible under-video rows:
   // - Ask: show askUnderVideo
-  // - Browse: (empty) — no legacy function/industry logic
-  // - Docs: (empty) — no recommendations under PDF viewer
+  // - Browse/Docs: none
+  // - Price/Meeting/Finished: none (screen is blanked with Coming Soon)
   const visibleUnderVideo = selected
     ? (mode === "ask" ? askUnderVideo : [])
     : listSource;
@@ -252,11 +252,16 @@ export default function AskAssistant() {
     { key: "demos", label: "Browse Demos", onClick: openBrowse },
     { key: "docs", label: "Browse Documents", onClick: openBrowseDocs },
     { key: "price", label: "Price Estimate", onClick: () => setMode("price") },
-    { key: "meeting", label: "Schedule Meeting", onClick: () => setMode("finished") },
+    { key: "meeting", label: "Schedule Meeting", onClick: () => setMode("meeting") },
     { key: "finished", label: "Finished", onClick: () => setMode("finished") },
   ];
   const currentTab =
-    mode === "browse" ? "demos" : mode === "docs" ? "docs" : mode === "price" ? "price" : mode === "finished" ? "finished" : null;
+    mode === "browse" ? "demos"
+    : mode === "docs" ? "docs"
+    : mode === "price" ? "price"
+    : mode === "meeting" ? "meeting"
+    : mode === "finished" ? "finished"
+    : null;
 
   if (fatal) {
     return (
@@ -272,6 +277,14 @@ export default function AskAssistant() {
       </div>
     );
   }
+
+  // Helper: shared "Coming soon" placeholder
+  const ComingSoon = ({ title }) => (
+    <div className="w-full flex-1 flex flex-col items-center justify-center text-gray-600">
+      <div className="text-lg font-semibold mb-1">{title}</div>
+      <div className="text-sm">Coming soon.</div>
+    </div>
+  );
 
   return (
     <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-2 sm:p-0">
@@ -294,6 +307,10 @@ export default function AskAssistant() {
                 ? "Browse Documents"
                 : mode === "price"
                 ? "Price Estimate"
+                : mode === "meeting"
+                ? "Schedule Meeting"
+                : mode === "finished"
+                ? "Finished"
                 : "Ask the Assistant"}
             </div>
           </div>
@@ -328,7 +345,16 @@ export default function AskAssistant() {
 
         {/* Content */}
         <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
-          {selected ? (
+          {/* If Price/Meeting/Finished → always show Coming Soon (blank view) */}
+          {["price", "meeting", "finished"].includes(mode) ? (
+            <ComingSoon
+              title={
+                mode === "price" ? "Price Estimate"
+                : mode === "meeting" ? "Schedule Meeting"
+                : "Finished"
+              }
+            />
+          ) : selected ? (
             <div className="w-full flex-1 flex flex-col">
               {mode === "docs" ? (
                 <div className={`${isAnchored ? "sticky top-0 z-10" : ""} bg-white pt-2 pb-2`}>
@@ -352,7 +378,7 @@ export default function AskAssistant() {
                 </div>
               )}
 
-              {mode !== "docs" && visibleUnderVideo.length > 0 && (
+              {mode === "ask" && visibleUnderVideo.length > 0 && (
                 <>
                   <div className="flex items-center justify-between mt-1 mb-3">
                     <p className="italic text-gray-600">Recommended demos</p>
@@ -421,11 +447,6 @@ export default function AskAssistant() {
                   </div>
                 </>
               )}
-            </div>
-          ) : mode === "price" ? (
-            <div className="w-full flex-1 flex flex-col items-center justify-center text-gray-600">
-              <div className="text-lg font-semibold mb-1">Price Estimate</div>
-              <div className="text-sm">Coming soon.</div>
             </div>
           ) : (
             <div className="w-full flex-1 flex flex-col">
