@@ -37,7 +37,9 @@ export default function AskAssistant() {
 
   const [items, setItems] = useState([]);
   const [browseItems, setBrowseItems] = useState([]);
-  const [selected, setSelected] = useState(null);
+  
+  const [browseDocs, setBrowseDocs] = useState([]);
+const [selected, setSelected] = useState(null);
 
   // Helper phasing for Ask: "hidden" → "header" → "buttons"
   const [helperPhase, setHelperPhase] = useState("hidden");
@@ -203,6 +205,22 @@ export default function AskAssistant() {
     }
   }
 
+
+  async function openBrowseDocs() {
+    if (!botId) return;
+    setMode("docs");
+    setSelected(null);
+    try {
+      const res = await fetch(`${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`);
+      const data = await res.json();
+      const src = Array.isArray(data?.items) ? data.items : (Array.isArray(data?.buttons) ? data.buttons : []);
+      setBrowseDocs(normalizeList(src));
+      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+    } catch {
+      setBrowseDocs([]);
+    }
+  }
+
   // Under-video lists (primary/industry) — legacy support: safely becomes empty in new flow
   const listSource = mode === "browse" ? browseItems : items;
 
@@ -233,10 +251,11 @@ export default function AskAssistant() {
   // Tabs — EXACTLY as requested: Browse Demos, Schedule Meeting, Finished
   const tabs = [
     { key: "demos", label: "Browse Demos", onClick: openBrowse },
+    { key: "docs", label: "Browse Documents", onClick: openBrowseDocs },
     { key: "meeting", label: "Schedule Meeting", onClick: () => setMode("finished") },
     { key: "finished", label: "Finished", onClick: () => setMode("finished") },
   ];
-  const currentTab = mode === "browse" ? "demos" : mode === "finished" ? "finished" : null;
+  const currentTab = mode === "browse" ? "demos" : mode === "docs" ? "docs" : mode === "finished" ? "finished" : null;
 
   if (fatal) {
     return (
@@ -266,7 +285,7 @@ export default function AskAssistant() {
               <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
             </div>
             <div className="text-lg sm:text-xl font-semibold text-white truncate max-w-[60%] text-right">
-              {selected ? selected.title : mode === "browse" ? "Browse Demos" : "Ask the Assistant"}
+              {selected ? selected.title : mode === "browse" ? "Browse Demos" : mode === "docs" ? "Browse Documents" : "Ask the Assistant"}
             </div>
           </div>
 
@@ -299,19 +318,29 @@ export default function AskAssistant() {
         <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
           {selected ? (
             <div className="w-full flex-1 flex flex-col">
-              {/* Video */}
-              <div className={`${isAnchored ? "sticky top-0 z-10" : ""} bg-white pt-2 pb-2`}>
-                <iframe
-                  style={{ width: "100%", aspectRatio: "471 / 272" }}
-                  src={selected.url}
-                  title={selected.title}
-                  className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              </div>
+              {mode === "docs" ? (
+                <div className={`${isAnchored ? "sticky top-0 z-10" : ""} bg-white pt-2 pb-2`}>
+                  <iframe
+                    style={{ width: "100%", height: "70vh" }}
+                    src={selected.url}
+                    title={selected.title}
+                    className="rounded-xl border border-gray-200 shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
+                  />
+                </div>
+              ) : (
+                <div className={`${isAnchored ? "sticky top-0 z-10" : ""} bg-white pt-2 pb-2`}>
+                  <iframe
+                    style={{ width: "100%", aspectRatio: "471 / 272" }}
+                    src={selected.url}
+                    title={selected.title}
+                    className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    />
+                </div>
+              )}
 
-              {visibleUnderVideo.length > 0 && (
+              {mode !== "docs" && visibleUnderVideo.length > 0 && (
                 <>
                   <div className="flex items-center justify-between mt-1 mb-3">
                     <p className="italic text-gray-600">Recommended demos</p>
@@ -343,6 +372,30 @@ export default function AskAssistant() {
                   </div>
                   <div className="flex flex-col gap-3">
                     {browseItems.map((it) => (
+                      <Row
+                        key={it.id || it.url || it.title}
+                        item={it}
+                        onPick={(val) => {
+                          setSelected(val);
+                          setIsAnchored(true);
+                          requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+                        }}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : mode === "docs" ? (
+            <div className="w-full flex-1 flex flex-col">
+              {browseDocs.length > 0 && (
+                <>
+                  <div className="flex items-center justify-between mt-2 mb-3">
+                    <p className="italic text-gray-600">Select a document to view it</p>
+                    <span />
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    {browseDocs.map((it) => (
                       <Row
                         key={it.id || it.url || it.title}
                         item={it}
