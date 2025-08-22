@@ -113,6 +113,18 @@ export default function AskAssistant() {
     });
   }, [priceQuestions, priceAnswers]);
 
+  // Compute selected product label (to mirror in header)
+  const selectedEditionLabel = useMemo(() => {
+    const norm = (s) => (s || "").toLowerCase().replace(/[\s-]+/g, "_");
+    const editionKeys = new Set(["edition", "editions", "product", "products", "industry_edition", "industry"]);
+    const q = priceQuestions.find((qq) => editionKeys.has(norm(qq.q_key)));
+    if (!q) return null;
+    const ansKey = priceAnswers[q.q_key];
+    if (!ansKey) return null;
+    const opt = (q.options || []).find((o) => o.key === ansKey);
+    return opt?.label || null;
+  }, [priceQuestions, priceAnswers]);
+
   // Autosize the question box (Ask tab)
   const inputRef = useRef(null);
   useEffect(() => {
@@ -282,41 +294,31 @@ export default function AskAssistant() {
     if (!input.trim() || !botId) return;
     const outgoing = input.trim();
 
-    // 1) mirror immediately
     setMode("ask");
     setLastQuestion(outgoing);
     setInput("");
-
-    // reset state for new ask
     setSelected(null);
     setIsAnchored(false);
     setResponseText("");
     setHelperPhase("hidden");
     setItems([]);
 
-    // 2) Thinking…
     setLoading(true);
 
     try {
       const res = await axios.post(
         `${apiBase}/demo-hal`,
-        {
-          bot_id: botId,
-          user_question: outgoing,
-        },
+        { bot_id: botId, user_question: outgoing },
         { timeout: 30000 }
       );
-
       const data = res?.data || {};
       const text = data?.response_text || "";
       const recSource = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
       const recs = normalizeList(recSource);
 
-      // 3) response
       setResponseText(text);
       setLoading(false);
 
-      // 4) helper header then 5) buttons
       if (recs.length > 0) {
         setHelperPhase("header");
         setTimeout(() => {
@@ -367,7 +369,6 @@ export default function AskAssistant() {
     }
   }
 
-  // Lists for Ask/Browse/Docs
   const listSource = mode === "browse" ? browseItems : items;
 
   const askUnderVideo = useMemo(() => {
@@ -378,7 +379,6 @@ export default function AskAssistant() {
 
   const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
 
-  // Tabs
   const tabs = [
     { key: "demos", label: "Browse Demos", onClick: openBrowse },
     { key: "docs", label: "Browse Documents", onClick: openBrowseDocs },
@@ -420,6 +420,19 @@ export default function AskAssistant() {
       "This tool provides a quick estimate based on your business edition (General Business is always included) and your monthly commercial transaction volume."
     ).trim();
     const introText = heading ? `${heading}\n\n${body}` : body;
+
+    // Mirror line if product selected
+    if (selectedEditionLabel) {
+      return (
+        <div className="w-full">
+          <div className="mb-3">
+            <div className="text-base italic text-gray-700 whitespace-pre-line">
+              {`You have selected ${selectedEditionLabel}.`}
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className="w-full">
@@ -495,7 +508,8 @@ export default function AskAssistant() {
     return (
       <div className="relative w-full">
         <div className="w-full border border-gray-400 rounded-lg px-4 py-3 text-base bg-white">
-          <div className="text-black font-bold text-sm">{q.prompt}</div>
+          {/* QUESTION SIZE bumped one step up (sm → base) */}
+          <div className="text-black font-bold text-base">{q.prompt}</div>
           {q.help_text ? <div className="text-xs text-black italic mt-1">{q.help_text}</div> : null}
 
           {Array.isArray(q.options) && q.options.length > 0 ? (
@@ -588,16 +602,13 @@ export default function AskAssistant() {
           </nav>
         </div>
 
-        {/* PRICE MODE: anchored intro + its own scroll area */}
+        {/* PRICE MODE: anchored header + its own scroll area */}
         {mode === "price" ? (
           <>
             <div className="px-6 pt-3 pb-2">
               <PriceTop />
             </div>
-            <div
-              ref={priceScrollRef}
-              className="px-6 pt-0 pb-6 flex-1 overflow-y-auto"
-            >
+            <div ref={priceScrollRef} className="px-6 pt-0 pb-6 flex-1 overflow-y-auto">
               <PriceBottomBox />
             </div>
           </>
@@ -665,30 +676,6 @@ export default function AskAssistant() {
                     </div>
                     <div className="flex flex-col gap-3">
                       {browseItems.map((it) => (
-                        <Row
-                          key={it.id || it.url || it.title}
-                          item={it}
-                          onPick={(val) => {
-                            setSelected(val);
-                            setIsAnchored(true);
-                            requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            ) : mode === "docs" ? (
-              <div className="w-full flex-1 flex flex-col">
-                {browseDocs.length > 0 && (
-                  <>
-                    <div className="flex items-center justify-between mt-2 mb-3">
-                      <p className="italic text-gray-600">Select a document to view it</p>
-                      <span />
-                    </div>
-                    <div className="flex flex-col gap-3">
-                      {browseDocs.map((it) => (
                         <Row
                           key={it.id || it.url || it.title}
                           item={it}
