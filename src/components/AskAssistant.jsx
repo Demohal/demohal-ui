@@ -113,7 +113,7 @@ export default function AskAssistant() {
     });
   }, [priceQuestions, priceAnswers]);
 
-  // Compute selected product label (to mirror in header)
+  // Compute selected product label (for mirror)
   const selectedEditionLabel = useMemo(() => {
     const norm = (s) => (s || "").toLowerCase().replace(/[\s-]+/g, "_");
     const editionKeys = new Set(["edition", "editions", "product", "products", "industry_edition", "industry"]);
@@ -288,128 +288,6 @@ export default function AskAssistant() {
   }
 
   // --------------------------
-  // Core Ask flow
-  // --------------------------
-  async function sendMessage() {
-    if (!input.trim() || !botId) return;
-    const outgoing = input.trim();
-
-    setMode("ask");
-    setLastQuestion(outgoing);
-    setInput("");
-    setSelected(null);
-    setIsAnchored(false);
-    setResponseText("");
-    setHelperPhase("hidden");
-    setItems([]);
-
-    setLoading(true);
-
-    try {
-      const res = await axios.post(
-        `${apiBase}/demo-hal`,
-        { bot_id: botId, user_question: outgoing },
-        { timeout: 30000 }
-      );
-      const data = res?.data || {};
-      const text = data?.response_text || "";
-      const recSource = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
-      const recs = normalizeList(recSource);
-
-      setResponseText(text);
-      setLoading(false);
-
-      if (recs.length > 0) {
-        setHelperPhase("header");
-        setTimeout(() => {
-          setItems(recs);
-          setHelperPhase("buttons");
-        }, 60);
-      } else {
-        setHelperPhase("hidden");
-        setItems([]);
-      }
-
-      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-    } catch (e) {
-      setLoading(false);
-      setResponseText("Sorry—something went wrong.");
-      setHelperPhase("hidden");
-      setItems([]);
-    }
-  }
-
-  async function openBrowse() {
-    if (!botId) return;
-    setMode("browse");
-    setSelected(null);
-    try {
-      const res = await fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`);
-      const data = await res.json();
-      const src = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
-      setBrowseItems(normalizeList(src));
-      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-    } catch {
-      setBrowseItems([]);
-    }
-  }
-
-  async function openBrowseDocs() {
-    if (!botId) return;
-    setMode("docs");
-    setSelected(null);
-    try {
-      const res = await fetch(`${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`);
-      const data = await res.json();
-      const src = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
-      setBrowseDocs(normalizeList(src));
-      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-    } catch {
-      setBrowseDocs([]);
-    }
-  }
-
-  const listSource = mode === "browse" ? browseItems : items;
-
-  const askUnderVideo = useMemo(() => {
-    if (!selected) return items;
-    const selKey = selected.id ?? selected.url ?? selected.title;
-    return (items || []).filter((it) => (it.id ?? it.url ?? it.title) !== selKey);
-  }, [selected, items]);
-
-  const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
-
-  const tabs = [
-    { key: "demos", label: "Browse Demos", onClick: openBrowse },
-    { key: "docs", label: "Browse Documents", onClick: openBrowseDocs },
-    { key: "price", label: "Price Estimate", onClick: () => { setSelected(null); setMode("price"); } },
-    { key: "meeting", label: "Schedule Meeting", onClick: () => { setSelected(null); setMode("meeting"); } },
-    { key: "finished", label: "Finished", onClick: () => { setSelected(null); setMode("finished"); } },
-  ];
-  const currentTab =
-    mode === "browse" ? "demos"
-    : mode === "docs" ? "docs"
-    : mode === "price" ? "price"
-    : mode === "meeting" ? "meeting"
-    : mode === "finished" ? "finished"
-    : null;
-
-  if (fatal) {
-    return (
-      <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
-        <div className="text-red-600 font-semibold">{fatal}</div>
-      </div>
-    );
-  }
-  if (!botId) {
-    return (
-      <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
-        <div className="text-gray-700">Loading…</div>
-      </div>
-    );
-  }
-
-  // --------------------------
   // Price panels
   // --------------------------
   function PriceTop() {
@@ -421,6 +299,15 @@ export default function AskAssistant() {
     ).trim();
     const introText = heading ? `${heading}\n\n${body}` : body;
 
+    // Compute selected tier label locally for the mirror
+    const norm = (s) => (s || "").toLowerCase().replace(/[\s-]+/g, "_");
+    const tierQ = priceQuestions.find((qq) =>
+      ["transactions", "transaction_volume", "volume", "tier", "tiers"].includes(norm(qq.q_key))
+    );
+    const tierAnsKey = tierQ ? priceAnswers[tierQ.q_key] : null;
+    const tierOpt = tierQ && (tierQ.options || []).find((o) => o.key === tierAnsKey);
+    const selectedTierLabelLocal = tierOpt ? tierOpt.label : null;
+
     // Mirror line if product selected
     if (selectedEditionLabel) {
       return (
@@ -429,6 +316,11 @@ export default function AskAssistant() {
             <div className="text-base italic text-gray-700 whitespace-pre-line">
               {`You have selected ${selectedEditionLabel}.`}
             </div>
+            {selectedTierLabelLocal ? (
+              <div className="text-base italic text-gray-700 whitespace-pre-line">
+                {`You said you execute ${selectedTierLabelLocal} per month.`}
+              </div>
+            ) : null}
           </div>
         </div>
       );
@@ -458,6 +350,13 @@ export default function AskAssistant() {
 
     // When all questions are answered, show the estimate card here (end of the function)
     if (!q) {
+      // helper to find transactions question to render at bottom for tweaks
+      const norm = (s) => (s || "").toLowerCase().replace(/[\s-]+/g, "_");
+      const txQ = priceQuestions.find((qq) =>
+        ["transactions", "transaction_volume", "volume", "tier", "tiers"].includes(norm(qq.q_key))
+      );
+      const txVal = txQ ? priceAnswers[txQ.q_key] : undefined;
+
       return (
         <div className="relative w-full">
           {!priceEstimate ? (
@@ -467,8 +366,8 @@ export default function AskAssistant() {
           ) : (
             <div className="border rounded-xl p-4 bg-white shadow">
               <div className="flex items-center justify-between mb-3">
-                <div className="font-semibold">Your Estimate</div>
-                <div className="text-sm">
+                <div className="text-black font-bold text-lg">Your Estimate</div>
+                <div className="text-black font-bold text-lg">
                   {priceEstimate.currency_code} {priceEstimate.total_min.toLocaleString()} –{" "}
                   {priceEstimate.currency_code} {priceEstimate.total_max.toLocaleString()}
                 </div>
@@ -479,8 +378,8 @@ export default function AskAssistant() {
                   priceEstimate.line_items.map((li) => (
                     <div key={li.product.id} className="border rounded-lg p-3">
                       <div className="flex items-center justify-between">
-                        <div className="font-medium">{li.product.name}</div>
-                        <div className="text-sm">
+                        <div className="text-black font-bold">{li.product.name}</div>
+                        <div className="text-black font-bold text-lg">
                           {li.currency_code} {li.price_min.toLocaleString()} – {li.currency_code}{" "}
                           {li.price_max.toLocaleString()}
                         </div>
@@ -497,6 +396,24 @@ export default function AskAssistant() {
                     </div>
                   ))}
               </div>
+
+              {/* Normal question block at bottom (Transactions tweak) */}
+              {txQ ? (
+                <div className="mt-4 border-t pt-4">
+                  <div className="text-black font-bold text-base">{txQ.prompt}</div>
+                  {txQ.help_text ? <div className="text-xs text-black italic mt-1">{txQ.help_text}</div> : null}
+                  <div className="mt-3 flex flex-col gap-3">
+                    {(txQ.options || []).map((opt) => (
+                      <OptionButton
+                        key={opt.key || opt.id}
+                        opt={opt}
+                        selected={Array.isArray(txVal) ? txVal.includes(opt.key) : txVal === opt.key}
+                        onClick={handlePickOption.bind(null, txQ)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
         </div>
@@ -576,11 +493,12 @@ export default function AskAssistant() {
               { key: "meeting", label: "Schedule Meeting", onClick: () => { setSelected(null); setMode("meeting"); } },
               { key: "finished", label: "Finished", onClick: () => { setSelected(null); setMode("finished"); } },
             ].map((t) => {
-              const active = (mode === "browse" && t.key === "demos")
-                || (mode === "docs" && t.key === "docs")
-                || (mode === "price" && t.key === "price")
-                || (mode === "meeting" && t.key === "meeting")
-                || (mode === "finished" && t.key === "finished");
+              const active =
+                (mode === "browse" && t.key === "demos") ||
+                (mode === "docs" && t.key === "docs") ||
+                (mode === "price" && t.key === "price") ||
+                (mode === "meeting" && t.key === "meeting") ||
+                (mode === "finished" && t.key === "finished");
               return (
                 <button
                   key={t.key}
