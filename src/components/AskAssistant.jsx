@@ -29,17 +29,20 @@ function Pill({ children }) {
   );
 }
 
+// Browse-style option button (one per row, same color scheme, tooltip line under label)
 function OptionButton({ opt, selected, onClick }) {
   return (
     <button
-      title={opt.tooltip || ""}
       onClick={() => onClick(opt)}
       className={[
-        "px-3 py-2 rounded-lg border text-sm transition-colors",
-        selected ? "bg-black text-white border-black" : "bg-white text-black border-gray-400 hover:bg-gray-50",
+        "w-full text-center bg-gradient-to-b from-gray-600 to-gray-700 text-white rounded-xl border border-gray-700 px-4 py-3 shadow hover:from-gray-500 hover:to-gray-600 transition-colors",
+        selected ? "ring-2 ring-white/60" : "",
       ].join(" ")}
     >
-      {opt.label}
+      <div className="font-extrabold text-xs sm:text-sm">{opt.label}</div>
+      {opt.tooltip ? (
+        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">{opt.tooltip}</div>
+      ) : null}
     </button>
   );
 }
@@ -401,22 +404,42 @@ export default function AskAssistant() {
 
   function PriceTop() {
     const intro = priceUiCopy?.intro || {};
-    const heading = intro.heading || "Welcome to the DemoHal Price Estimator";
-    const body =
+    const heading = (intro.heading || "").trim();
+    const body = (
       intro.body ||
-      "This tool provides a quick estimate based on your business edition (General Business is always included) and your monthly commercial transaction volume.";
+      "This tool provides a quick estimate based on your business edition (General Business is always included) and your monthly commercial transaction volume."
+    ).trim();
+    const introText = heading ? `${heading}\n\n${body}` : body;
 
     return (
       <div className="w-full flex-1 flex flex-col">
         <div className="mb-3">
-          <div className="text-base font-bold">{heading}</div>
-          <div className="text-sm text-gray-700 whitespace-pre-line">{body}</div>
+          <div className="text-black text-base font-bold whitespace-pre-line">{introText}</div>
         </div>
+      </div>
+    );
+  }
 
-        <div className="mt-2">
+  function PriceBottomBox() {
+    const q = nextPriceQuestion;
+
+    if (!priceQuestions?.length) {
+      return (
+        <div className="relative w-full">
+          <div className="w-full border border-gray-400 rounded-lg px-4 py-2 text-base text-gray-600 bg-gray-50">
+            {priceErr || "Loading price estimator…"}
+          </div>
+        </div>
+      );
+    }
+
+    // When all questions are answered, show the estimate card here (end of the function)
+    if (!q) {
+      return (
+        <div className="relative w-full">
           {!priceEstimate ? (
-            <div className="border rounded-xl p-4 bg-gray-50 text-gray-700">
-              {priceBusy ? "Calculating your estimate…" : "Answer the questions below to see your price estimate."}
+            <div className="w-full border border-gray-400 rounded-lg px-4 py-2 text-base text-gray-700 bg-gray-50">
+              {priceBusy ? "Calculating your estimate…" : "Preparing your estimate…"}
             </div>
           ) : (
             <div className="border rounded-xl p-4 bg-white shadow">
@@ -454,30 +477,6 @@ export default function AskAssistant() {
             </div>
           )}
         </div>
-      </div>
-    );
-  }
-
-  function PriceBottomBox() {
-    const q = nextPriceQuestion;
-
-    if (!priceQuestions?.length) {
-      return (
-        <div className="relative w-full">
-          <div className="w-full border border-gray-400 rounded-lg px-4 py-2 text-base text-gray-600 bg-gray-50">
-            {priceErr || "Loading price estimator…"}
-          </div>
-        </div>
-      );
-    }
-
-    if (!q) {
-      return (
-        <div className="relative w-full">
-          <div className="w-full border border-gray-400 rounded-lg px-4 py-2 text-base text-gray-700 bg-gray-50">
-            All questions are answered. You can change selections above to adjust your estimate.
-          </div>
-        </div>
       );
     }
 
@@ -486,11 +485,11 @@ export default function AskAssistant() {
     return (
       <div className="relative w-full">
         <div className="w-full border border-gray-400 rounded-lg px-4 py-3 text-base bg-white">
-          <div className="font-semibold text-sm">{q.prompt}</div>
-          {q.help_text ? <div className="text-xs text-gray-600 mt-1">{q.help_text}</div> : null}
+          <div className="text-black font-bold text-sm">{q.prompt}</div>
+          {q.help_text ? <div className="text-xs text-black italic mt-1">{q.help_text}</div> : null}
 
           {Array.isArray(q.options) && q.options.length > 0 ? (
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-col gap-3">
               {q.options.map((opt) => (
                 <OptionButton
                   key={opt.key || opt.id}
