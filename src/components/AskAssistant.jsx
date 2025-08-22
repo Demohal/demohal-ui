@@ -5,11 +5,13 @@ import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
 
+/* Browse/demo/document row button */
 function Row({ item, onPick }) {
   return (
     <button
       onClick={() => onPick(item)}
       className="w-full text-center bg-gradient-to-b from-gray-600 to-gray-700 text-white rounded-xl border border-gray-700 px-4 py-3 shadow hover:from-gray-500 hover:to-gray-600 transition-colors"
+      title={item.description || ""}
     >
       <div className="font-extrabold text-xs sm:text-sm">{item.title}</div>
       {item.description ? (
@@ -21,6 +23,7 @@ function Row({ item, onPick }) {
   );
 }
 
+/* Small pill for standard features */
 function Pill({ children }) {
   return (
     <span className="inline-block text-xs border border-gray-300 rounded-full px-2 py-0.5 mr-1 mb-1">
@@ -29,15 +32,17 @@ function Pill({ children }) {
   );
 }
 
-// Browse-style option button (one per row, same color scheme, tooltip line under label)
+/* Pricing options styled like Browse buttons (one per row, tooltip line under label) */
 function OptionButton({ opt, selected, onClick }) {
   return (
     <button
       onClick={() => onClick(opt)}
       className={[
-        "w-full text-center bg-gradient-to-b from-gray-600 to-gray-700 text-white rounded-xl border border-gray-700 px-4 py-3 shadow hover:from-gray-500 hover:to-gray-600 transition-colors",
+        "w-full text-center bg-gradient-to-b from-gray-600 to-gray-700 text-white rounded-xl",
+        "border border-gray-700 px-4 py-3 shadow hover:from-gray-500 hover:to-gray-600 transition-colors",
         selected ? "ring-2 ring-white/60" : "",
       ].join(" ")}
+      title={opt.tooltip || ""}
     >
       <div className="font-extrabold text-xs sm:text-sm">{opt.label}</div>
       {opt.tooltip ? (
@@ -62,9 +67,9 @@ export default function AskAssistant() {
   );
   const [loading, setLoading] = useState(false);
 
-  const [items, setItems] = useState([]);             // Ask recommendations from bot
-  const [browseItems, setBrowseItems] = useState([]); // Demos for Browse
-  const [browseDocs, setBrowseDocs] = useState([]);   // Docs for Browse Documents
+  const [items, setItems] = useState([]);             // Ask recommendations
+  const [browseItems, setBrowseItems] = useState([]); // Browse demos
+  const [browseDocs, setBrowseDocs] = useState([]);   // Browse docs
   const [selected, setSelected] = useState(null);
 
   // Helper phasing for Ask: "hidden" → "header" → "buttons"
@@ -107,7 +112,7 @@ export default function AskAssistant() {
     });
   }, [priceQuestions, priceAnswers]);
 
-  // Autosize the question box
+  // Autosize the question box (Ask tab)
   const inputRef = useRef(null);
   useEffect(() => {
     const el = inputRef.current;
@@ -122,6 +127,7 @@ export default function AskAssistant() {
     return (qs.get("alias") || "demo").trim();
   }, []);
 
+  /* Utility: extract bot id from various shapes */
   function extractBotId(payload) {
     if (!payload || typeof payload !== "object") return null;
     if (payload.bot && payload.bot.id) return payload.bot.id;
@@ -132,6 +138,7 @@ export default function AskAssistant() {
     return null;
   }
 
+  /* Normalize items for list rendering */
   function normalizeList(arr) {
     if (!Array.isArray(arr)) return [];
     return arr
@@ -253,6 +260,7 @@ export default function AskAssistant() {
     };
   }, [mode, botId, apiBase, haveAllEstimationAnswers, priceAnswers]);
 
+  /* Handle clicking an option */
   function handlePickOption(q, opt) {
     setPriceAnswers((prev) => {
       if (q.type === "multi_choice") {
@@ -266,6 +274,9 @@ export default function AskAssistant() {
     });
   }
 
+  // --------------------------
+  // Core Ask flow
+  // --------------------------
   async function sendMessage() {
     if (!input.trim() || !botId) return;
     const outgoing = input.trim();
@@ -355,6 +366,7 @@ export default function AskAssistant() {
     }
   }
 
+  // Lists for Ask/Browse/Docs
   const listSource = mode === "browse" ? browseItems : items;
 
   const askUnderVideo = useMemo(() => {
@@ -365,6 +377,7 @@ export default function AskAssistant() {
 
   const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
 
+  // Tabs
   const tabs = [
     { key: "demos", label: "Browse Demos", onClick: openBrowse },
     { key: "docs", label: "Browse Documents", onClick: openBrowseDocs },
@@ -395,13 +408,9 @@ export default function AskAssistant() {
     );
   }
 
-  const ComingSoon = ({ title }) => (
-    <div className="w-full flex-1 flex flex-col items-center justify-center text-gray-600">
-      <div className="text-lg font-semibold mb-1">{title}</div>
-      <div className="text-sm">Coming soon.</div>
-    </div>
-  );
-
+  // --------------------------
+  // Price panels
+  // --------------------------
   function PriceTop() {
     const intro = priceUiCopy?.intro || {};
     const heading = (intro.heading || "").trim();
@@ -418,6 +427,7 @@ export default function AskAssistant() {
         </div>
       </div>
     );
+  }
 
   function PriceBottomBox() {
     const q = nextPriceQuestion;
@@ -581,15 +591,20 @@ export default function AskAssistant() {
         <div ref={contentRef} className="px-6 pt-0 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
           {mode === "price" ? (
             <>
+              {/* Sticky intro under the banner */}
               <div className="sticky top-0 z-20 bg-white pt-3">
                 <PriceTop />
               </div>
+              {/* Scrolling question/estimate area */}
               <div className="mt-2">
                 <PriceBottomBox />
               </div>
             </>
           ) : ["meeting", "finished"].includes(mode) ? (
-            <ComingSoon title={mode === "meeting" ? "Schedule Meeting" : "Finished"} />
+            <div className="w-full flex-1 flex flex-col items-center justify-center text-gray-600">
+              <div className="text-lg font-semibold mb-1">{mode === "meeting" ? "Schedule Meeting" : "Finished"}</div>
+              <div className="text-sm">Coming soon.</div>
+            </div>
           ) : selected ? (
             <div className="w-full flex-1 flex flex-col">
               {mode === "docs" ? (
@@ -738,7 +753,7 @@ export default function AskAssistant() {
           )}
         </div>
 
-        {/* Bottom input / question box */}
+        {/* Bottom bar: hide in price mode so pricing Q&A/estimate can scroll */}
         <div className="px-4 py-3 border-t border-gray-200">
           {mode === "price" ? null : (
             <div className="relative w-full">
