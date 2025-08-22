@@ -76,7 +76,8 @@ export default function AskAssistant() {
   const [helperPhase, setHelperPhase] = useState("hidden");
 
   const [isAnchored, setIsAnchored] = useState(false);
-  const contentRef = useRef(null);
+  const contentRef = useRef(null);     // main scroll area for non-price modes
+  const priceScrollRef = useRef(null); // scroll area for price questions/estimate
 
   // --------------------------
   // Pricing state (isolated)
@@ -219,7 +220,7 @@ export default function AskAssistant() {
         if (!data?.ok) throw new Error(data?.error || "Failed to load pricing questions");
         setPriceUiCopy(data.ui_copy || {});
         setPriceQuestions(Array.isArray(data.questions) ? data.questions : []);
-        requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+        requestAnimationFrame(() => priceScrollRef.current?.scrollTo({ top: 0, behavior: "auto" }));
       } catch (e) {
         if (!cancel) setPriceErr("Unable to load price estimator.");
       }
@@ -587,171 +588,175 @@ export default function AskAssistant() {
           </nav>
         </div>
 
-        {/* Content */}
-        <div ref={contentRef} className="px-6 pt-0 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
-          {mode === "price" ? (
-            <>
-              {/* Sticky intro under the banner */}
-              <div className="sticky top-0 z-20 bg-white pt-3">
-                <PriceTop />
-              </div>
-              {/* Scrolling question/estimate area */}
-              <div className="mt-2">
-                <PriceBottomBox />
-              </div>
-            </>
-          ) : ["meeting", "finished"].includes(mode) ? (
-            <div className="w-full flex-1 flex flex-col items-center justify-center text-gray-600">
-              <div className="text-lg font-semibold mb-1">{mode === "meeting" ? "Schedule Meeting" : "Finished"}</div>
-              <div className="text-sm">Coming soon.</div>
+        {/* PRICE MODE: anchored intro + its own scroll area */}
+        {mode === "price" ? (
+          <>
+            <div className="px-6 pt-3 pb-2">
+              <PriceTop />
             </div>
-          ) : selected ? (
-            <div className="w-full flex-1 flex flex-col">
-              {mode === "docs" ? (
-                <div className={`${isAnchored ? "sticky top-0 z-10" : ""} bg-white pt-2 pb-2`}>
-                  <iframe
-                    style={{ width: "100%", height: "70vh" }}
-                    src={selected.url}
-                    title={selected.title}
-                    className="rounded-xl border border-gray-200 shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
-                  />
-                </div>
-              ) : (
-                <div className={`${isAnchored ? "sticky top-0 z-10" : ""} bg-white pt-2 pb-2`}>
-                  <iframe
-                    style={{ width: "100%", aspectRatio: "471 / 272" }}
-                    src={selected.url}
-                    title={selected.title}
-                    className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
-                </div>
-              )}
+            <div
+              ref={priceScrollRef}
+              className="px-6 pt-0 pb-6 flex-1 overflow-y-auto"
+            >
+              <PriceBottomBox />
+            </div>
+          </>
+        ) : (
+          /* Other modes use a single scrolling content area */
+          <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
+            {["meeting", "finished"].includes(mode) ? (
+              <div className="w-full flex-1 flex flex-col items-center justify-center text-gray-600">
+                <div className="text-lg font-semibold mb-1">{mode === "meeting" ? "Schedule Meeting" : "Finished"}</div>
+                <div className="text-sm">Coming soon.</div>
+              </div>
+            ) : selected ? (
+              <div className="w-full flex-1 flex flex-col">
+                {mode === "docs" ? (
+                  <div className={`${isAnchored ? "sticky top-0 z-10" : ""} bg-white pt-2 pb-2`}>
+                    <iframe
+                      style={{ width: "100%", height: "70vh" }}
+                      src={selected.url}
+                      title={selected.title}
+                      className="rounded-xl border border-gray-200 shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
+                    />
+                  </div>
+                ) : (
+                  <div className={`${isAnchored ? "sticky top-0 z-10" : ""} bg-white pt-2 pb-2`}>
+                    <iframe
+                      style={{ width: "100%", aspectRatio: "471 / 272" }}
+                      src={selected.url}
+                      title={selected.title}
+                      className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  </div>
+                )}
 
-              {mode === "ask" && visibleUnderVideo.length > 0 && (
-                <>
-                  <div className="flex items-center justify-between mt-1 mb-3">
+                {mode === "ask" && visibleUnderVideo.length > 0 && (
+                  <>
+                    <div className="flex items-center justify-between mt-1 mb-3">
+                      <p className="italic text-gray-600">Recommended demos</p>
+                      <span />
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      {visibleUnderVideo.map((it) => (
+                        <Row
+                          key={it.id || it.url || it.title}
+                          item={it}
+                          onPick={(val) => {
+                            setSelected(val);
+                            setIsAnchored(true);
+                            requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : mode === "browse" ? (
+              <div className="w-full flex-1 flex flex-col">
+                {browseItems.length > 0 && (
+                  <>
+                    <div className="flex items-center justify-between mt-2 mb-3">
+                      <p className="italic text-gray-600">Select a demo to view it</p>
+                      <span />
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      {browseItems.map((it) => (
+                        <Row
+                          key={it.id || it.url || it.title}
+                          item={it}
+                          onPick={(val) => {
+                            setSelected(val);
+                            setIsAnchored(true);
+                            requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : mode === "docs" ? (
+              <div className="w-full flex-1 flex flex-col">
+                {browseDocs.length > 0 && (
+                  <>
+                    <div className="flex items-center justify-between mt-2 mb-3">
+                      <p className="italic text-gray-600">Select a document to view it</p>
+                      <span />
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      {browseDocs.map((it) => (
+                        <Row
+                          key={it.id || it.url || it.title}
+                          item={it}
+                          onPick={(val) => {
+                            setSelected(val);
+                            setIsAnchored(true);
+                            requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="w-full flex-1 flex flex-col">
+                {!lastQuestion && !loading && (
+                  <div className="space-y-3">
+                    <div className="text-black text-base font-bold whitespace-pre-line">{responseText}</div>
+                    <div style={{ position: "relative", paddingTop: "56.25%" }}>
+                      <iframe
+                        src="https://player.vimeo.com/video/1102303359?badge=0&autopause=0&player_id=0&app_id=58479"
+                        title="DemoHAL Intro Video"
+                        frameBorder="0"
+                        allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
+                        referrerPolicy="strict-origin-when-cross-origin"
+                        style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {lastQuestion ? <p className="text-base text-black italic text-center mb-2">"{lastQuestion}"</p> : null}
+
+                <div className="text-left mt-2">
+                  {loading ? (
+                    <p className="text-gray-500 font-semibold animate-pulse">Thinking…</p>
+                  ) : lastQuestion ? (
+                    <p className="text-black text-base font-bold whitespace-pre-line">{responseText}</p>
+                  ) : null}
+                </div>
+
+                {helperPhase !== "hidden" && (
+                  <div className="flex items-center justify-between mt-3 mb-2">
                     <p className="italic text-gray-600">Recommended demos</p>
                     <span />
                   </div>
-                  <div className="flex flex-col gap-3">
-                    {visibleUnderVideo.map((it) => (
-                      <Row
-                        key={it.id || it.url || it.title}
-                        item={it}
-                        onPick={(val) => {
-                          setSelected(val);
-                          setIsAnchored(true);
-                          requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-                        }}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          ) : mode === "browse" ? (
-            <div className="w-full flex-1 flex flex-col">
-              {browseItems.length > 0 && (
-                <>
-                  <div className="flex items-center justify-between mt-2 mb-3">
-                    <p className="italic text-gray-600">Select a demo to view it</p>
-                    <span />
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    {browseItems.map((it) => (
-                      <Row
-                        key={it.id || it.url || it.title}
-                        item={it}
-                        onPick={(val) => {
-                          setSelected(val);
-                          setIsAnchored(true);
-                          requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-                        }}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          ) : mode === "docs" ? (
-            <div className="w-full flex-1 flex flex-col">
-              {browseDocs.length > 0 && (
-                <>
-                  <div className="flex items-center justify-between mt-2 mb-3">
-                    <p className="italic text-gray-600">Select a document to view it</p>
-                    <span />
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    {browseDocs.map((it) => (
-                      <Row
-                        key={it.id || it.url || it.title}
-                        item={it}
-                        onPick={(val) => {
-                          setSelected(val);
-                          setIsAnchored(true);
-                          requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-                        }}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          ) : (
-            <div className="w-full flex-1 flex flex-col">
-              {!lastQuestion && !loading && (
-                <div className="space-y-3">
-                  <div className="text-black text-base font-bold whitespace-pre-line">{responseText}</div>
-                  <div style={{ position: "relative", paddingTop: "56.25%" }}>
-                    <iframe
-                      src="https://player.vimeo.com/video/1102303359?badge=0&autopause=0&player_id=0&app_id=58479"
-                      title="DemoHAL Intro Video"
-                      frameBorder="0"
-                      allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
-                      referrerPolicy="strict-origin-when-cross-origin"
-                      style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
-                    />
-                  </div>
-                </div>
-              )}
+                )}
 
-              {lastQuestion ? <p className="text-base text-black italic text-center mb-2">"{lastQuestion}"</p> : null}
-
-              <div className="text-left mt-2">
-                {loading ? (
-                  <p className="text-gray-500 font-semibold animate-pulse">Thinking…</p>
-                ) : lastQuestion ? (
-                  <p className="text-black text-base font-bold whitespace-pre-line">{responseText}</p>
-                ) : null}
+                {helperPhase === "buttons" && items.length > 0 && (
+                  <div className="flex flex-col gap-3">
+                    {items.map((it) => (
+                      <Row
+                        key={it.id || it.url || it.title}
+                        item={it}
+                        onPick={(val) => {
+                          setSelected(val);
+                          setIsAnchored(true);
+                          requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
-
-              {helperPhase !== "hidden" && (
-                <div className="flex items-center justify-between mt-3 mb-2">
-                  <p className="italic text-gray-600">Recommended demos</p>
-                  <span />
-                </div>
-              )}
-
-              {helperPhase === "buttons" && items.length > 0 && (
-                <div className="flex flex-col gap-3">
-                  {items.map((it) => (
-                    <Row
-                      key={it.id || it.url || it.title}
-                      item={it}
-                      onPick={(val) => {
-                        setSelected(val);
-                        setIsAnchored(true);
-                        requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
         {/* Bottom bar: hide in price mode so pricing Q&A/estimate can scroll */}
         <div className="px-4 py-3 border-t border-gray-200">
