@@ -412,13 +412,12 @@ export default function AskAssistant() {
     const introText = heading ? `${heading}\n\n${body}` : body;
 
     return (
-      <div className="w-full flex-1 flex flex-col">
+      <div className="w-full">
         <div className="mb-3">
           <div className="text-black text-base font-bold whitespace-pre-line">{introText}</div>
         </div>
       </div>
     );
-  }
 
   function PriceBottomBox() {
     const q = nextPriceQuestion;
@@ -579,9 +578,16 @@ export default function AskAssistant() {
         </div>
 
         {/* Content */}
-        <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
+        <div ref={contentRef} className="px-6 pt-0 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
           {mode === "price" ? (
-            <PriceTop />
+            <>
+              <div className="sticky top-0 z-20 bg-white pt-3">
+                <PriceTop />
+              </div>
+              <div className="mt-2">
+                <PriceBottomBox />
+              </div>
+            </>
           ) : ["meeting", "finished"].includes(mode) ? (
             <ComingSoon title={mode === "meeting" ? "Schedule Meeting" : "Finished"} />
           ) : selected ? (
@@ -734,9 +740,7 @@ export default function AskAssistant() {
 
         {/* Bottom input / question box */}
         <div className="px-4 py-3 border-t border-gray-200">
-          {mode === "price" ? (
-            <PriceBottomBox />
-          ) : (
+          {mode === "price" ? null : (
             <div className="relative w-full">
               <textarea
                 ref={inputRef}
