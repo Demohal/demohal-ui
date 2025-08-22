@@ -134,10 +134,10 @@ export default function AskAssistant() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  // Resolve alias — default to "demo"
+  // Resolve alias — support alias *and* alais; default to demo
   const alias = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
-    return (qs.get("alias") || "demo").trim();
+    return (qs.get("alias") || qs.get("alais") || "demo").trim();
   }, []);
 
   /* Utility: extract bot id from various shapes */
@@ -299,14 +299,14 @@ export default function AskAssistant() {
     ).trim();
     const introText = heading ? `${heading}\n\n${body}` : body;
 
-    // Compute selected tier label locally for the mirror
+    // Compute selected tier label for the mirror
     const norm = (s) => (s || "").toLowerCase().replace(/[\s-]+/g, "_");
     const tierQ = priceQuestions.find((qq) =>
       ["transactions", "transaction_volume", "volume", "tier", "tiers"].includes(norm(qq.q_key))
     );
     const tierAnsKey = tierQ ? priceAnswers[tierQ.q_key] : null;
     const tierOpt = tierQ && (tierQ.options || []).find((o) => o.key === tierAnsKey);
-    const selectedTierLabelLocal = tierOpt ? tierOpt.label : null;
+    const selectedTierLabel = tierOpt ? tierOpt.label : null;
 
     // Mirror line if product selected
     if (selectedEditionLabel) {
@@ -316,9 +316,9 @@ export default function AskAssistant() {
             <div className="text-base italic text-gray-700 whitespace-pre-line">
               {`You have selected ${selectedEditionLabel}.`}
             </div>
-            {selectedTierLabelLocal ? (
+            {selectedTierLabel ? (
               <div className="text-base italic text-gray-700 whitespace-pre-line">
-                {`You said you execute ${selectedTierLabelLocal} per month.`}
+                {`You said you execute ${selectedTierLabel} per month.`}
               </div>
             ) : null}
           </div>
@@ -350,7 +350,7 @@ export default function AskAssistant() {
 
     // When all questions are answered, show the estimate card here (end of the function)
     if (!q) {
-      // helper to find transactions question to render at bottom for tweaks
+      // find the transactions question to render at the bottom for tweaks
       const norm = (s) => (s || "").toLowerCase().replace(/[\s-]+/g, "_");
       const txQ = priceQuestions.find((qq) =>
         ["transactions", "transaction_volume", "volume", "tier", "tiers"].includes(norm(qq.q_key))
@@ -448,6 +448,128 @@ export default function AskAssistant() {
             <div className="mt-3 text-xs text-gray-600">No options available.</div>
           )}
         </div>
+      </div>
+    );
+  }
+
+  // --------------------------
+  // Core Ask flow
+  // --------------------------
+  async function sendMessage() {
+    if (!input.trim() || !botId) return;
+    const outgoing = input.trim();
+
+    setMode("ask");
+    setLastQuestion(outgoing);
+    setInput("");
+    setSelected(null);
+    setIsAnchored(false);
+    setResponseText("");
+    setHelperPhase("hidden");
+    setItems([]);
+
+    setLoading(true);
+
+    try {
+      const res = await axios.post(
+        `${apiBase}/demo-hal`,
+        { bot_id: botId, user_question: outgoing },
+        { timeout: 30000 }
+      );
+      const data = res?.data || {};
+      const text = data?.response_text || "";
+      const recSource = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
+      const recs = normalizeList(recSource);
+
+      setResponseText(text);
+      setLoading(false);
+
+      if (recs.length > 0) {
+        setHelperPhase("header");
+        setTimeout(() => {
+          setItems(recs);
+          setHelperPhase("buttons");
+        }, 60);
+      } else {
+        setHelperPhase("hidden");
+        setItems([]);
+      }
+
+      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+    } catch (e) {
+      setLoading(false);
+      setResponseText("Sorry—something went wrong.");
+      setHelperPhase("hidden");
+      setItems([]);
+    }
+  }
+
+  async function openBrowse() {
+    if (!botId) return;
+    setMode("browse");
+    setSelected(null);
+    try {
+      const res = await fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`);
+      const data = await res.json();
+      const src = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
+      setBrowseItems(normalizeList(src));
+      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+    } catch {
+      setBrowseItems([]);
+    }
+  }
+
+  async function openBrowseDocs() {
+    if (!botId) return;
+    setMode("docs");
+    setSelected(null);
+    try {
+      const res = await fetch(`${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`);
+      const data = await res.json();
+      const src = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
+      setBrowseDocs(normalizeList(src));
+      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+    } catch {
+      setBrowseDocs([]);
+    }
+  }
+
+  const listSource = mode === "browse" ? browseItems : items;
+
+  const askUnderVideo = useMemo(() => {
+    if (!selected) return items;
+    const selKey = selected.id ?? selected.url ?? selected.title;
+    return (items || []).filter((it) => (it.id ?? it.url ?? it.title) !== selKey);
+  }, [selected, items]);
+
+  const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
+
+  const tabs = [
+    { key: "demos", label: "Browse Demos", onClick: openBrowse },
+    { key: "docs", label: "Browse Documents", onClick: openBrowseDocs },
+    { key: "price", label: "Price Estimate", onClick: () => { setSelected(null); setMode("price"); } },
+    { key: "meeting", label: "Schedule Meeting", onClick: () => { setSelected(null); setMode("meeting"); } },
+    { key: "finished", label: "Finished", onClick: () => { setSelected(null); setMode("finished"); } },
+  ];
+  const currentTab =
+    mode === "browse" ? "demos"
+    : mode === "docs" ? "docs"
+    : mode === "price" ? "price"
+    : mode === "meeting" ? "meeting"
+    : mode === "finished" ? "finished"
+    : null;
+
+  if (fatal) {
+    return (
+      <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
+        <div className="text-red-600 font-semibold">{fatal}</div>
+      </div>
+    );
+  }
+  if (!botId) {
+    return (
+      <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
+        <div className="text-gray-700">Loading…</div>
       </div>
     );
   }
