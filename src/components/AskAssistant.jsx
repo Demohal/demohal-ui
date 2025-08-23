@@ -283,6 +283,7 @@ export default function AskAssistant() {
   // --------------------------
   function PriceTop() {
     const intro = priceUiCopy?.intro || {};
+    thead;
     const heading = (intro.heading || "").trim();
     const body = (
       intro.body ||
@@ -654,7 +655,7 @@ export default function AskAssistant() {
                     <iframe
                       title="Schedule a Meeting"
                       src={`${agent.calendar_link}?embed_domain=${window.location.hostname}&embed_type=Inline`}
-                      style={{ width: "100%", height: "90vh", maxHeight: "640px" }}
+                      style={{ width: "100%", height: "80vh", maxHeight: "640px" }}
                       className="rounded-xl border border-gray-200 shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
                     />
                   )}
@@ -716,6 +717,30 @@ export default function AskAssistant() {
                     </div>
                     <div className="flex flex-col gap-3">
                       {browseItems.map((it) => (
+                        <Row
+                          key={it.id || it.url || it.title}
+                          item={it}
+                          onPick={(val) => {
+                            setSelected(val);
+                            setIsAnchored(true);
+                            requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : mode === "docs" ? (
+              <div className="w-full flex-1 flex flex-col">
+                {browseDocs.length > 0 && (
+                  <>
+                    <div className="flex items-center justify-between mt-2 mb-3">
+                      <p className="italic text-gray-600">Select a document to view it</p>
+                      <span />
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      {browseDocs.map((it) => (
                         <Row
                           key={it.id || it.url || it.title}
                           item={it}
