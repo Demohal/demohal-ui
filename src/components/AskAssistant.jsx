@@ -10,7 +10,7 @@ function Row({ item, onPick }) {
   return (
     <button
       onClick={() => onPick(item)}
-      className="w-full text-center bg-gradient-to-b from-gray-600 to-gray-700 text-white rounded-xl border border-gray-700 px-4 py-3 shadow hover:from-gray-500 hover:to-gray-600 transition-colors"
+      className="w-full text-center bg-gradient-to-b from-gray-600 to-gray-700 text-white rounded-xl border border-gray-700 px-4 py-3 shadow hover:from-gray-500 hover:from-gray-500 hover:to-gray-600 transition-colors"
       title={item.description || ""}
     >
       <div className="font-extrabold text-xs sm:text-sm">{item.title}</div>
@@ -58,7 +58,7 @@ export default function AskAssistant() {
   const [botId, setBotId] = useState("");
   const [fatal, setFatal] = useState("");
 
-  // Modes: ask | browse | docs | price | meeting | finished
+  // Modes: ask | browse | docs | price | meeting
   const [mode, setMode] = useState("ask");
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
@@ -88,6 +88,9 @@ export default function AskAssistant() {
   const [priceEstimate, setPriceEstimate] = useState(null);
   const [priceBusy, setPriceBusy] = useState(false);
   const [priceErr, setPriceErr] = useState("");
+
+  // Agent (for meeting tab)
+  const [agent, setAgent] = useState(null);
 
   const nextPriceQuestion = useMemo(() => {
     if (!priceQuestions?.length) return null;
@@ -520,6 +523,24 @@ export default function AskAssistant() {
     }
   }
 
+  async function openMeeting() {
+    if (!botId) return;
+    setSelected(null);
+    setMode("meeting");
+    try {
+      const res = await fetch(`${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`);
+      const data = await res.json();
+      if (data?.ok && data.agent?.calendar_link) {
+        setAgent(data.agent);
+      } else {
+        setAgent({ calendar_link: "https://calendly.com/dave-oppgen/30min" });
+      }
+      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+    } catch {
+      setAgent({ calendar_link: "https://calendly.com/dave-oppgen/30min" });
+    }
+  }
+
   const listSource = mode === "browse" ? browseItems : items;
 
   const askUnderVideo = useMemo(() => {
@@ -530,20 +551,13 @@ export default function AskAssistant() {
 
   const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
 
+  // Tabs (Removed Finished)
   const tabs = [
     { key: "demos", label: "Browse Demos", onClick: openBrowse },
     { key: "docs", label: "Browse Documents", onClick: openBrowseDocs },
     { key: "price", label: "Price Estimate", onClick: () => { setSelected(null); setMode("price"); } },
-    { key: "meeting", label: "Schedule Meeting", onClick: () => { setSelected(null); setMode("meeting"); } },
-    { key: "finished", label: "Finished", onClick: () => { setSelected(null); setMode("finished"); } },
+    { key: "meeting", label: "Schedule Meeting", onClick: openMeeting },
   ];
-  const currentTab =
-    mode === "browse" ? "demos"
-    : mode === "docs" ? "docs"
-    : mode === "price" ? "price"
-    : mode === "meeting" ? "meeting"
-    : mode === "finished" ? "finished"
-    : null;
 
   if (fatal) {
     return (
@@ -586,8 +600,6 @@ export default function AskAssistant() {
                 ? "Price Estimate"
                 : mode === "meeting"
                 ? "Schedule Meeting"
-                : mode === "finished"
-                ? "Finished"
                 : "Ask the Assistant"}
             </div>
           </div>
@@ -597,18 +609,12 @@ export default function AskAssistant() {
             className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             role="tablist"
           >
-            {[
-              { key: "demos", label: "Browse Demos", onClick: openBrowse },
-              { key: "docs", label: "Browse Documents", onClick: openBrowseDocs },
-              { key: "price", label: "Price Estimate", onClick: () => { setSelected(null); setMode("price"); } },
-              { key: "meeting", label: "Schedule Meeting", onClick: () => { setSelected(null); setMode("meeting"); } },
-              { key: "finished", label: "Finished", onClick: () => { setSelected(null); setMode("finished"); } },
-            ].map((t) => {
-              const active = (mode === "browse" && t.key === "demos")
-                || (mode === "docs" && t.key === "docs")
-                || (mode === "price" && t.key === "price")
-                || (mode === "meeting" && t.key === "meeting")
-                || (mode === "finished" && t.key === "finished");
+            {tabs.map((t) => {
+              const active =
+                (mode === "browse" && t.key === "demos") ||
+                (mode === "docs" && t.key === "docs") ||
+                (mode === "price" && t.key === "price") ||
+                (mode === "meeting" && t.key === "meeting");
               return (
                 <button
                   key={t.key}
@@ -643,10 +649,16 @@ export default function AskAssistant() {
         ) : (
           /* Other modes use a single scrolling content area */
           <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
-            {["meeting", "finished"].includes(mode) ? (
-              <div className="w-full flex-1 flex flex-col items-center justify-center text-gray-600">
-                <div className="text-lg font-semibold mb-1">{mode === "meeting" ? "Schedule Meeting" : "Finished"}</div>
-                <div className="text-sm">Coming soon.</div>
+            {mode === "meeting" ? (
+              <div className="w-full flex-1 flex flex-col">
+                <div className={`${isAnchored ? "sticky top-0 z-10" : ""} bg-white pt-2 pb-2`}>
+                  <iframe
+                    title="Schedule a Meeting"
+                    src={`${(agent?.calendar_link || "https://calendly.com/dave-oppgen/30min")}?embed_domain=${window.location.hostname}&embed_type=Inline`}
+                    style={{ width: "100%", height: "700px" }}
+                    className="rounded-xl border border-gray-200 shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
+                  />
+                </div>
               </div>
             ) : selected ? (
               <div className="w-full flex-1 flex flex-col">
