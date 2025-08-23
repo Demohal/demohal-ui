@@ -633,7 +633,6 @@ export default function AskAssistant() {
             </nav>
           </div>
 
-
         {/* PRICE MODE: anchored header + its own scroll area */}
         {mode === "price" ? (
           <>
