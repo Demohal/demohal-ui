@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
+import theme, { getCssVars } from "../theme";
 
 /* =============================== *
  *  PATCH-READY CONSTANTS & UTILS  *
@@ -40,6 +41,12 @@ function renderMirror(template, label) {
 /* ========================== *
  *  SMALL PATCHABLE COMPONENTS *
  * ========================== */
+
+function applyCssVars(vars) {
+  if (!vars) return;
+  const root = document.documentElement;
+  Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, String(v)));
+}
 
 function Row({ item, onPick }) {
   return (
@@ -225,6 +232,11 @@ export default function AskAssistant() {
     return (qs.get("alias") || qs.get("alais") || "demo").trim();
   }, []);
 
+  // Apply fallback JS theme immediately
+  useEffect(() => {
+    applyCssVars(getCssVars(theme));  // default
+  }, []);
+  
   // Bot id resolver
   useEffect(() => {
     let cancel = false;
@@ -243,6 +255,20 @@ export default function AskAssistant() {
         if (id) {
           setBotId(id);
           setFatal("");
+          useEffect(() => {
+            if (!botId) return;
+            let cancelled = false;
+            (async () => {
+              try {
+                const res = await fetch(`${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`);
+                const data = await res.json();
+                if (!cancelled && data?.ok && data.css_vars) {
+                  applyCssVars(data.css_vars);  // override vars with DB theme
+                }
+              } catch { /* keep fallback */ }
+            })();
+            return () => { cancelled = true; };
+          }, [botId, apiBase]);
         } else if (!res.ok || data?.ok === false) {
           setFatal("Invalid or inactive alias.");
         } else {
@@ -548,10 +574,13 @@ export default function AskAssistant() {
   const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
 
   return (
-    <div className="w-screen min-h-[100dvh] h-[100dvh] bg-gray-100 p-0 md:p-2 md:flex md:items-center md:justify-center">
+    <div 
+      className="w-screen min-h-[100dvh] h-[100dvh] bg-gray-100 p-0 md:p-2 md:flex md:items-center md:justify-center"
+      style={{ backgroundColor: "var(--page-bg)" }}
+    >
       <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-white border md:rounded-2xl md:shadow-xl flex flex-col overflow-hidden transition-all duration-300 rounded-none shadow-none">
         {/* Header */}
-        <div className="bg-black text-white px-4 sm:px-6">
+        <div className="px-4 sm:px-6" style={{ backgroundColor: "var(--banner-bg)", color: "var(--banner-fg)" }}>>
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
               <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
