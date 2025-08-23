@@ -10,7 +10,7 @@ function Row({ item, onPick }) {
   return (
     <button
       onClick={() => onPick(item)}
-      className="w-full text-center bg-gradient-to-b from-gray-600 to-gray-700 text-white rounded-xl border border-gray-700 px-4 py-3 shadow hover:from-gray-500 hover:from-gray-500 hover:to-gray-600 transition-colors"
+      className="w-full text-center bg-gradient-to-b from-gray-600 to-gray-700 text-white rounded-xl border border-gray-700 px-4 py-3 shadow hover:from-gray-500 hover:to-gray-600 transition-colors"
       title={item.description || ""}
     >
       <div className="font-extrabold text-xs sm:text-sm">{item.title}</div>
@@ -600,36 +600,38 @@ export default function AskAssistant() {
             </div>
           </div>
 
-          {/* Tabs */}
-          <nav
-            className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            role="tablist"
-          >
-            {tabs.map((t) => {
-              const active =
-                (mode === "browse" && t.key === "demos") ||
-                (mode === "docs" && t.key === "docs") ||
-                (mode === "price" && t.key === "price") ||
-                (mode === "meeting" && t.key === "meeting");
-              return (
-                <button
-                  key={t.key}
-                  onClick={t.onClick}
-                  role="tab"
-                  aria-selected={active}
-                  className={[
-                    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
-                    "rounded-t-md border border-b-0",
-                    active
-                      ? "bg-white text-black border-white -mb-px shadow-[0_2px_0_rgba(0,0,0,0.15)]"
-                      : "bg-gradient-to-b from-gray-600 to-gray-700 text-white border-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]",
-                  ].join(" ")}
-                >
-                  {t.label}
-                </button>
-              );
-            })}
-          </nav>
+          {/* Tabs (centered) */}
+          <div className="w-full flex justify-center border-b border-gray-300">
+            <nav
+              className="inline-flex justify-center items-center gap-0.5 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              role="tablist"
+            >
+              {tabs.map((t) => {
+                const active =
+                  (mode === "browse" && t.key === "demos") ||
+                  (mode === "docs" && t.key === "docs") ||
+                  (mode === "price" && t.key === "price") ||
+                  (mode === "meeting" && t.key === "meeting");
+                return (
+                  <button
+                    key={t.key}
+                    onClick={t.onClick}
+                    role="tab"
+                    aria-selected={active}
+                    className={[
+                      "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
+                      "rounded-t-md border border-b-0",
+                      active
+                        ? "bg-white text-black border-white -mb-px shadow-[0_2px_0_rgba(0,0,0,0.15)]"
+                        : "bg-gradient-to-b from-gray-600 to-gray-700 text-white border-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]",
+                    ].join(" ")}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
         </div>
 
         {/* PRICE MODE: anchored header + its own scroll area */}
@@ -648,12 +650,14 @@ export default function AskAssistant() {
             {mode === "meeting" ? (
               <div className="w-full flex-1 flex flex-col">
                 <div className={`${isAnchored ? "sticky top-0 z-10" : ""} bg-white pt-2 pb-2`}>
-                  <iframe
-                    title="Schedule a Meeting"
-                    src={`${agent.calendar_link}?embed_domain=${window.location.hostname}&embed_type=Inline`}
-                    style={{ width: "100%", height: "60vh", maxHeight: "640px" }}
-                    className="rounded-xl border border-gray-200 shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
-                  />
+                  {agent?.calendar_link && (
+                    <iframe
+                      title="Schedule a Meeting"
+                      src={`${agent.calendar_link}?embed_domain=${window.location.hostname}&embed_type=Inline`}
+                      style={{ width: "100%", height: "60vh", maxHeight: "640px" }}
+                      className="rounded-xl border border-gray-200 shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
+                    />
+                  )}
                 </div>
               </div>
             ) : selected ? (
