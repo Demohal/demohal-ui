@@ -601,37 +601,36 @@ export default function AskAssistant() {
           </div>
 
           {/* Tabs */}
-          <div className="w-full flex justify-center border-b border-gray-300">
-            <nav
-              className="inline-flex justify-center items-center gap-0.5 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-              role="tablist"
-            >
-              {tabs.map((t) => {
-                const active =
-                  (mode === "browse" && t.key === "demos") ||
-                  (mode === "docs" && t.key === "docs") ||
-                  (mode === "price" && t.key === "price") ||
-                  (mode === "meeting" && t.key === "meeting");
-                return (
-                  <button
-                    key={t.key}
-                    onClick={t.onClick}
-                    role="tab"
-                    aria-selected={active}
-                    className={[
-                      "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
-                      "rounded-t-md border border-b-0",
-                      active
-                        ? "bg-white text-black border-white -mb-px shadow-[0_2px_0_rgba(0,0,0,0.15)]"
-                        : "bg-gradient-to-b from-gray-600 to-gray-700 text-white border-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]",
-                    ].join(" ")}
-                  >
-                    {t.label}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
+          <nav
+            className="flex gap-0.5 overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            role="tablist"
+          >
+            {tabs.map((t) => {
+              const active =
+                (mode === "browse" && t.key === "demos") ||
+                (mode === "docs" && t.key === "docs") ||
+                (mode === "price" && t.key === "price") ||
+                (mode === "meeting" && t.key === "meeting");
+              return (
+                <button
+                  key={t.key}
+                  onClick={t.onClick}
+                  role="tab"
+                  aria-selected={active}
+                  className={[
+                    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
+                    "rounded-t-md border border-b-0",
+                    active
+                      ? "bg-white text-black border-white -mb-px shadow-[0_2px_0_rgba(0,0,0,0.15)]"
+                      : "bg-gradient-to-b from-gray-600 to-gray-700 text-white border-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]",
+                  ].join(" ")}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
 
         {/* PRICE MODE: anchored header + its own scroll area */}
         {mode === "price" ? (
