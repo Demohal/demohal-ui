@@ -113,18 +113,6 @@ export default function AskAssistant() {
     });
   }, [priceQuestions, priceAnswers]);
 
-  // Compute selected product label (for mirror)
-  const selectedEditionLabel = useMemo(() => {
-    const norm = (s) => (s || "").toLowerCase().replace(/[\s-]+/g, "_");
-    const editionKeys = new Set(["edition", "editions", "product", "products", "industry_edition", "industry"]);
-    const q = priceQuestions.find((qq) => editionKeys.has(norm(qq.q_key)));
-    if (!q) return null;
-    const ansKey = priceAnswers[q.q_key];
-    if (!ansKey) return null;
-    const opt = (q.options || []).find((o) => o.key === ansKey);
-    return opt?.label || null;
-  }, [priceQuestions, priceAnswers]);
-
   // Autosize the question box (Ask tab)
   const inputRef = useRef(null);
   useEffect(() => {
@@ -134,10 +122,10 @@ export default function AskAssistant() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  // Resolve alias — support alias *and* alais; default to demo
+  // Resolve alias — default to "demo"
   const alias = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
-    return (qs.get("alias") || qs.get("alais") || "demo").trim();
+    return (qs.get("alias") || "demo").trim();
   }, []);
 
   /* Utility: extract bot id from various shapes */
@@ -299,28 +287,51 @@ export default function AskAssistant() {
     ).trim();
     const introText = heading ? `${heading}\n\n${body}` : body;
 
-    // Compute selected tier label for the mirror
+    // Build mirror lines from answered questions using optional mirror_template
+    // Tokens supported: {{answer_label}} and {{answer_label_lower}}
     const norm = (s) => (s || "").toLowerCase().replace(/[\s-]+/g, "_");
-    const tierQ = priceQuestions.find((qq) =>
-      ["transactions", "transaction_volume", "volume", "tier", "tiers"].includes(norm(qq.q_key))
-    );
-    const tierAnsKey = tierQ ? priceAnswers[tierQ.q_key] : null;
-    const tierOpt = tierQ && (tierQ.options || []).find((o) => o.key === tierAnsKey);
-    const selectedTierLabel = tierOpt ? tierOpt.label : null;
 
-    // Mirror line if product selected
-    if (selectedEditionLabel) {
+    const mirrorLines = [];
+    for (const q of priceQuestions) {
+      const ans = priceAnswers[q.q_key];
+      if (ans === undefined || ans === null || ans === "" || (Array.isArray(ans) && ans.length === 0)) continue;
+
+      const opts = q.options || [];
+      let label = "";
+      if (q.type === "choice") {
+        const o = opts.find((o) => o.key === ans);
+        label = o?.label || String(ans);
+      } else if (q.type === "multi_choice") {
+        const picked = Array.isArray(ans) ? ans : [];
+        label = opts.filter((o) => picked.includes(o.key)).map((o) => o.label).join(", ");
+      } else {
+        label = String(ans);
+      }
+      if (!label) continue;
+
+      let line = "";
+      if (q.mirror_template) {
+        line = (q.mirror_template + "")
+          .split("{{answer_label_lower}}").join(label.toLowerCase())
+          .split("{{answer_label}}").join(label);
+      } else {
+        // Defaults until mirror_template populated
+        if (["edition","editions","product","products","industry_edition","industry"].includes(norm(q.q_key))) {
+          line = `You have selected ${label}.`;
+        } else if (["transactions","transaction_volume","volume","tier","tiers"].includes(norm(q.q_key))) {
+          line = `You stated that you execute ${label.toLowerCase()} commercial transactions per month.`;
+        }
+      }
+      if (line) mirrorLines.push(line);
+    }
+
+    if (mirrorLines.length > 0) {
       return (
         <div className="w-full">
           <div className="mb-3">
-            <div className="text-base italic text-gray-700 whitespace-pre-line">
-              {`You have selected ${selectedEditionLabel}.`}
-            </div>
-            {selectedTierLabel ? (
-              <div className="text-base italic text-gray-700 whitespace-pre-line">
-                {`You said you execute ${selectedTierLabel} per month.`}
-              </div>
-            ) : null}
+            {mirrorLines.map((ln, idx) => (
+              <div key={idx} className="text-base italic text-gray-700 whitespace-pre-line">{ln}</div>
+            ))}
           </div>
         </div>
       );
@@ -348,15 +359,8 @@ export default function AskAssistant() {
       );
     }
 
-    // When all questions are answered, show the estimate card here (end of the function)
+    // When all questions are answered, show the estimate card
     if (!q) {
-      // find the transactions question to render at the bottom for tweaks
-      const norm = (s) => (s || "").toLowerCase().replace(/[\s-]+/g, "_");
-      const txQ = priceQuestions.find((qq) =>
-        ["transactions", "transaction_volume", "volume", "tier", "tiers"].includes(norm(qq.q_key))
-      );
-      const txVal = txQ ? priceAnswers[txQ.q_key] : undefined;
-
       return (
         <div className="relative w-full">
           {!priceEstimate ? (
@@ -396,24 +400,6 @@ export default function AskAssistant() {
                     </div>
                   ))}
               </div>
-
-              {/* Normal question block at bottom (Transactions tweak) */}
-              {txQ ? (
-                <div className="mt-4 border-t pt-4">
-                  <div className="text-black font-bold text-base">{txQ.prompt}</div>
-                  {txQ.help_text ? <div className="text-xs text-black italic mt-1">{txQ.help_text}</div> : null}
-                  <div className="mt-3 flex flex-col gap-3">
-                    {(txQ.options || []).map((opt) => (
-                      <OptionButton
-                        key={opt.key || opt.id}
-                        opt={opt}
-                        selected={Array.isArray(txVal) ? txVal.includes(opt.key) : txVal === opt.key}
-                        onClick={handlePickOption.bind(null, txQ)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ) : null}
             </div>
           )}
         </div>
@@ -425,7 +411,6 @@ export default function AskAssistant() {
     return (
       <div className="relative w-full">
         <div className="w-full border border-gray-400 rounded-lg px-4 py-3 text-base bg-white">
-          {/* QUESTION SIZE bumped one step up (sm → base) */}
           <div className="text-black font-bold text-base">{q.prompt}</div>
           {q.help_text ? <div className="text-xs text-black italic mt-1">{q.help_text}</div> : null}
 
@@ -574,6 +559,8 @@ export default function AskAssistant() {
     );
   }
 
+  const showAskBottom = mode !== "price" || haveAllEstimationAnswers;
+
   return (
     <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-2 sm:p-0">
       <div
@@ -615,12 +602,11 @@ export default function AskAssistant() {
               { key: "meeting", label: "Schedule Meeting", onClick: () => { setSelected(null); setMode("meeting"); } },
               { key: "finished", label: "Finished", onClick: () => { setSelected(null); setMode("finished"); } },
             ].map((t) => {
-              const active =
-                (mode === "browse" && t.key === "demos") ||
-                (mode === "docs" && t.key === "docs") ||
-                (mode === "price" && t.key === "price") ||
-                (mode === "meeting" && t.key === "meeting") ||
-                (mode === "finished" && t.key === "finished");
+              const active = (mode === "browse" && t.key === "demos")
+                || (mode === "docs" && t.key === "docs")
+                || (mode === "price" && t.key === "price")
+                || (mode === "meeting" && t.key === "meeting")
+                || (mode === "finished" && t.key === "finished");
               return (
                 <button
                   key={t.key}
@@ -785,9 +771,9 @@ export default function AskAssistant() {
           </div>
         )}
 
-        {/* Bottom bar: hide in price mode so pricing Q&A/estimate can scroll */}
+        {/* Bottom bar */}
         <div className="px-4 py-3 border-t border-gray-200">
-          {mode === "price" ? null : (
+          {showAskBottom ? (
             <div className="relative w-full">
               <textarea
                 ref={inputRef}
@@ -811,7 +797,7 @@ export default function AskAssistant() {
                 <ArrowUpCircleIcon className="w-8 h-8 text-red-600 hover:text-red-700" />
               </button>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </div>
