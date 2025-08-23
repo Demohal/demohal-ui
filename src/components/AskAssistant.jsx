@@ -283,7 +283,6 @@ export default function AskAssistant() {
   // --------------------------
   function PriceTop() {
     const intro = priceUiCopy?.intro || {};
-    thead;
     const heading = (intro.heading || "").trim();
     const body = (
       intro.body ||
@@ -353,7 +352,7 @@ export default function AskAssistant() {
     const q = nextPriceQuestion;
 
     if (!priceQuestions?.length) {
-      return null; // fully remove loading container
+      return null; // fully remove loading container (per requirement)
     }
 
     // When all questions are answered, show the estimate card (no loading placeholder)
@@ -655,7 +654,7 @@ export default function AskAssistant() {
                     <iframe
                       title="Schedule a Meeting"
                       src={`${agent.calendar_link}?embed_domain=${window.location.hostname}&embed_type=Inline`}
-                      style={{ width: "100%", height: "80vh", maxHeight: "640px" }}
+                      style={{ width: "100%", height: "60vh", maxHeight: "640px" }}
                       className="rounded-xl border border-gray-200 shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
                     />
                   )}
