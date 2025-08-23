@@ -113,18 +113,6 @@ export default function AskAssistant() {
     });
   }, [priceQuestions, priceAnswers]);
 
-  // Compute selected product label (to mirror in header)
-  const selectedEditionLabel = useMemo(() => {
-    const norm = (s) => (s || "").toLowerCase().replace(/[\s-]+/g, "_");
-    const editionKeys = new Set(["edition", "editions", "product", "products", "industry_edition", "industry"]);
-    const q = priceQuestions.find((qq) => editionKeys.has(norm(qq.q_key)));
-    if (!q) return null;
-    const ansKey = priceAnswers[q.q_key];
-    if (!ansKey) return null;
-    const opt = (q.options || []).find((o) => o.key === ansKey);
-    return opt?.label || null;
-  }, [priceQuestions, priceAnswers]);
-
   // Autosize the question box (Ask tab)
   const inputRef = useRef(null);
   useEffect(() => {
@@ -134,10 +122,10 @@ export default function AskAssistant() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  // Resolve alias — default to "demo"
+  // Resolve alias — support alias and alais; default to demo
   const alias = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
-    return (qs.get("alias") || "demo").trim();
+    return (qs.get("alias") || qs.get("alais") || "demo").trim();
   }, []);
 
   /* Utility: extract bot id from various shapes */
@@ -288,6 +276,169 @@ export default function AskAssistant() {
   }
 
   // --------------------------
+  // Price panels
+  // --------------------------
+  function PriceTop() {
+    const intro = priceUiCopy?.intro || {};
+    const heading = (intro.heading || "").trim();
+    const body = (
+      intro.body ||
+      "This tool provides a quick estimate based on your selections. Final pricing may vary by configuration, usage, and implementation."
+    ).trim();
+    const introText = heading ? `${heading}\n\n${body}` : body;
+
+    // Build mirror lines from answered questions using optional mirror_template
+    // Tokens supported: {{answer_label}} and {{answer_label_lower}}
+    const norm = (s) => (s || "").toLowerCase().replace(/[\s-]+/g, "_");
+
+    const mirrorLines = [];
+    for (const q of priceQuestions) {
+      const ans = priceAnswers[q.q_key];
+      if (ans === undefined || ans === null || ans === "" || (Array.isArray(ans) && ans.length === 0)) continue;
+
+      const opts = q.options || [];
+      let label = "";
+      if (q.type === "choice") {
+        const o = opts.find((o) => o.key === ans);
+        label = o?.label || String(ans);
+      } else if (q.type === "multi_choice") {
+        const picked = Array.isArray(ans) ? ans : [];
+        label = opts.filter((o) => picked.includes(o.key)).map((o) => o.label).join(", ");
+      } else {
+        label = String(ans);
+      }
+      if (!label) continue;
+
+      let line = "";
+      if (q.mirror_template) {
+        line = (q.mirror_template + "")
+          .split("{{answer_label_lower}}").join(label.toLowerCase())
+          .split("{{answer_label}}").join(label);
+      } else {
+        if (["edition","editions","product","products","industry_edition","industry"].includes(norm(q.q_key))) {
+          line = `You have selected ${label}.`;
+        } else if (["transactions","transaction_volume","volume","tier","tiers"].includes(norm(q.q_key))) {
+          line = `You stated that you execute ${label.toLowerCase()} commercial transactions per month.`;
+        }
+      }
+      if (line) mirrorLines.push(line);
+    }
+
+    if (mirrorLines.length > 0) {
+      return (
+        <div className="w-full">
+          <div className="mb-3">
+            {mirrorLines.map((ln, idx) => (
+              <div key={idx} className="text-base italic text-gray-700 whitespace-pre-line">{ln}</div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="w-full">
+        <div className="mb-3">
+          <div className="text-black text-base font-bold whitespace-pre-line">{introText}</div>
+        </div>
+      </div>
+    );
+  }
+
+  function PriceBottomBox() {
+    const q = nextPriceQuestion;
+
+    if (!priceQuestions?.length) {
+      return null; // fully remove loading container
+    }
+
+    // When all questions are answered, show the estimate card (no loading placeholder)
+    if (!q) {
+      const outro = priceUiCopy?.outro || {};
+      const outroHeading = (outro.heading || "").trim();
+      const outroBody = (outro.body || "").trim();
+      const outroText = outroHeading ? `${outroHeading}\n\n${outroBody}` : outroBody;
+
+      return (
+        <div className="relative w-full">
+          {priceEstimate ? (
+            <>
+              <div className="border rounded-xl p-4 bg-white shadow">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-black font-bold text-lg">Your Estimate</div>
+                  <div className="text-black font-bold text-lg">
+                    {priceEstimate.currency_code} {priceEstimate.total_min.toLocaleString()} –{" "}
+                    {priceEstimate.currency_code} {priceEstimate.total_max.toLocaleString()}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {Array.isArray(priceEstimate.line_items) &&
+                    priceEstimate.line_items.map((li) => (
+                      <div key={li.product.id} className="border rounded-lg p-3">
+                        <div className="flex items-center justify-between">
+                          <div className="text-black font-bold">{li.product.name}</div>
+                          <div className="text-black font-bold text-lg">
+                            {li.currency_code} {li.price_min.toLocaleString()} – {li.currency_code}{" "}
+                            {li.price_max.toLocaleString()}
+                          </div>
+                        </div>
+                        {Array.isArray(li.features) && li.features.length > 0 && (
+                          <div className="mt-2">
+                            {li.features
+                              .filter((f) => f.is_standard)
+                              .map((f, idx) => (
+                                <Pill key={`${li.product.id}-${idx}`}>{f.name}</Pill>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+              {outroText ? (
+                <div className="mt-3 text-black text-base font-bold whitespace-pre-line">{outroText}</div>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+      );
+    }
+
+    const currentVal = priceAnswers[q.q_key];
+
+    return (
+      <div className="relative w-full">
+        <div className="w-full border border-gray-400 rounded-lg px-4 py-3 text-base bg-white">
+          {/* QUESTION SIZE bumped one step up (sm → base) */}
+          <div className="text-black font-bold text-base">{q.prompt}</div>
+          {q.help_text ? <div className="text-xs text-black italic mt-1">{q.help_text}</div> : null}
+
+          {Array.isArray(q.options) && q.options.length > 0 ? (
+            <div className="mt-3 flex flex-col gap-3">
+              {q.options.map((opt) => (
+                <OptionButton
+                  key={opt.key || opt.id}
+                  opt={opt}
+                  selected={
+                    q.type === "multi_choice"
+                      ? Array.isArray(currentVal) && currentVal.includes(opt.key)
+                      : currentVal === opt.key
+                  }
+                  onClick={handlePickOption.bind(null, q)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="mt-3 text-xs text-gray-600">No options available.</div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // --------------------------
   // Core Ask flow
   // --------------------------
   async function sendMessage() {
@@ -409,138 +560,8 @@ export default function AskAssistant() {
     );
   }
 
-  // --------------------------
-  // Price panels
-  // --------------------------
-  function PriceTop() {
-    const intro = priceUiCopy?.intro || {};
-    const heading = (intro.heading || "").trim();
-    const body = (
-      intro.body ||
-      "This tool provides a quick estimate based on your selections. Final pricing may vary by configuration, usage, and implementation."
-    ).trim();
-    const introText = heading ? `${heading}\n\n${body}` : body;
-
-    // Mirror line if product selected
-    if (selectedEditionLabel) {
-      return (
-        <div className="w-full">
-          <div className="mb-3">
-            <div className="text-base italic text-gray-700 whitespace-pre-line">
-              {`You have selected ${selectedEditionLabel}.`}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="w-full">
-        <div className="mb-3">
-          <div className="text-black text-base font-bold whitespace-pre-line">{introText}</div>
-        </div>
-      </div>
-    );
-  }
-
-  function PriceBottomBox() {
-    const q = nextPriceQuestion;
-
-    // if (!priceQuestions?.length) {
-      //return (
-        //<div className="relative w-full">
-          ///<div className="w-full border border-gray-400 rounded-lg px-4 py-2 text-base text-gray-600 bg-gray-50">
-            //{priceErr || "Loading price estimator…"}
-          //</div>
-        //</div>
-      //);
-    //}
-
-    // When all questions are answered, show the estimate card here (end of the function)
-    if (!q) {
-      const outro = priceUiCopy?.outro || {};
-      const outroHeading = (outro.heading || "").trim();
-      const outroBody = (outro.body || "").trim();
-      const outroText = outroHeading ? `${outroHeading}
-
-${outroBody}` : outroBody;
-      return (
-        <div className="relative w-full">
-          {priceEstimate ? (
-            <>
-              <div className="border rounded-xl p-4 bg-white shadow">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="font-semibold">Your Estimate</div>
-                  <div className="text-sm">
-                    {priceEstimate.currency_code} {priceEstimate.total_min.toLocaleString()} –{" "}
-                    {priceEstimate.currency_code} {priceEstimate.total_max.toLocaleString()}
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  {Array.isArray(priceEstimate.line_items) &&
-                    priceEstimate.line_items.map((li) => (
-                      <div key={li.product.id} className="border rounded-lg p-3">
-                        <div className="flex items-center justify-between">
-                          <div className="font-medium">{li.product.name}</div>
-                          <div className="text-sm">
-                            {li.currency_code} {li.price_min.toLocaleString()} – {li.currency_code}{" "}
-                            {li.price_max.toLocaleString()}
-                          </div>
-                        </div>
-                        {Array.isArray(li.features) && li.features.length > 0 && (
-                          <div className="mt-2">
-                            {li.features
-                              .filter((f) => f.is_standard)
-                              .map((f, idx) => (
-                                <Pill key={`${li.product.id}-${idx}`}>{f.name}</Pill>
-                              ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                </div>
-              </div>
-              {outroText ? (
-                <div className="mt-3 text-black text-base font-bold whitespace-pre-line">{outroText}</div>
-              ) : null}
-            </>
-          ) : null}
-        </div>
-      );
-    }
-
-    const currentVal = priceAnswers[q.q_key];
-
-    return (
-      <div className="relative w-full">
-        <div className="w-full border border-gray-400 rounded-lg px-4 py-3 text-base bg-white">
-          {/* QUESTION SIZE bumped one step up (sm → base) */}
-          <div className="text-black font-bold text-base">{q.prompt}</div>
-          {q.help_text ? <div className="text-xs text-black italic mt-1">{q.help_text}</div> : null}
-
-          {Array.isArray(q.options) && q.options.length > 0 ? (
-            <div className="mt-3 flex flex-col gap-3">
-              {q.options.map((opt) => (
-                <OptionButton
-                  key={opt.key || opt.id}
-                  opt={opt}
-                  selected={
-                    q.type === "multi_choice"
-                      ? Array.isArray(currentVal) && currentVal.includes(opt.key)
-                      : currentVal === opt.key
-                  }
-                  onClick={handlePickOption.bind(null, q)}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="mt-3 text-xs text-gray-600">No options available.</div>
-          )}
-        </div>
-      </div>
-    );
-  }
+  // Show standard Ask bottom when not in price OR once estimate exists
+  const showAskBottom = mode !== "price" || !!priceEstimate;
 
   return (
     <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-2 sm:p-0">
@@ -752,9 +773,9 @@ ${outroBody}` : outroBody;
           </div>
         )}
 
-        {/* Bottom bar: hide in price mode so pricing Q&A/estimate can scroll */}
+        {/* Bottom bar (Ask); shown once estimate exists or for all other modes */}
         <div className="px-4 py-3 border-t border-gray-200">
-          {mode === "price" ? null : (
+          {showAskBottom ? (
             <div className="relative w-full">
               <textarea
                 ref={inputRef}
@@ -778,7 +799,7 @@ ${outroBody}` : outroBody;
                 <ArrowUpCircleIcon className="w-8 h-8 text-red-600 hover:text-red-700" />
               </button>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </div>
