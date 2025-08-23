@@ -213,7 +213,7 @@ export default function AskAssistant() {
   const [priceQuestions, setPriceQuestions] = useState([]);
   const [priceAnswers, setPriceAnswers] = useState({});
   const [priceEstimate, setPriceEstimate] = useState(null);
-  const [priceBusy, setPriceBusy] = useState(false); // retained for logic
+  const [priceBusy, setPriceBusy] = useState(false);
   const [priceErr, setPriceErr] = useState("");
 
   // Agent for meeting tab
@@ -470,7 +470,7 @@ export default function AskAssistant() {
     setLoading(true);
     try {
       const res = await axios.post(`${apiBase}/demo-hal`, { bot_id: botId, user_question: outgoing }, { timeout: 30000 });
-      const data = res?.data || {};
+      const data = await res.json();
       const text = data?.response_text || "";
       const recSource = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
       const recs = (Array.isArray(recSource) ? recSource : []).map((it) => {
@@ -539,7 +539,6 @@ export default function AskAssistant() {
   const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
 
   return (
-    {/* MOBILE: full-screen; DESKTOP: centered card with fixed height */}
     <div className="w-screen min-h-[100dvh] h-[100dvh] bg-gray-100 p-0 md:p-2 md:flex md:items-center md:justify-center">
       <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-white border md:rounded-2xl md:shadow-xl flex flex-col overflow-hidden transition-all duration-300 rounded-none shadow-none">
         {/* Header */}
@@ -562,8 +561,6 @@ export default function AskAssistant() {
                 : "Ask the Assistant"}
             </div>
           </div>
-
-          {/* Tabs (centered on md+, horizontal scroll on mobile; no vertical scrollbar) */}
           <TabsNav mode={mode} tabs={tabs} />
         </div>
 
@@ -574,7 +571,7 @@ export default function AskAssistant() {
               <PriceMirror lines={mirrorLines.length ? mirrorLines : null} />
               {!mirrorLines.length ? (
                 <div className="text-black text-base font-bold whitespace-pre-line">
-                  {(priceUiCopy?.intro?.heading?.trim() ? `${priceUiCopy.intro.heading.trim()}\n\n` : "") +
+                  {((priceUiCopy?.intro?.heading || "").trim() ? `${priceUiCopy.intro.heading.trim()}\n\n` : "") +
                     (priceUiCopy?.intro?.body ||
                       "This tool provides a quick estimate based on your selections. Final pricing may vary by configuration, usage, and implementation.")}
                 </div>
@@ -587,7 +584,7 @@ export default function AskAssistant() {
                 <EstimateCard
                   estimate={priceEstimate}
                   outroText={
-                    (priceUiCopy?.outro?.heading?.trim ? `${priceUiCopy.outro.heading.trim()}\n\n` : "") +
+                    (((priceUiCopy?.outro?.heading || "")).trim() ? `${priceUiCopy.outro.heading.trim()}\n\n` : "") +
                     (priceUiCopy?.outro?.body || "")
                   }
                 />
@@ -695,7 +692,7 @@ export default function AskAssistant() {
                           key={it.id || it.url || it.title}
                           item={it}
                           onPick={(val) => {
-                            setSelected val;
+                            setSelected(val);  // fixed typo
                             requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
                           }}
                         />
