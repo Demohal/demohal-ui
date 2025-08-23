@@ -153,8 +153,14 @@ function QuestionBlock({ q, value, onPick }) {
 
 function TabsNav({ mode, tabs }) {
   return (
-    <div className="w-full flex justify-start md:justify-center overflow-x-auto border-b border-gray-300" data-patch="tabs-nav">
-      <nav className="inline-flex min-w-max items-center gap-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
+    <div
+      className="w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      data-patch="tabs-nav"
+    >
+      <nav
+        className="inline-flex min-w-max items-center gap-0.5 overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        role="tablist"
+      >
         {tabs.map((t) => {
           const active =
             (mode === "browse" && t.key === "demos") ||
@@ -162,13 +168,7 @@ function TabsNav({ mode, tabs }) {
             (mode === "price" && t.key === "price") ||
             (mode === "meeting" && t.key === "meeting");
           return (
-            <button
-              key={t.key}
-              onClick={t.onClick}
-              role="tab"
-              aria-selected={active}
-              className={active ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}
-            >
+            <button key={t.key} onClick={t.onClick} role="tab" aria-selected={active} className={active ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}>
               {t.label}
             </button>
           );
@@ -539,9 +539,9 @@ export default function AskAssistant() {
   const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
 
   return (
-    // MOBILE: full-screen; DESKTOP: centered card
+    {/* MOBILE: full-screen; DESKTOP: centered card with fixed height */}
     <div className="w-screen min-h-[100dvh] h-[100dvh] bg-gray-100 p-0 md:p-2 md:flex md:items-center md:justify-center">
-      <div className="w-full max-w-[720px] h-[100dvh] md:h-auto md:max-h-[90vh] bg-white border md:rounded-2xl md:shadow-xl flex flex-col overflow-hidden transition-all duration-300 rounded-none shadow-none">
+      <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-white border md:rounded-2xl md:shadow-xl flex flex-col overflow-hidden transition-all duration-300 rounded-none shadow-none">
         {/* Header */}
         <div className="bg-black text-white px-4 sm:px-6">
           <div className="flex items-center justify-between w-full py-3">
@@ -562,6 +562,8 @@ export default function AskAssistant() {
                 : "Ask the Assistant"}
             </div>
           </div>
+
+          {/* Tabs (centered on md+, horizontal scroll on mobile; no vertical scrollbar) */}
           <TabsNav mode={mode} tabs={tabs} />
         </div>
 
@@ -585,7 +587,7 @@ export default function AskAssistant() {
                 <EstimateCard
                   estimate={priceEstimate}
                   outroText={
-                    (priceUiCopy?.outro?.heading?.trim() ? `${priceUiCopy.outro.heading.trim()}\n\n` : "") +
+                    (priceUiCopy?.outro?.heading?.trim ? `${priceUiCopy.outro.heading.trim()}\n\n` : "") +
                     (priceUiCopy?.outro?.body || "")
                   }
                 />
@@ -693,7 +695,7 @@ export default function AskAssistant() {
                           key={it.id || it.url || it.title}
                           item={it}
                           onPick={(val) => {
-                            setSelected(val);
+                            setSelected val;
                             requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
                           }}
                         />
