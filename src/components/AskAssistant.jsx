@@ -290,15 +290,12 @@ export default function AskAssistant() {
     ).trim();
     const introText = heading ? `${heading}\n\n${body}` : body;
 
-    // Build mirror lines from answered questions using optional mirror_template
-    // Tokens supported: {{answer_label}} and {{answer_label_lower}}
+    // Build mirror lines from answered questions
     const norm = (s) => (s || "").toLowerCase().replace(/[\s-]+/g, "_");
-
     const mirrorLines = [];
     for (const q of priceQuestions) {
       const ans = priceAnswers[q.q_key];
       if (ans === undefined || ans === null || ans === "" || (Array.isArray(ans) && ans.length === 0)) continue;
-
       const opts = q.options || [];
       let label = "";
       if (q.type === "choice") {
@@ -352,10 +349,9 @@ export default function AskAssistant() {
     const q = nextPriceQuestion;
 
     if (!priceQuestions?.length) {
-      return null; // fully remove loading container (per requirement)
+      return null; // fully remove loading container
     }
 
-    // When all questions are answered, show the estimate card (no loading placeholder)
     if (!q) {
       const outro = priceUiCopy?.outro || {};
       const outroHeading = (outro.heading || "").trim();
@@ -414,7 +410,6 @@ export default function AskAssistant() {
     return (
       <div className="relative w-full">
         <div className="w-full border border-gray-400 rounded-lg px-4 py-3 text-base bg-white">
-          {/* QUESTION SIZE bumped one step up (sm → base) */}
           <div className="text-black font-bold text-base">{q.prompt}</div>
           {q.help_text ? <div className="text-xs text-black italic mt-1">{q.help_text}</div> : null}
 
@@ -547,7 +542,7 @@ export default function AskAssistant() {
 
   const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
 
-  // Tabs (Removed Finished)
+  // Tabs
   const tabs = [
     { key: "demos", label: "Browse Demos", onClick: openBrowse },
     { key: "docs", label: "Browse Documents", onClick: openBrowseDocs },
@@ -574,10 +569,10 @@ export default function AskAssistant() {
   const showAskBottom = mode !== "price" || !!priceEstimate;
 
   return (
-    <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-2 sm:p-0">
+    // MOBILE: full-screen container; DESKTOP: centered card
+    <div className="w-screen min-h-[100dvh] h-[100dvh] bg-gray-100 p-0 md:p-2 md:flex md:items-center md:justify-center">
       <div
-        className="border rounded-2xl shadow-xl bg-white flex flex-col overflow-hidden transition-all duration-300"
-        style={{ width: "min(720px, 100vw - 16px)", minHeight: 450, maxHeight: "90vh" }}
+        className="w-full max-w-[720px] h-[100dvh] md:h-auto md:max-h-[90vh] bg-white border md:rounded-2xl md:shadow-xl flex flex-col overflow-hidden transition-all duration-300 rounded-none shadow-none"
       >
         {/* Header */}
         <div className="bg-black text-white px-4 sm:px-6">
@@ -600,10 +595,10 @@ export default function AskAssistant() {
             </div>
           </div>
 
-          {/* Tabs (centered) */}
-          <div className="w-full flex justify-center border-b border-gray-300">
+          {/* Tabs (centered on md+, scrollable on mobile) */}
+          <div className="w-full flex justify-start md:justify-center overflow-x-auto border-b border-gray-300">
             <nav
-              className="inline-flex justify-center items-center gap-0.5 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              className="inline-flex min-w-max items-center gap-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               role="tablist"
             >
               {tabs.map((t) => {
@@ -663,12 +658,13 @@ export default function AskAssistant() {
             ) : selected ? (
               <div className="w-full flex-1 flex flex-col">
                 {mode === "docs" ? (
-                  <div className={`${isAnchored ? "sticky top-0 z-10" : ""} bg-white pt-2 pb-2`}>
+                  <div className={`${isAnchored ? "md:sticky top-0 z-10" : ""} bg-white pt-2 pb-2`}>
                     <iframe
-                      style={{ width: "100%", height: "70vh" }}
+                      className="w-full h-[65vh] md:h-[78vh] rounded-xl border border-gray-200 shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
                       src={selected.url}
                       title={selected.title}
-                      className="rounded-xl border border-gray-200 shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
+                      loading="lazy"
+                      referrerPolicy="strict-origin-when-cross-origin"
                     />
                   </div>
                 ) : (
@@ -809,8 +805,11 @@ export default function AskAssistant() {
           </div>
         )}
 
-        {/* Bottom bar (Ask); shown once estimate exists or for all other modes */}
-        <div className="px-4 py-3 border-t border-gray-200">
+        {/* Bottom bar (Ask); iOS safe-area friendly */}
+        <div
+          className="px-4 py-3 border-t border-gray-200"
+          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        >
           {showAskBottom ? (
             <div className="relative w-full">
               <textarea
@@ -831,7 +830,11 @@ export default function AskAssistant() {
                   }
                 }}
               />
-              <button aria-label="Send" onClick={sendMessage} className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95">
+              <button
+                aria-label="Send"
+                onClick={sendMessage}
+                className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
+              >
                 <ArrowUpCircleIcon className="w-8 h-8 text-red-600 hover:text-red-700" />
               </button>
             </div>
