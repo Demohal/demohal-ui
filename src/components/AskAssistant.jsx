@@ -644,7 +644,14 @@ export default function AskAssistant() {
           <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
             {mode === "meeting" ? (
               <div className="w-full flex-1 flex flex-col">
-                <div className={`${isAnchored ? "sticky top-0 z-10" : ""} bg-white pt-2 pb-2`}>
+                <div className="bg-white pt-2 pb-2">
+                  {/* NEW: schedule header helper text */}
+                  {agent?.schedule_header ? (
+                    <div className="mb-2 text-sm italic text-gray-600 whitespace-pre-line">
+                      {agent.schedule_header}
+                    </div>
+                  ) : null}
+
                   {agent?.calendar_link && (
                     <iframe
                       title="Schedule a Meeting"
@@ -658,7 +665,7 @@ export default function AskAssistant() {
             ) : selected ? (
               <div className="w-full flex-1 flex flex-col">
                 {mode === "docs" ? (
-                  <div className={`${isAnchored ? "md:sticky top-0 z-10" : ""} bg-white pt-2 pb-2`}>
+                  <div className="bg-white pt-2 pb-2">
                     <iframe
                       className="w-full h-[65vh] md:h-[78vh] rounded-xl border border-gray-200 shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
                       src={selected.url}
@@ -668,7 +675,7 @@ export default function AskAssistant() {
                     />
                   </div>
                 ) : (
-                  <div className={`${isAnchored ? "sticky top-0 z-10" : ""} bg-white pt-2 pb-2`}>
+                  <div className="bg-white pt-2 pb-2">
                     <iframe
                       style={{ width: "100%", aspectRatio: "471 / 272" }}
                       src={selected.url}
@@ -693,7 +700,6 @@ export default function AskAssistant() {
                           item={it}
                           onPick={(val) => {
                             setSelected(val);
-                            setIsAnchored(true);
                             requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
                           }}
                         />
@@ -717,7 +723,6 @@ export default function AskAssistant() {
                           item={it}
                           onPick={(val) => {
                             setSelected(val);
-                            setIsAnchored(true);
                             requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
                           }}
                         />
@@ -741,7 +746,6 @@ export default function AskAssistant() {
                           item={it}
                           onPick={(val) => {
                             setSelected(val);
-                            setIsAnchored(true);
                             requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
                           }}
                         />
@@ -793,7 +797,6 @@ export default function AskAssistant() {
                         item={it}
                         onPick={(val) => {
                           setSelected(val);
-                          setIsAnchored(true);
                           requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
                         }}
                       />
