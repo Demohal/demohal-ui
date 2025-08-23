@@ -446,15 +446,15 @@ export default function AskAssistant() {
   function PriceBottomBox() {
     const q = nextPriceQuestion;
 
-    if (!priceQuestions?.length) {
-      return (
-        <div className="relative w-full">
-          <div className="w-full border border-gray-400 rounded-lg px-4 py-2 text-base text-gray-600 bg-gray-50">
-            {priceErr || "Loading price estimator…"}
-          </div>
-        </div>
-      );
-    }
+    // if (!priceQuestions?.length) {
+      //return (
+        //<div className="relative w-full">
+          ///<div className="w-full border border-gray-400 rounded-lg px-4 py-2 text-base text-gray-600 bg-gray-50">
+            //{priceErr || "Loading price estimator…"}
+          //</div>
+        //</div>
+      //);
+    //}
 
     // When all questions are answered, show the estimate card here (end of the function)
     if (!q) {
