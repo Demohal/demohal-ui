@@ -490,6 +490,7 @@ export default function AskAssistant() {
         return { id, title, url, description, functions_text: it.functions_text ?? description, action: it.action ?? it.button_action ?? "demo" };
       });
 
+
       setResponseText(text);
       setLoading(false);
 
