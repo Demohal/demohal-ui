@@ -469,8 +469,13 @@ export default function AskAssistant() {
     setItems([]);
     setLoading(true);
     try {
-      const res = await axios.post(`${apiBase}/demo-hal`, { bot_id: botId, user_question: outgoing }, { timeout: 30000 });
-      const data = await res.json();
+      const res = await axios.post(
+        `${apiBase}/demo-hal`,
+        { bot_id: botId, user_question: outgoing },
+        { timeout: 30000 }
+      );
+      const data = res?.data || {}; // <-- axios: use res.data
+
       const text = data?.response_text || "";
       const recSource = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
       const recs = (Array.isArray(recSource) ? recSource : []).map((it) => {
@@ -484,8 +489,10 @@ export default function AskAssistant() {
         const description = it.description ?? it.summary ?? it.functions_text ?? "";
         return { id, title, url, description, functions_text: it.functions_text ?? description, action: it.action ?? it.button_action ?? "demo" };
       });
+
       setResponseText(text);
       setLoading(false);
+
       if (recs.length > 0) {
         setHelperPhase("header");
         setTimeout(() => {
@@ -496,6 +503,7 @@ export default function AskAssistant() {
         setHelperPhase("hidden");
         setItems([]);
       }
+
       requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
     } catch {
       setLoading(false);
@@ -584,7 +592,7 @@ export default function AskAssistant() {
                 <EstimateCard
                   estimate={priceEstimate}
                   outroText={
-                    (((priceUiCopy?.outro?.heading || "")).trim() ? `${priceUiCopy.outro.heading.trim()}\n\n` : "") +
+                    ((priceUiCopy?.outro?.heading || "").trim() ? `${priceUiCopy.outro.heading.trim()}\n\n` : "") +
                     (priceUiCopy?.outro?.body || "")
                   }
                 />
@@ -692,7 +700,7 @@ export default function AskAssistant() {
                           key={it.id || it.url || it.title}
                           item={it}
                           onPick={(val) => {
-                            setSelected(val);  // fixed typo
+                            setSelected(val);
                             requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
                           }}
                         />
