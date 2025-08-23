@@ -5,12 +5,56 @@ import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import logo from "../assets/logo.png";
 
-/* Browse/demo/document row button */
+/* =============================== *
+ *  PATCH-READY CONSTANTS & UTILS  *
+ * =============================== */
+
+// PATCH-ANCHOR: CLASS_CONSTANTS:BEGIN
+const UI = {
+  CARD: "border rounded-xl p-4 bg-white shadow",
+  BTN: "w-full text-center bg-gradient-to-b from-gray-600 to-gray-700 text-white rounded-xl border border-gray-700 px-4 py-3 shadow hover:from-gray-500 hover:to-gray-600 transition-colors",
+  FIELD: "w-full border border-gray-400 rounded-lg px-4 py-3 text-base bg-white",
+  TAB_ACTIVE:
+    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors rounded-t-md border border-b-0 bg-white text-black border-white -mb-px shadow-[0_2px_0_rgba(0,0,0,0.15)]",
+  TAB_INACTIVE:
+    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors rounded-t-md border border-b-0 bg-gradient-to-b from-gray-600 to-gray-700 text-white border-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]",
+};
+// PATCH-ANCHOR: CLASS_CONSTANTS:END
+
+// PATCH-ANCHOR: CFG_AND_UTILS:BEGIN
+const CFG = {
+  qKeys: {
+    product: ["edition", "editions", "product", "products", "industry_edition", "industry"],
+    tier: ["transactions", "transaction_volume", "volume", "tier", "tiers"],
+  },
+};
+
+const normKey = (s) => (s || "").toLowerCase().replace(/[\s-]+/g, "_");
+
+const classNames = (...xs) => xs.filter(Boolean).join(" ");
+
+function renderMirror(template, label) {
+  if (!template) return null;
+  return template
+    .split("{{answer_label_lower}}")
+    .join(label.toLowerCase())
+    .split("{{answer_label}}")
+    .join(label);
+}
+// PATCH-ANCHOR: CFG_AND_UTILS:END
+
+
+/* ========================== *
+ *  SMALL PATCHABLE COMPONENTS *
+ * ========================== */
+
+// PATCH-ANCHOR: RowButton:BEGIN
 function Row({ item, onPick }) {
   return (
     <button
+      data-patch="row-button"
       onClick={() => onPick(item)}
-      className="w-full text-center bg-gradient-to-b from-gray-600 to-gray-700 text-white rounded-xl border border-gray-700 px-4 py-3 shadow hover:from-gray-500 hover:to-gray-600 transition-colors"
+      className={UI.BTN}
       title={item.description || ""}
     >
       <div className="font-extrabold text-xs sm:text-sm">{item.title}</div>
@@ -22,26 +66,15 @@ function Row({ item, onPick }) {
     </button>
   );
 }
+// PATCH-ANCHOR: RowButton:END
 
-/* Small pill for standard features */
-function Pill({ children }) {
-  return (
-    <span className="inline-block text-xs border border-gray-300 rounded-full px-2 py-0.5 mr-1 mb-1">
-      {children}
-    </span>
-  );
-}
-
-/* Pricing options styled like Browse buttons (one per row, tooltip line under label) */
+// PATCH-ANCHOR: OptionButton:BEGIN
 function OptionButton({ opt, selected, onClick }) {
   return (
     <button
+      data-patch="option-button"
       onClick={() => onClick(opt)}
-      className={[
-        "w-full text-center bg-gradient-to-b from-gray-600 to-gray-700 text-white rounded-xl",
-        "border border-gray-700 px-4 py-3 shadow hover:from-gray-500 hover:to-gray-600 transition-colors",
-        selected ? "ring-2 ring-white/60" : "",
-      ].join(" ")}
+      className={classNames(UI.BTN, selected && "ring-2 ring-white/60")}
       title={opt.tooltip || ""}
     >
       <div className="font-extrabold text-xs sm:text-sm">{opt.label}</div>
@@ -51,6 +84,131 @@ function OptionButton({ opt, selected, onClick }) {
     </button>
   );
 }
+// PATCH-ANCHOR: OptionButton:END
+
+// PATCH-ANCHOR: PriceMirror:BEGIN
+function PriceMirror({ lines }) {
+  if (!lines?.length) return null;
+  return (
+    <div data-patch="price-mirror" className="mb-3">
+      {lines.map((ln, i) => (
+        <div key={i} className="text-base italic text-gray-700 whitespace-pre-line">
+          {ln}
+        </div>
+      ))}
+    </div>
+  );
+}
+// PATCH-ANCHOR: PriceMirror:END
+
+// PATCH-ANCHOR: EstimateCard:BEGIN
+function EstimateCard({ estimate, outroText }) {
+  if (!estimate) return null;
+  return (
+    <div data-patch="estimate-card">
+      <div className={UI.CARD}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-black font-bold text-lg">Your Estimate</div>
+          <div className="text-black font-bold text-lg">
+            {estimate.currency_code} {Number(estimate.total_min).toLocaleString()} – {estimate.currency_code}{" "}
+            {Number(estimate.total_max).toLocaleString()}
+          </div>
+        </div>
+        <div className="space-y-3">
+          {(estimate.line_items || []).map((li) => (
+            <div key={li.product.id} className="border rounded-lg p-3">
+              <div className="flex items-center justify-between">
+                <div className="text-black font-bold">{li.product.name}</div>
+                <div className="text-black font-bold text-lg">
+                  {li.currency_code} {Number(li.price_min).toLocaleString()} – {li.currency_code}{" "}
+                  {Number(li.price_max).toLocaleString()}
+                </div>
+              </div>
+              {Array.isArray(li.features) && li.features.length > 0 && (
+                <div className="mt-2">
+                  {li.features
+                    .filter((f) => f.is_standard)
+                    .map((f, idx) => (
+                      <span
+                        key={`${li.product.id}-${idx}`}
+                        className="inline-block text-xs border border-gray-300 rounded-full px-2 py-0.5 mr-1 mb-1"
+                      >
+                        {f.name}
+                      </span>
+                    ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {outroText ? (
+        <div className="mt-3 text-black text-base font-bold whitespace-pre-line">{outroText}</div>
+      ) : null}
+    </div>
+  );
+}
+// PATCH-ANCHOR: EstimateCard:END
+
+// PATCH-ANCHOR: QuestionBlock:BEGIN
+function QuestionBlock({ q, value, onPick }) {
+  return (
+    <div data-patch="question-block" className={UI.FIELD}>
+      <div className="text-black font-bold text-base">{q.prompt}</div>
+      {q.help_text ? <div className="text-xs text-black italic mt-1">{q.help_text}</div> : null}
+
+      {Array.isArray(q.options) && q.options.length > 0 ? (
+        <div className="mt-3 flex flex-col gap-3">
+          {q.options.map((opt) => (
+            <OptionButton
+              key={opt.key || opt.id}
+              opt={opt}
+              selected={q.type === "multi_choice" ? Array.isArray(value) && value.includes(opt.key) : value === opt.key}
+              onClick={() => onPick(q, opt)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 text-xs text-gray-600">No options available.</div>
+      )}
+    </div>
+  );
+}
+// PATCH-ANCHOR: QuestionBlock:END
+
+// PATCH-ANCHOR: TabsNav:BEGIN
+function TabsNav({ mode, tabs }) {
+  return (
+    <div className="w-full flex justify-start md:justify-center overflow-x-auto border-b border-gray-300" data-patch="tabs-nav">
+      <nav className="inline-flex min-w-max items-center gap-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
+        {tabs.map((t) => {
+          const active =
+            (mode === "browse" && t.key === "demos") ||
+            (mode === "docs" && t.key === "docs") ||
+            (mode === "price" && t.key === "price") ||
+            (mode === "meeting" && t.key === "meeting");
+        return (
+          <button
+            key={t.key}
+            onClick={t.onClick}
+            role="tab"
+            aria-selected={active}
+            className={active ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}
+          >
+            {t.label}
+          </button>
+        );})}
+      </nav>
+    </div>
+  );
+}
+// PATCH-ANCHOR: TabsNav:END
+
+
+/* =================== *
+ *  MAIN APP COMPONENT *
+ * =================== */
 
 export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
@@ -72,51 +230,45 @@ export default function AskAssistant() {
   const [browseDocs, setBrowseDocs] = useState([]);   // Browse docs
   const [selected, setSelected] = useState(null);
 
-  // Helper phasing for Ask: "hidden" → "header" → "buttons"
   const [helperPhase, setHelperPhase] = useState("hidden");
-
   const [isAnchored, setIsAnchored] = useState(false);
-  const contentRef = useRef(null);     // main scroll area for non-price modes
-  const priceScrollRef = useRef(null); // scroll area for price questions/estimate
 
-  // --------------------------
-  // Pricing state (isolated)
-  // --------------------------
+  const contentRef = useRef(null);
+  const priceScrollRef = useRef(null);
+
+  // Pricing state
   const [priceUiCopy, setPriceUiCopy] = useState({});
   const [priceQuestions, setPriceQuestions] = useState([]);
   const [priceAnswers, setPriceAnswers] = useState({});
   const [priceEstimate, setPriceEstimate] = useState(null);
-  const [priceBusy, setPriceBusy] = useState(false);
+  const [priceBusy, setPriceBusy] = useState(false); // (no spinner shown, but kept for logic)
   const [priceErr, setPriceErr] = useState("");
 
-  // Agent (for meeting tab)
+  // Agent for meeting tab
   const [agent, setAgent] = useState(null);
 
+  // Next required question
   const nextPriceQuestion = useMemo(() => {
     if (!priceQuestions?.length) return null;
     for (const q of priceQuestions) {
-      const val = priceAnswers[q.q_key];
+      const v = priceAnswers[q.q_key];
       const empty =
-        (q.type === "multi_choice" && Array.isArray(val) && val.length === 0) ||
-        val === undefined ||
-        val === null ||
-        val === "";
-      if (empty) return q;
+        (q.type === "multi_choice" && Array.isArray(v) && v.length === 0) || v === undefined || v === null || v === "";
+      if (empty && (q.required !== false)) return q;
     }
     return null;
   }, [priceQuestions, priceAnswers]);
 
   const haveAllEstimationAnswers = useMemo(() => {
     if (!priceQuestions?.length) return false;
-    const requiredEstimation = priceQuestions.filter((q) => q.group === "estimation" && q.required !== false);
-    if (requiredEstimation.length === 0) return false;
-    return requiredEstimation.every((q) => {
+    const req = priceQuestions.filter((q) => q.group === "estimation" && q.required !== false);
+    return req.length > 0 && req.every((q) => {
       const v = priceAnswers[q.q_key];
       return !(v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0));
     });
   }, [priceQuestions, priceAnswers]);
 
-  // Autosize the question box (Ask tab)
+  // Autosize ask box
   const inputRef = useRef(null);
   useEffect(() => {
     const el = inputRef.current;
@@ -125,27 +277,24 @@ export default function AskAssistant() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  // Resolve alias — support alias and alais; default to demo
+  // Resolve alias — allow typo ?alais=
   const alias = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     return (qs.get("alias") || qs.get("alais") || "demo").trim();
   }, []);
 
-  /* Utility: extract bot id from various shapes */
-  function extractBotId(payload) {
+  const extractBotId = (payload) => {
     if (!payload || typeof payload !== "object") return null;
-    if (payload.bot && payload.bot.id) return payload.bot.id;
+    if (payload.bot?.id) return payload.bot.id;
     if (payload.id) return payload.id;
-    if (payload.data && payload.data.id) return payload.data.id;
-    if (Array.isArray(payload.data) && payload.data[0] && payload.data[0].id) return payload.data[0].id;
-    if (Array.isArray(payload.rows) && payload.rows[0] && payload.rows[0].id) return payload.rows[0].id;
+    if (payload.data?.id) return payload.data.id;
+    if (Array.isArray(payload.data) && payload.data[0]?.id) return payload.data[0].id;
+    if (Array.isArray(payload.rows) && payload.rows[0]?.id) return payload.rows[0].id;
     return null;
-  }
+  };
 
-  /* Normalize items for list rendering */
-  function normalizeList(arr) {
-    if (!Array.isArray(arr)) return [];
-    return arr
+  const normalizeList = (arr) =>
+    (Array.isArray(arr) ? arr : [])
       .map((it) => {
         const id = it.id ?? it.button_id ?? it.value ?? it.url ?? it.title;
         const title =
@@ -166,7 +315,6 @@ export default function AskAssistant() {
         };
       })
       .filter((x) => x.title && x.url);
-  }
 
   // Load bot by alias
   useEffect(() => {
@@ -183,40 +331,31 @@ export default function AskAssistant() {
         } else if (!res.ok || data?.ok === false) {
           setFatal("Invalid or inactive alias.");
         } else {
-          console.warn("/bot-by-alias returned unexpected shape", data);
           setBotId("");
         }
-      } catch (e) {
+      } catch {
         if (!cancel) setFatal("Invalid or inactive alias.");
       }
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => { cancel = true; };
   }, [alias, apiBase]);
 
-  // Release anchor on scroll (video/doc view)
+  // Release video/doc stickiness on scroll
   useEffect(() => {
     const el = contentRef.current;
     if (!el || !selected) return;
-    const onScroll = () => {
-      if (el.scrollTop > 8 && isAnchored) setIsAnchored(false);
-    };
+    const onScroll = () => { if (el.scrollTop > 8 && isAnchored) setIsAnchored(false); };
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
   }, [selected, isAnchored]);
 
-  // --------------------------
-  // Pricing: load questions
-  // --------------------------
+  // Load pricing questions
   useEffect(() => {
     if (mode !== "price" || !botId) return;
     let cancel = false;
     (async () => {
       try {
-        setPriceErr("");
-        setPriceEstimate(null);
-        setPriceAnswers({});
+        setPriceErr(""); setPriceEstimate(null); setPriceAnswers({});
         const res = await fetch(`${apiBase}/pricing/questions?bot_id=${encodeURIComponent(botId)}`);
         const data = await res.json();
         if (cancel) return;
@@ -224,22 +363,17 @@ export default function AskAssistant() {
         setPriceUiCopy(data.ui_copy || {});
         setPriceQuestions(Array.isArray(data.questions) ? data.questions : []);
         requestAnimationFrame(() => priceScrollRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-      } catch (e) {
+      } catch {
         if (!cancel) setPriceErr("Unable to load price estimator.");
       }
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => { cancel = true; };
   }, [mode, botId, apiBase]);
 
-  // Pricing: compute estimate when ready
+  // Compute estimate when ready
   useEffect(() => {
     if (mode !== "price" || !botId) return;
-    if (!haveAllEstimationAnswers) {
-      setPriceEstimate(null);
-      return;
-    }
+    if (!haveAllEstimationAnswers) { setPriceEstimate(null); return; }
     let cancel = false;
     (async () => {
       try {
@@ -253,18 +387,52 @@ export default function AskAssistant() {
         if (cancel) return;
         if (!data?.ok) throw new Error(data?.error || "Failed to compute estimate");
         setPriceEstimate(data);
-      } catch (e) {
+      } catch {
         if (!cancel) setPriceErr("Unable to compute estimate.");
       } finally {
         if (!cancel) setPriceBusy(false);
       }
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => { cancel = true; };
   }, [mode, botId, apiBase, haveAllEstimationAnswers, priceAnswers]);
 
-  /* Handle clicking an option */
+  // Meeting: load agent
+  async function openMeeting() {
+    if (!botId) return;
+    setSelected(null); setMode("meeting");
+    try {
+      const res = await fetch(`${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`);
+      const data = await res.json();
+      setAgent(data?.ok ? data.agent : null);
+      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+    } catch { setAgent(null); }
+  }
+
+  // Handlers
+  async function openBrowse() {
+    if (!botId) return;
+    setMode("browse"); setSelected(null);
+    try {
+      const res = await fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`);
+      const data = await res.json();
+      const src = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
+      setBrowseItems(normalizeList(src));
+      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+    } catch { setBrowseItems([]); }
+  }
+
+  async function openBrowseDocs() {
+    if (!botId) return;
+    setMode("docs"); setSelected(null);
+    try {
+      const res = await fetch(`${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`);
+      const data = await res.json();
+      const src = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
+      setBrowseDocs(normalizeList(src));
+      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+    } catch { setBrowseDocs([]); }
+  }
+
   function handlePickOption(q, opt) {
     setPriceAnswers((prev) => {
       if (q.type === "multi_choice") {
@@ -272,263 +440,32 @@ export default function AskAssistant() {
         const exists = curr.includes(opt.key);
         const next = exists ? curr.filter((k) => k !== opt.key) : [...curr, opt.key];
         return { ...prev, [q.q_key]: next };
-      } else {
-        return { ...prev, [q.q_key]: opt.key };
       }
+      return { ...prev, [q.q_key]: opt.key };
     });
   }
 
-  // --------------------------
-  // Price panels
-  // --------------------------
-  function PriceTop() {
-    const intro = priceUiCopy?.intro || {};
-    const heading = (intro.heading || "").trim();
-    const body = (
-      intro.body ||
-      "This tool provides a quick estimate based on your selections. Final pricing may vary by configuration, usage, and implementation."
-    ).trim();
-    const introText = heading ? `${heading}\n\n${body}` : body;
-
-    // Build mirror lines from answered questions
-    const norm = (s) => (s || "").toLowerCase().replace(/[\s-]+/g, "_");
-    const mirrorLines = [];
-    for (const q of priceQuestions) {
-      const ans = priceAnswers[q.q_key];
-      if (ans === undefined || ans === null || ans === "" || (Array.isArray(ans) && ans.length === 0)) continue;
-      const opts = q.options || [];
-      let label = "";
-      if (q.type === "choice") {
-        const o = opts.find((o) => o.key === ans);
-        label = o?.label || String(ans);
-      } else if (q.type === "multi_choice") {
-        const picked = Array.isArray(ans) ? ans : [];
-        label = opts.filter((o) => picked.includes(o.key)).map((o) => o.label).join(", ");
-      } else {
-        label = String(ans);
-      }
-      if (!label) continue;
-
-      let line = "";
-      if (q.mirror_template) {
-        line = (q.mirror_template + "")
-          .split("{{answer_label_lower}}").join(label.toLowerCase())
-          .split("{{answer_label}}").join(label);
-      } else {
-        if (["edition","editions","product","products","industry_edition","industry"].includes(norm(q.q_key))) {
-          line = `You have selected ${label}.`;
-        } else if (["transactions","transaction_volume","volume","tier","tiers"].includes(norm(q.q_key))) {
-          line = `You stated that you execute ${label.toLowerCase()} commercial transactions per month.`;
-        }
-      }
-      if (line) mirrorLines.push(line);
-    }
-
-    if (mirrorLines.length > 0) {
-      return (
-        <div className="w-full">
-          <div className="mb-3">
-            {mirrorLines.map((ln, idx) => (
-              <div key={idx} className="text-base italic text-gray-700 whitespace-pre-line">{ln}</div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="w-full">
-        <div className="mb-3">
-          <div className="text-black text-base font-bold whitespace-pre-line">{introText}</div>
-        </div>
-      </div>
-    );
-  }
-
-  function PriceBottomBox() {
-    const q = nextPriceQuestion;
-
-    if (!priceQuestions?.length) {
-      return null; // fully remove loading container
-    }
-
-    if (!q) {
-      const outro = priceUiCopy?.outro || {};
-      const outroHeading = (outro.heading || "").trim();
-      const outroBody = (outro.body || "").trim();
-      const outroText = outroHeading ? `${outroHeading}\n\n${outroBody}` : outroBody;
-
-      return (
-        <div className="relative w-full">
-          {priceEstimate ? (
-            <>
-              <div className="border rounded-xl p-4 bg-white shadow">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-black font-bold text-lg">Your Estimate</div>
-                  <div className="text-black font-bold text-lg">
-                    {priceEstimate.currency_code} {priceEstimate.total_min.toLocaleString()} –{" "}
-                    {priceEstimate.currency_code} {priceEstimate.total_max.toLocaleString()}
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  {Array.isArray(priceEstimate.line_items) &&
-                    priceEstimate.line_items.map((li) => (
-                      <div key={li.product.id} className="border rounded-lg p-3">
-                        <div className="flex items-center justify-between">
-                          <div className="text-black font-bold">{li.product.name}</div>
-                          <div className="text-black font-bold text-lg">
-                            {li.currency_code} {li.price_min.toLocaleString()} – {li.currency_code}{" "}
-                            {li.price_max.toLocaleString()}
-                          </div>
-                        </div>
-                        {Array.isArray(li.features) && li.features.length > 0 && (
-                          <div className="mt-2">
-                            {li.features
-                              .filter((f) => f.is_standard)
-                              .map((f, idx) => (
-                                <Pill key={`${li.product.id}-${idx}`}>{f.name}</Pill>
-                              ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                </div>
-              </div>
-
-              {outroText ? (
-                <div className="mt-3 text-black text-base font-bold whitespace-pre-line">{outroText}</div>
-              ) : null}
-            </>
-          ) : null}
-        </div>
-      );
-    }
-
-    const currentVal = priceAnswers[q.q_key];
-
-    return (
-      <div className="relative w-full">
-        <div className="w-full border border-gray-400 rounded-lg px-4 py-3 text-base bg-white">
-          <div className="text-black font-bold text-base">{q.prompt}</div>
-          {q.help_text ? <div className="text-xs text-black italic mt-1">{q.help_text}</div> : null}
-
-          {Array.isArray(q.options) && q.options.length > 0 ? (
-            <div className="mt-3 flex flex-col gap-3">
-              {q.options.map((opt) => (
-                <OptionButton
-                  key={opt.key || opt.id}
-                  opt={opt}
-                  selected={
-                    q.type === "multi_choice"
-                      ? Array.isArray(currentVal) && currentVal.includes(opt.key)
-                      : currentVal === opt.key
-                  }
-                  onClick={handlePickOption.bind(null, q)}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="mt-3 text-xs text-gray-600">No options available.</div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // --------------------------
-  // Core Ask flow
-  // --------------------------
   async function sendMessage() {
     if (!input.trim() || !botId) return;
     const outgoing = input.trim();
-
-    setMode("ask");
-    setLastQuestion(outgoing);
-    setInput("");
-    setSelected(null);
-    setIsAnchored(false);
-    setResponseText("");
-    setHelperPhase("hidden");
-    setItems([]);
-
+    setMode("ask"); setLastQuestion(outgoing); setInput("");
+    setSelected(null); setIsAnchored(false);
+    setResponseText(""); setHelperPhase("hidden"); setItems([]);
     setLoading(true);
-
     try {
-      const res = await axios.post(
-        `${apiBase}/demo-hal`,
-        { bot_id: botId, user_question: outgoing },
-        { timeout: 30000 }
-      );
+      const res = await axios.post(`${apiBase}/demo-hal`, { bot_id: botId, user_question: outgoing }, { timeout: 30000 });
       const data = res?.data || {};
       const text = data?.response_text || "";
       const recSource = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
       const recs = normalizeList(recSource);
-
-      setResponseText(text);
-      setLoading(false);
-
+      setResponseText(text); setLoading(false);
       if (recs.length > 0) {
         setHelperPhase("header");
-        setTimeout(() => {
-          setItems(recs);
-          setHelperPhase("buttons");
-        }, 60);
-      } else {
-        setHelperPhase("hidden");
-        setItems([]);
-      }
-
-      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-    } catch (e) {
-      setLoading(false);
-      setResponseText("Sorry—something went wrong.");
-      setHelperPhase("hidden");
-      setItems([]);
-    }
-  }
-
-  async function openBrowse() {
-    if (!botId) return;
-    setMode("browse");
-    setSelected(null);
-    try {
-      const res = await fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`);
-      const data = await res.json();
-      const src = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
-      setBrowseItems(normalizeList(src));
+        setTimeout(() => { setItems(recs); setHelperPhase("buttons"); }, 60);
+      } else { setHelperPhase("hidden"); setItems([]); }
       requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
     } catch {
-      setBrowseItems([]);
-    }
-  }
-
-  async function openBrowseDocs() {
-    if (!botId) return;
-    setMode("docs");
-    setSelected(null);
-    try {
-      const res = await fetch(`${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`);
-      const data = await res.json();
-      const src = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
-      setBrowseDocs(normalizeList(src));
-      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-    } catch {
-      setBrowseDocs([]);
-    }
-  }
-
-  async function openMeeting() {
-    if (!botId) return;
-    setSelected(null);
-    setMode("meeting");
-    try {
-      const res = await fetch(`${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`);
-      const data = await res.json();
-      setAgent(data?.ok ? data.agent : null);
-      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-    } catch {
-      setAgent(null);
+      setLoading(false); setResponseText("Sorry—something went wrong."); setHelperPhase("hidden"); setItems([]);
     }
   }
 
@@ -542,7 +479,6 @@ export default function AskAssistant() {
 
   const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
 
-  // Tabs
   const tabs = [
     { key: "demos", label: "Browse Demos", onClick: openBrowse },
     { key: "docs", label: "Browse Documents", onClick: openBrowseDocs },
@@ -565,11 +501,45 @@ export default function AskAssistant() {
     );
   }
 
-  // Show standard Ask bottom when not in price OR once estimate exists
+  // show Ask bottom in every mode except price before estimate exists
   const showAskBottom = mode !== "price" || !!priceEstimate;
 
+  // Build mirror lines (PriceTop)
+  const mirrorLines = useMemo(() => {
+    if (!priceQuestions?.length) return [];
+    const lines = [];
+    for (const q of priceQuestions) {
+      const ans = priceAnswers[q.q_key];
+      if (ans === undefined || ans === null || ans === "" || (Array.isArray(ans) && ans.length === 0)) continue;
+      const opts = q.options || [];
+      let label = "";
+      if (q.type === "choice") {
+        const o = opts.find((o) => o.key === ans);
+        label = o?.label || String(ans);
+      } else if (q.type === "multi_choice") {
+        const picked = Array.isArray(ans) ? ans : [];
+        label = opts.filter((o) => picked.includes(o.key)).map((o) => o.label).join(", ");
+      } else {
+        label = String(ans);
+      }
+      if (!label) continue;
+
+      const key = normKey(q.q_key);
+      let line = null;
+      if (q.mirror_template) {
+        line = renderMirror(q.mirror_template, label);
+      } else if (CFG.qKeys.product.includes(key)) {
+        line = `You have selected ${label}.`;
+      } else if (CFG.qKeys.tier.includes(key)) {
+        line = `You stated that you execute ${label.toLowerCase()} commercial transactions per month.`;
+      }
+      if (line) lines.push(line);
+    }
+    return lines;
+  }, [priceQuestions, priceAnswers]);
+
   return (
-    // MOBILE: full-screen container; DESKTOP: centered card
+    // MOBILE: full-screen; DESKTOP: centered card
     <div className="w-screen min-h-[100dvh] h-[100dvh] bg-gray-100 p-0 md:p-2 md:flex md:items-center md:justify-center">
       <div
         className="w-full max-w-[720px] h-[100dvh] md:h-auto md:max-h-[90vh] bg-white border md:rounded-2xl md:shadow-xl flex flex-col overflow-hidden transition-all duration-300 rounded-none shadow-none"
@@ -595,61 +565,51 @@ export default function AskAssistant() {
             </div>
           </div>
 
-          {/* Tabs (centered on md+, scrollable on mobile) */}
-          <div className="w-full flex justify-start md:justify-center overflow-x-auto border-b border-gray-300">
-            <nav
-              className="inline-flex min-w-max items-center gap-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-              role="tablist"
-            >
-              {tabs.map((t) => {
-                const active =
-                  (mode === "browse" && t.key === "demos") ||
-                  (mode === "docs" && t.key === "docs") ||
-                  (mode === "price" && t.key === "price") ||
-                  (mode === "meeting" && t.key === "meeting");
-                return (
-                  <button
-                    key={t.key}
-                    onClick={t.onClick}
-                    role="tab"
-                    aria-selected={active}
-                    className={[
-                      "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors",
-                      "rounded-t-md border border-b-0",
-                      active
-                        ? "bg-white text-black border-white -mb-px shadow-[0_2px_0_rgba(0,0,0,0.15)]"
-                        : "bg-gradient-to-b from-gray-600 to-gray-700 text-white border-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]",
-                    ].join(" ")}
-                  >
-                    {t.label}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
+          {/* PATCH-ANCHOR: TABS_NAV:BEGIN */}
+          <TabsNav mode={mode} tabs={tabs} />
+          {/* PATCH-ANCHOR: TABS_NAV:END */}
         </div>
 
-        {/* PRICE MODE: anchored header + its own scroll area */}
+        {/* Content */}
         {mode === "price" ? (
           <>
-            <div className="px-6 pt-3 pb-2">
-              <PriceTop />
+            <div className="px-6 pt-3 pb-2" data-patch="price-intro">
+              {/* PATCH-ANCHOR: PRICE_INTRO:BEGIN */}
+              <PriceMirror lines={mirrorLines.length ? mirrorLines : null} />
+              {!mirrorLines.length ? (
+                <div className="text-black text-base font-bold whitespace-pre-line">
+                  {((priceUiCopy?.intro?.heading || "").trim()
+                    ? `${priceUiCopy?.intro?.heading?.trim()}\n\n`
+                    : "") + (priceUiCopy?.intro?.body || "This tool provides a quick estimate based on your selections. Final pricing may vary by configuration, usage, and implementation.")}
+                </div>
+              ) : null}
+              {/* PATCH-ANCHOR: PRICE_INTRO:END */}
             </div>
             <div ref={priceScrollRef} className="px-6 pt-0 pb-6 flex-1 overflow-y-auto">
-              <PriceBottomBox />
+              {/* PATCH-ANCHOR: PRICE_QUESTION_OR_ESTIMATE:BEGIN */}
+              {!priceQuestions?.length ? null : nextPriceQuestion ? (
+                <QuestionBlock q={nextPriceQuestion} value={priceAnswers[nextPriceQuestion.q_key]} onPick={handlePickOption} />
+              ) : (
+                <EstimateCard
+                  estimate={priceEstimate}
+                  outroText={
+                    ((priceUiCopy?.outro?.heading || "").trim()
+                      ? `${priceUiCopy?.outro?.heading?.trim()}\n\n`
+                      : "") + (priceUiCopy?.outro?.body || "")
+                  }
+                />
+              )}
+              {/* PATCH-ANCHOR: PRICE_QUESTION_OR_ESTIMATE:END */}
             </div>
           </>
         ) : (
-          /* Other modes use a single scrolling content area */
           <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
             {mode === "meeting" ? (
-              <div className="w-full flex-1 flex flex-col">
+              <div className="w-full flex-1 flex flex-col" data-patch="meeting-pane">
                 <div className="bg-white pt-2 pb-2">
-                  {/* NEW: schedule header helper text */}
+                  {/* helper-style schedule header */}
                   {agent?.schedule_header ? (
-                    <div className="mb-2 text-sm italic text-gray-600 whitespace-pre-line">
-                      {agent.schedule_header}
-                    </div>
+                    <div className="mb-2 text-sm italic text-gray-600 whitespace-pre-line">{agent.schedule_header}</div>
                   ) : null}
 
                   {agent?.calendar_link && (
@@ -812,6 +772,7 @@ export default function AskAssistant() {
         <div
           className="px-4 py-3 border-t border-gray-200"
           style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+          data-patch="ask-bottom-bar"
         >
           {showAskBottom ? (
             <div className="relative w-full">
