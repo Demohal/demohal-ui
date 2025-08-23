@@ -9,7 +9,6 @@ import logo from "../assets/logo.png";
  *  PATCH-READY CONSTANTS & UTILS  *
  * =============================== */
 
-// PATCH-ANCHOR: CLASS_CONSTANTS:BEGIN
 const UI = {
   CARD: "border rounded-xl p-4 bg-white shadow",
   BTN: "w-full text-center bg-gradient-to-b from-gray-600 to-gray-700 text-white rounded-xl border border-gray-700 px-4 py-3 shadow hover:from-gray-500 hover:to-gray-600 transition-colors",
@@ -19,9 +18,7 @@ const UI = {
   TAB_INACTIVE:
     "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors rounded-t-md border border-b-0 bg-gradient-to-b from-gray-600 to-gray-700 text-white border-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]",
 };
-// PATCH-ANCHOR: CLASS_CONSTANTS:END
 
-// PATCH-ANCHOR: CFG_AND_UTILS:BEGIN
 const CFG = {
   qKeys: {
     product: ["edition", "editions", "product", "products", "industry_edition", "industry"],
@@ -30,9 +27,7 @@ const CFG = {
 };
 
 const normKey = (s) => (s || "").toLowerCase().replace(/[\s-]+/g, "_");
-
 const classNames = (...xs) => xs.filter(Boolean).join(" ");
-
 function renderMirror(template, label) {
   if (!template) return null;
   return template
@@ -41,22 +36,14 @@ function renderMirror(template, label) {
     .split("{{answer_label}}")
     .join(label);
 }
-// PATCH-ANCHOR: CFG_AND_UTILS:END
-
 
 /* ========================== *
  *  SMALL PATCHABLE COMPONENTS *
  * ========================== */
 
-// PATCH-ANCHOR: RowButton:BEGIN
 function Row({ item, onPick }) {
   return (
-    <button
-      data-patch="row-button"
-      onClick={() => onPick(item)}
-      className={UI.BTN}
-      title={item.description || ""}
-    >
+    <button data-patch="row-button" onClick={() => onPick(item)} className={UI.BTN} title={item.description || ""}>
       <div className="font-extrabold text-xs sm:text-sm">{item.title}</div>
       {item.description ? (
         <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">{item.description}</div>
@@ -66,9 +53,7 @@ function Row({ item, onPick }) {
     </button>
   );
 }
-// PATCH-ANCHOR: RowButton:END
 
-// PATCH-ANCHOR: OptionButton:BEGIN
 function OptionButton({ opt, selected, onClick }) {
   return (
     <button
@@ -78,15 +63,11 @@ function OptionButton({ opt, selected, onClick }) {
       title={opt.tooltip || ""}
     >
       <div className="font-extrabold text-xs sm:text-sm">{opt.label}</div>
-      {opt.tooltip ? (
-        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">{opt.tooltip}</div>
-      ) : null}
+      {opt.tooltip ? <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">{opt.tooltip}</div> : null}
     </button>
   );
 }
-// PATCH-ANCHOR: OptionButton:END
 
-// PATCH-ANCHOR: PriceMirror:BEGIN
 function PriceMirror({ lines }) {
   if (!lines?.length) return null;
   return (
@@ -99,9 +80,7 @@ function PriceMirror({ lines }) {
     </div>
   );
 }
-// PATCH-ANCHOR: PriceMirror:END
 
-// PATCH-ANCHOR: EstimateCard:BEGIN
 function EstimateCard({ estimate, outroText }) {
   if (!estimate) return null;
   return (
@@ -143,15 +122,11 @@ function EstimateCard({ estimate, outroText }) {
         </div>
       </div>
 
-      {outroText ? (
-        <div className="mt-3 text-black text-base font-bold whitespace-pre-line">{outroText}</div>
-      ) : null}
+      {outroText ? <div className="mt-3 text-black text-base font-bold whitespace-pre-line">{outroText}</div> : null}
     </div>
   );
 }
-// PATCH-ANCHOR: EstimateCard:END
 
-// PATCH-ANCHOR: QuestionBlock:BEGIN
 function QuestionBlock({ q, value, onPick }) {
   return (
     <div data-patch="question-block" className={UI.FIELD}>
@@ -175,9 +150,7 @@ function QuestionBlock({ q, value, onPick }) {
     </div>
   );
 }
-// PATCH-ANCHOR: QuestionBlock:END
 
-// PATCH-ANCHOR: TabsNav:BEGIN
 function TabsNav({ mode, tabs }) {
   return (
     <div className="w-full flex justify-start md:justify-center overflow-x-auto border-b border-gray-300" data-patch="tabs-nav">
@@ -188,23 +161,22 @@ function TabsNav({ mode, tabs }) {
             (mode === "docs" && t.key === "docs") ||
             (mode === "price" && t.key === "price") ||
             (mode === "meeting" && t.key === "meeting");
-        return (
-          <button
-            key={t.key}
-            onClick={t.onClick}
-            role="tab"
-            aria-selected={active}
-            className={active ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}
-          >
-            {t.label}
-          </button>
-        );})}
+          return (
+            <button
+              key={t.key}
+              onClick={t.onClick}
+              role="tab"
+              aria-selected={active}
+              className={active ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}
+            >
+              {t.label}
+            </button>
+          );
+        })}
       </nav>
     </div>
   );
 }
-// PATCH-ANCHOR: TabsNav:END
-
 
 /* =================== *
  *  MAIN APP COMPONENT *
@@ -212,7 +184,6 @@ function TabsNav({ mode, tabs }) {
 
 export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
-
   const [botId, setBotId] = useState("");
   const [fatal, setFatal] = useState("");
 
@@ -225,9 +196,9 @@ export default function AskAssistant() {
   );
   const [loading, setLoading] = useState(false);
 
-  const [items, setItems] = useState([]);             // Ask recommendations
-  const [browseItems, setBrowseItems] = useState([]); // Browse demos
-  const [browseDocs, setBrowseDocs] = useState([]);   // Browse docs
+  const [items, setItems] = useState([]); // Ask suggestions
+  const [browseItems, setBrowseItems] = useState([]); // Demos
+  const [browseDocs, setBrowseDocs] = useState([]); // Docs
   const [selected, setSelected] = useState(null);
 
   const [helperPhase, setHelperPhase] = useState("hidden");
@@ -235,88 +206,26 @@ export default function AskAssistant() {
 
   const contentRef = useRef(null);
   const priceScrollRef = useRef(null);
+  const inputRef = useRef(null);
 
   // Pricing state
   const [priceUiCopy, setPriceUiCopy] = useState({});
   const [priceQuestions, setPriceQuestions] = useState([]);
   const [priceAnswers, setPriceAnswers] = useState({});
   const [priceEstimate, setPriceEstimate] = useState(null);
-  const [priceBusy, setPriceBusy] = useState(false); // (no spinner shown, but kept for logic)
+  const [priceBusy, setPriceBusy] = useState(false); // retained for logic
   const [priceErr, setPriceErr] = useState("");
 
   // Agent for meeting tab
   const [agent, setAgent] = useState(null);
 
-  // Next required question
-  const nextPriceQuestion = useMemo(() => {
-    if (!priceQuestions?.length) return null;
-    for (const q of priceQuestions) {
-      const v = priceAnswers[q.q_key];
-      const empty =
-        (q.type === "multi_choice" && Array.isArray(v) && v.length === 0) || v === undefined || v === null || v === "";
-      if (empty && (q.required !== false)) return q;
-    }
-    return null;
-  }, [priceQuestions, priceAnswers]);
-
-  const haveAllEstimationAnswers = useMemo(() => {
-    if (!priceQuestions?.length) return false;
-    const req = priceQuestions.filter((q) => q.group === "estimation" && q.required !== false);
-    return req.length > 0 && req.every((q) => {
-      const v = priceAnswers[q.q_key];
-      return !(v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0));
-    });
-  }, [priceQuestions, priceAnswers]);
-
-  // Autosize ask box
-  const inputRef = useRef(null);
-  useEffect(() => {
-    const el = inputRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [input]);
-
-  // Resolve alias — allow typo ?alais=
+  // Compute alias
   const alias = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     return (qs.get("alias") || qs.get("alais") || "demo").trim();
   }, []);
 
-  const extractBotId = (payload) => {
-    if (!payload || typeof payload !== "object") return null;
-    if (payload.bot?.id) return payload.bot.id;
-    if (payload.id) return payload.id;
-    if (payload.data?.id) return payload.data.id;
-    if (Array.isArray(payload.data) && payload.data[0]?.id) return payload.data[0].id;
-    if (Array.isArray(payload.rows) && payload.rows[0]?.id) return payload.rows[0].id;
-    return null;
-  };
-
-  const normalizeList = (arr) =>
-    (Array.isArray(arr) ? arr : [])
-      .map((it) => {
-        const id = it.id ?? it.button_id ?? it.value ?? it.url ?? it.title;
-        const title =
-          it.title ??
-          it.button_title ??
-          (typeof it.label === "string" ? it.label.replace(/^Watch the \"|\" demo$/g, "") : it.label) ??
-          "";
-        const url = it.url ?? it.value ?? it.button_value ?? "";
-        const description = it.description ?? it.summary ?? it.functions_text ?? "";
-        return {
-          id,
-          title,
-          url,
-          description,
-          functions_text: it.functions_text ?? description,
-          action: it.action ?? it.button_action ?? "demo",
-          label: it.label ?? it.button_label ?? (title ? `Watch the "${title}" demo` : ""),
-        };
-      })
-      .filter((x) => x.title && x.url);
-
-  // Load bot by alias
+  // Bot id resolver
   useEffect(() => {
     let cancel = false;
     (async () => {
@@ -324,7 +233,13 @@ export default function AskAssistant() {
         const res = await fetch(`${apiBase}/bot-by-alias?alias=${encodeURIComponent(alias)}`);
         const data = await res.json();
         if (cancel) return;
-        const id = extractBotId(data);
+        const id =
+          data?.bot?.id ||
+          data?.id ||
+          data?.data?.id ||
+          (Array.isArray(data?.data) && data?.data[0]?.id) ||
+          (Array.isArray(data?.rows) && data?.rows[0]?.id) ||
+          "";
         if (id) {
           setBotId(id);
           setFatal("");
@@ -337,25 +252,39 @@ export default function AskAssistant() {
         if (!cancel) setFatal("Invalid or inactive alias.");
       }
     })();
-    return () => { cancel = true; };
+    return () => {
+      cancel = true;
+    };
   }, [alias, apiBase]);
 
-  // Release video/doc stickiness on scroll
+  // Autosize ask box
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [input]);
+
+  // Release video/doc sticky when scrolling
   useEffect(() => {
     const el = contentRef.current;
     if (!el || !selected) return;
-    const onScroll = () => { if (el.scrollTop > 8 && isAnchored) setIsAnchored(false); };
+    const onScroll = () => {
+      if (el.scrollTop > 8 && isAnchored) setIsAnchored(false);
+    };
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
   }, [selected, isAnchored]);
 
-  // Load pricing questions
+  // Load pricing questions (entering price tab)
   useEffect(() => {
     if (mode !== "price" || !botId) return;
     let cancel = false;
     (async () => {
       try {
-        setPriceErr(""); setPriceEstimate(null); setPriceAnswers({});
+        setPriceErr("");
+        setPriceEstimate(null);
+        setPriceAnswers({});
         const res = await fetch(`${apiBase}/pricing/questions?bot_id=${encodeURIComponent(botId)}`);
         const data = await res.json();
         if (cancel) return;
@@ -367,13 +296,27 @@ export default function AskAssistant() {
         if (!cancel) setPriceErr("Unable to load price estimator.");
       }
     })();
-    return () => { cancel = true; };
+    return () => {
+      cancel = true;
+    };
   }, [mode, botId, apiBase]);
 
-  // Compute estimate when ready
+  // Compute estimate when inputs ready
   useEffect(() => {
-    if (mode !== "price" || !botId) return;
-    if (!haveAllEstimationAnswers) { setPriceEstimate(null); return; }
+    const haveAll = (() => {
+      if (!priceQuestions?.length) return false;
+      const req = priceQuestions.filter((q) => q.group === "estimation" && q.required !== false);
+      if (!req.length) return false;
+      return req.every((q) => {
+        const v = priceAnswers[q.q_key];
+        return !(v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0));
+      });
+    })();
+
+    if (mode !== "price" || !botId || !haveAll) {
+      setPriceEstimate(null);
+      return;
+    }
     let cancel = false;
     (async () => {
       try {
@@ -393,44 +336,112 @@ export default function AskAssistant() {
         if (!cancel) setPriceBusy(false);
       }
     })();
-    return () => { cancel = true; };
-  }, [mode, botId, apiBase, haveAllEstimationAnswers, priceAnswers]);
+    return () => {
+      cancel = true;
+    };
+  }, [mode, botId, apiBase, priceQuestions, priceAnswers]);
 
-  // Meeting: load agent
+  // Next unanswered (required) question
+  const nextPriceQuestion = useMemo(() => {
+    if (!priceQuestions?.length) return null;
+    for (const q of priceQuestions) {
+      const v = priceAnswers[q.q_key];
+      const empty =
+        (q.type === "multi_choice" && Array.isArray(v) && v.length === 0) || v === undefined || v === null || v === "";
+      if (empty && q.group === "estimation" && q.required !== false) return q;
+    }
+    return null;
+  }, [priceQuestions, priceAnswers]);
+
+  // Mirror lines (for PriceTop)
+  const mirrorLines = useMemo(() => {
+    if (!priceQuestions?.length) return [];
+    const lines = [];
+    for (const q of priceQuestions) {
+      const ans = priceAnswers[q.q_key];
+      if (ans === undefined || ans === null || ans === "" || (Array.isArray(ans) && ans.length === 0)) continue;
+      const opts = q.options || [];
+      let label = "";
+      if (q.type === "choice") {
+        const o = opts.find((o) => o.key === ans);
+        label = o?.label || String(ans);
+      } else if (q.type === "multi_choice") {
+        const picked = Array.isArray(ans) ? ans : [];
+        label = opts.filter((o) => picked.includes(o.key)).map((o) => o.label).join(", ");
+      } else {
+        label = String(ans);
+      }
+      if (!label) continue;
+
+      const key = normKey(q.q_key);
+      let line = null;
+      if (q.mirror_template) line = renderMirror(q.mirror_template, label);
+      else if (CFG.qKeys.product.includes(key)) line = `You have selected ${label}.`;
+      else if (CFG.qKeys.tier.includes(key)) line = `You stated that you execute ${label.toLowerCase()} commercial transactions per month.`;
+      if (line) lines.push(line);
+    }
+    return lines;
+  }, [priceQuestions, priceAnswers]);
+
+  // Actions
   async function openMeeting() {
     if (!botId) return;
-    setSelected(null); setMode("meeting");
+    setSelected(null);
+    setMode("meeting");
     try {
       const res = await fetch(`${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`);
       const data = await res.json();
       setAgent(data?.ok ? data.agent : null);
       requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-    } catch { setAgent(null); }
+    } catch {
+      setAgent(null);
+    }
   }
 
-  // Handlers
   async function openBrowse() {
     if (!botId) return;
-    setMode("browse"); setSelected(null);
+    setMode("browse");
+    setSelected(null);
     try {
       const res = await fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`);
       const data = await res.json();
       const src = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
-      setBrowseItems(normalizeList(src));
+      setBrowseItems(
+        (Array.isArray(src) ? src : []).map((it) => ({
+          id: it.id ?? it.value ?? it.url ?? it.title,
+          title: it.title ?? it.button_title ?? it.label ?? "",
+          url: it.url ?? it.value ?? it.button_value ?? "",
+          description: it.description ?? it.summary ?? it.functions_text ?? "",
+          functions_text: it.functions_text ?? it.description ?? "",
+        }))
+      );
       requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-    } catch { setBrowseItems([]); }
+    } catch {
+      setBrowseItems([]);
+    }
   }
 
   async function openBrowseDocs() {
     if (!botId) return;
-    setMode("docs"); setSelected(null);
+    setMode("docs");
+    setSelected(null);
     try {
       const res = await fetch(`${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`);
       const data = await res.json();
       const src = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
-      setBrowseDocs(normalizeList(src));
+      setBrowseDocs(
+        (Array.isArray(src) ? src : []).map((it) => ({
+          id: it.id ?? it.value ?? it.url ?? it.title,
+          title: it.title ?? it.button_title ?? it.label ?? "",
+          url: it.url ?? it.value ?? it.button_value ?? "",
+          description: it.description ?? it.summary ?? it.functions_text ?? "",
+          functions_text: it.functions_text ?? it.description ?? "",
+        }))
+      );
       requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-    } catch { setBrowseDocs([]); }
+    } catch {
+      setBrowseDocs([]);
+    }
   }
 
   function handlePickOption(q, opt) {
@@ -448,35 +459,58 @@ export default function AskAssistant() {
   async function sendMessage() {
     if (!input.trim() || !botId) return;
     const outgoing = input.trim();
-    setMode("ask"); setLastQuestion(outgoing); setInput("");
-    setSelected(null); setIsAnchored(false);
-    setResponseText(""); setHelperPhase("hidden"); setItems([]);
+    setMode("ask");
+    setLastQuestion(outgoing);
+    setInput("");
+    setSelected(null);
+    setIsAnchored(false);
+    setResponseText("");
+    setHelperPhase("hidden");
+    setItems([]);
     setLoading(true);
     try {
       const res = await axios.post(`${apiBase}/demo-hal`, { bot_id: botId, user_question: outgoing }, { timeout: 30000 });
       const data = res?.data || {};
       const text = data?.response_text || "";
       const recSource = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
-      const recs = normalizeList(recSource);
-      setResponseText(text); setLoading(false);
+      const recs = (Array.isArray(recSource) ? recSource : []).map((it) => {
+        const id = it.id ?? it.button_id ?? it.value ?? it.url ?? it.title;
+        const title =
+          it.title ??
+          it.button_title ??
+          (typeof it.label === "string" ? it.label.replace(/^Watch the \"|\" demo$/g, "") : it.label) ??
+          "";
+        const url = it.url ?? it.value ?? it.button_value ?? "";
+        const description = it.description ?? it.summary ?? it.functions_text ?? "";
+        return { id, title, url, description, functions_text: it.functions_text ?? description, action: it.action ?? it.button_action ?? "demo" };
+      });
+      setResponseText(text);
+      setLoading(false);
       if (recs.length > 0) {
         setHelperPhase("header");
-        setTimeout(() => { setItems(recs); setHelperPhase("buttons"); }, 60);
-      } else { setHelperPhase("hidden"); setItems([]); }
+        setTimeout(() => {
+          setItems(recs);
+          setHelperPhase("buttons");
+        }, 60);
+      } else {
+        setHelperPhase("hidden");
+        setItems([]);
+      }
       requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
     } catch {
-      setLoading(false); setResponseText("Sorry—something went wrong."); setHelperPhase("hidden"); setItems([]);
+      setLoading(false);
+      setResponseText("Sorry—something went wrong.");
+      setHelperPhase("hidden");
+      setItems([]);
     }
   }
 
   const listSource = mode === "browse" ? browseItems : items;
-
   const askUnderVideo = useMemo(() => {
     if (!selected) return items;
     const selKey = selected.id ?? selected.url ?? selected.title;
     return (items || []).filter((it) => (it.id ?? it.url ?? it.title) !== selKey);
   }, [selected, items]);
-
   const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
 
   const tabs = [
@@ -501,49 +535,13 @@ export default function AskAssistant() {
     );
   }
 
-  // show Ask bottom in every mode except price before estimate exists
   const showAskBottom = mode !== "price" || !!priceEstimate;
-
-  // Build mirror lines (PriceTop)
-  const mirrorLines = useMemo(() => {
-    if (!priceQuestions?.length) return [];
-    const lines = [];
-    for (const q of priceQuestions) {
-      const ans = priceAnswers[q.q_key];
-      if (ans === undefined || ans === null || ans === "" || (Array.isArray(ans) && ans.length === 0)) continue;
-      const opts = q.options || [];
-      let label = "";
-      if (q.type === "choice") {
-        const o = opts.find((o) => o.key === ans);
-        label = o?.label || String(ans);
-      } else if (q.type === "multi_choice") {
-        const picked = Array.isArray(ans) ? ans : [];
-        label = opts.filter((o) => picked.includes(o.key)).map((o) => o.label).join(", ");
-      } else {
-        label = String(ans);
-      }
-      if (!label) continue;
-
-      const key = normKey(q.q_key);
-      let line = null;
-      if (q.mirror_template) {
-        line = renderMirror(q.mirror_template, label);
-      } else if (CFG.qKeys.product.includes(key)) {
-        line = `You have selected ${label}.`;
-      } else if (CFG.qKeys.tier.includes(key)) {
-        line = `You stated that you execute ${label.toLowerCase()} commercial transactions per month.`;
-      }
-      if (line) lines.push(line);
-    }
-    return lines;
-  }, [priceQuestions, priceAnswers]);
+  const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
 
   return (
     // MOBILE: full-screen; DESKTOP: centered card
     <div className="w-screen min-h-[100dvh] h-[100dvh] bg-gray-100 p-0 md:p-2 md:flex md:items-center md:justify-center">
-      <div
-        className="w-full max-w-[720px] h-[100dvh] md:h-auto md:max-h-[90vh] bg-white border md:rounded-2xl md:shadow-xl flex flex-col overflow-hidden transition-all duration-300 rounded-none shadow-none"
-      >
+      <div className="w-full max-w-[720px] h-[100dvh] md:h-auto md:max-h-[90vh] bg-white border md:rounded-2xl md:shadow-xl flex flex-col overflow-hidden transition-all duration-300 rounded-none shadow-none">
         {/* Header */}
         <div className="bg-black text-white px-4 sm:px-6">
           <div className="flex items-center justify-between w-full py-3">
@@ -564,62 +562,53 @@ export default function AskAssistant() {
                 : "Ask the Assistant"}
             </div>
           </div>
-
-          {/* PATCH-ANCHOR: TABS_NAV:BEGIN */}
           <TabsNav mode={mode} tabs={tabs} />
-          {/* PATCH-ANCHOR: TABS_NAV:END */}
         </div>
 
-        {/* Content */}
+        {/* PRICE MODE */}
         {mode === "price" ? (
           <>
             <div className="px-6 pt-3 pb-2" data-patch="price-intro">
-              {/* PATCH-ANCHOR: PRICE_INTRO:BEGIN */}
               <PriceMirror lines={mirrorLines.length ? mirrorLines : null} />
               {!mirrorLines.length ? (
                 <div className="text-black text-base font-bold whitespace-pre-line">
-                  {((priceUiCopy?.intro?.heading || "").trim()
-                    ? `${priceUiCopy?.intro?.heading?.trim()}\n\n`
-                    : "") + (priceUiCopy?.intro?.body || "This tool provides a quick estimate based on your selections. Final pricing may vary by configuration, usage, and implementation.")}
+                  {(priceUiCopy?.intro?.heading?.trim() ? `${priceUiCopy.intro.heading.trim()}\n\n` : "") +
+                    (priceUiCopy?.intro?.body ||
+                      "This tool provides a quick estimate based on your selections. Final pricing may vary by configuration, usage, and implementation.")}
                 </div>
               ) : null}
-              {/* PATCH-ANCHOR: PRICE_INTRO:END */}
             </div>
             <div ref={priceScrollRef} className="px-6 pt-0 pb-6 flex-1 overflow-y-auto">
-              {/* PATCH-ANCHOR: PRICE_QUESTION_OR_ESTIMATE:BEGIN */}
               {!priceQuestions?.length ? null : nextPriceQuestion ? (
                 <QuestionBlock q={nextPriceQuestion} value={priceAnswers[nextPriceQuestion.q_key]} onPick={handlePickOption} />
               ) : (
                 <EstimateCard
                   estimate={priceEstimate}
                   outroText={
-                    ((priceUiCopy?.outro?.heading || "").trim()
-                      ? `${priceUiCopy?.outro?.heading?.trim()}\n\n`
-                      : "") + (priceUiCopy?.outro?.body || "")
+                    (priceUiCopy?.outro?.heading?.trim() ? `${priceUiCopy.outro.heading.trim()}\n\n` : "") +
+                    (priceUiCopy?.outro?.body || "")
                   }
                 />
               )}
-              {/* PATCH-ANCHOR: PRICE_QUESTION_OR_ESTIMATE:END */}
             </div>
           </>
         ) : (
+          /* OTHER MODES */
           <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
             {mode === "meeting" ? (
               <div className="w-full flex-1 flex flex-col" data-patch="meeting-pane">
                 <div className="bg-white pt-2 pb-2">
-                  {/* helper-style schedule header */}
                   {agent?.schedule_header ? (
                     <div className="mb-2 text-sm italic text-gray-600 whitespace-pre-line">{agent.schedule_header}</div>
                   ) : null}
-
-                  {agent?.calendar_link && (
+                  {agent?.calendar_link ? (
                     <iframe
                       title="Schedule a Meeting"
-                      src={`${agent.calendar_link}?embed_domain=${window.location.hostname}&embed_type=Inline`}
+                      src={`${agent.calendar_link}?embed_domain=${embedDomain}&embed_type=Inline`}
                       style={{ width: "100%", height: "60vh", maxHeight: "640px" }}
                       className="rounded-xl border border-gray-200 shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
                     />
-                  )}
+                  ) : null}
                 </div>
               </div>
             ) : selected ? (
@@ -646,8 +635,7 @@ export default function AskAssistant() {
                     />
                   </div>
                 )}
-
-                {mode === "ask" && visibleUnderVideo.length > 0 && (
+                {mode === "ask" && (visibleUnderVideo || []).length > 0 && (
                   <>
                     <div className="flex items-center justify-between mt-1 mb-3">
                       <p className="italic text-gray-600">Recommended demos</p>
@@ -670,7 +658,7 @@ export default function AskAssistant() {
               </div>
             ) : mode === "browse" ? (
               <div className="w-full flex-1 flex flex-col">
-                {browseItems.length > 0 && (
+                {(browseItems || []).length > 0 && (
                   <>
                     <div className="flex items-center justify-between mt-2 mb-3">
                       <p className="italic text-gray-600">Select a demo to view it</p>
@@ -693,7 +681,7 @@ export default function AskAssistant() {
               </div>
             ) : mode === "docs" ? (
               <div className="w-full flex-1 flex flex-col">
-                {browseDocs.length > 0 && (
+                {(browseDocs || []).length > 0 && (
                   <>
                     <div className="flex items-center justify-between mt-2 mb-3">
                       <p className="italic text-gray-600">Select a document to view it</p>
@@ -731,9 +719,7 @@ export default function AskAssistant() {
                     </div>
                   </div>
                 )}
-
                 {lastQuestion ? <p className="text-base text-black italic text-center mb-2">"{lastQuestion}"</p> : null}
-
                 <div className="text-left mt-2">
                   {loading ? (
                     <p className="text-gray-500 font-semibold animate-pulse">Thinking…</p>
@@ -741,15 +727,13 @@ export default function AskAssistant() {
                     <p className="text-black text-base font-bold whitespace-pre-line">{responseText}</p>
                   ) : null}
                 </div>
-
                 {helperPhase !== "hidden" && (
                   <div className="flex items-center justify-between mt-3 mb-2">
                     <p className="italic text-gray-600">Recommended demos</p>
                     <span />
                   </div>
                 )}
-
-                {helperPhase === "buttons" && items.length > 0 && (
+                {helperPhase === "buttons" && (items || []).length > 0 && (
                   <div className="flex flex-col gap-3">
                     {items.map((it) => (
                       <Row
@@ -768,12 +752,8 @@ export default function AskAssistant() {
           </div>
         )}
 
-        {/* Bottom bar (Ask); iOS safe-area friendly */}
-        <div
-          className="px-4 py-3 border-t border-gray-200"
-          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-          data-patch="ask-bottom-bar"
-        >
+        {/* Bottom Ask Bar */}
+        <div className="px-4 py-3 border-t border-gray-200" style={{ paddingBottom: "env(safe-area-inset-bottom)" }} data-patch="ask-bottom-bar">
           {showAskBottom ? (
             <div className="relative w-full">
               <textarea
@@ -794,11 +774,7 @@ export default function AskAssistant() {
                   }
                 }}
               />
-              <button
-                aria-label="Send"
-                onClick={sendMessage}
-                className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
-              >
+              <button aria-label="Send" onClick={sendMessage} className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95">
                 <ArrowUpCircleIcon className="w-8 h-8 text-red-600 hover:text-red-700" />
               </button>
             </div>
