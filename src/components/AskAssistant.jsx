@@ -530,14 +530,10 @@ export default function AskAssistant() {
     try {
       const res = await fetch(`${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`);
       const data = await res.json();
-      if (data?.ok && data.agent?.calendar_link) {
-        setAgent(data.agent);
-      } else {
-        setAgent({ calendar_link: "https://calendly.com/dave-oppgen/30min" });
-      }
+      setAgent(data?.ok ? data.agent : null);
       requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
     } catch {
-      setAgent({ calendar_link: "https://calendly.com/dave-oppgen/30min" });
+      setAgent(null);
     }
   }
 
@@ -654,8 +650,8 @@ export default function AskAssistant() {
                 <div className={`${isAnchored ? "sticky top-0 z-10" : ""} bg-white pt-2 pb-2`}>
                   <iframe
                     title="Schedule a Meeting"
-                    src={`${(agent?.calendar_link || "https://calendly.com/dave-oppgen/30min")}?embed_domain=${window.location.hostname}&embed_type=Inline`}
-                    style={{ width: "100%", height: "700px" }}
+                    src={`${agent.calendar_link}?embed_domain=${window.location.hostname}&embed_type=Inline`}
+                    style={{ width: "100%", height: "60vh", maxHeight: "640px" }}
                     className="rounded-xl border border-gray-200 shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
                   />
                 </div>
