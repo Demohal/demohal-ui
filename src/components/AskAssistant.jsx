@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
-import logo from "../assets/logo.png";
+import fallbackLogo from "../assets/logo.png";
 
 /* =============================== *
  *  PATCH-READY CONSTANTS & UTILS  *
@@ -43,8 +43,7 @@ const DEFAULT_THEME_VARS = {
 };
 
 const UI = {
-  CARD:
-    "border rounded-xl p-4 bg-white shadow",
+  CARD: "border rounded-xl p-4 bg-white shadow",
   BTN:
     "w-full text-center rounded-xl px-4 py-3 shadow transition-colors " +
     "text-[var(--btn-fg)] border " +
@@ -258,6 +257,13 @@ export default function AskAssistant() {
   // Theme (DB-driven CSS variables)
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
 
+  // NEW: brand assets (logo variants)
+  const [brandAssets, setBrandAssets] = useState({
+    logo_url: null,
+    logo_light_url: null,
+    logo_dark_url: null,
+  });
+
   // Pricing state
   const [priceUiCopy, setPriceUiCopy] = useState({});
   const [priceQuestions, setPriceQuestions] = useState([]);
@@ -307,7 +313,7 @@ export default function AskAssistant() {
     };
   }, [alias, apiBase]);
 
-  // Fetch brand theme once we know botId (DB-driven CSS)
+  // Fetch brand theme + assets once we know botId (DB-driven CSS + logo)
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
@@ -316,9 +322,16 @@ export default function AskAssistant() {
         const res = await fetch(`${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`);
         const data = await res.json();
         if (cancel) return;
+
         if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
-          // Merge with defaults so missing tokens still have sane values
           setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
+        }
+        if (data?.ok && data?.assets) {
+          setBrandAssets({
+            logo_url: data.assets.logo_url || null,
+            logo_light_url: data.assets.logo_light_url || null,
+            logo_dark_url: data.assets.logo_dark_url || null,
+          });
         }
       } catch {
         // keep defaults if brand fails
@@ -546,12 +559,11 @@ export default function AskAssistant() {
         { bot_id: botId, user_question: outgoing },
         { timeout: 30000 }
       );
-      const data = res?.data || {}; // axios uses res.data
+      const data = res?.data || {};
 
       const text = data?.response_text || "";
       const recSource = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
 
-      // Strip legacy landbot buttons ("Continue", "Show me options")
       const recs = (Array.isArray(recSource) ? recSource : [])
         .map((it) => {
           const id = it.id ?? it.button_id ?? it.value ?? it.url ?? it.title;
@@ -627,6 +639,13 @@ export default function AskAssistant() {
   const showAskBottom = mode !== "price" || !!priceEstimate;
   const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
 
+  // Choose which logo to display (prefer explicit logo_url)
+  const logoSrc =
+    brandAssets.logo_url ||
+    brandAssets.logo_light_url ||
+    brandAssets.logo_dark_url ||
+    fallbackLogo;
+
   return (
     <div
       className="w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center"
@@ -637,7 +656,7 @@ export default function AskAssistant() {
         <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)]">
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
-              <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
+              <img src={logoSrc} alt="Brand logo" className="h-10 object-contain" />
             </div>
             <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
               {selected
@@ -681,6 +700,8 @@ export default function AskAssistant() {
                   }
                 />
               )}
+              {priceBusy ? <div className="mt-2 text-sm text-gray-500">Calculating…</div> : null}
+              {priceErr ? <div className="mt-2 text-sm text-red-600">{priceErr}</div> : null}
             </div>
           </>
         ) : (
