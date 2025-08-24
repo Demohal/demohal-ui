@@ -9,14 +9,61 @@ import logo from "../assets/logo.png";
  *  PATCH-READY CONSTANTS & UTILS  *
  * =============================== */
 
+/** Default CSS variable values (used until /brand loads). */
+const DEFAULT_THEME_VARS = {
+  "--banner-bg": "#000000",
+  "--banner-fg": "#FFFFFF",
+  "--page-bg": "#F3F4F6",
+
+  "--btn-grad-from": "#4B5563",
+  "--btn-grad-to": "#374151",
+  "--btn-grad-from-hover": "#6B7280",
+  "--btn-grad-to-hover": "#4B5563",
+  "--btn-fg": "#FFFFFF",
+  "--btn-border": "#374151",
+
+  "--tab-active-bg": "#FFFFFF",
+  "--tab-active-fg": "#000000",
+  "--tab-active-border": "#FFFFFF",
+  "--tab-active-shadow": "0 2px 0 rgba(0,0,0,.15)",
+
+  "--tab-inactive-grad-from": "#4B5563",
+  "--tab-inactive-grad-to": "#374151",
+  "--tab-inactive-hover-from": "#6B7280",
+  "--tab-inactive-hover-to": "#4B5563",
+  "--tab-inactive-fg": "#FFFFFF",
+  "--tab-inactive-border": "#374151",
+
+  "--field-bg": "#FFFFFF",
+  "--field-border": "#9CA3AF",
+  "--radius-field": "0.5rem",
+
+  "--send-color": "#EA4335",
+  "--send-color-hover": "#C03327",
+};
+
 const UI = {
-  CARD: "border rounded-xl p-4 bg-white shadow",
-  BTN: "w-full text-center bg-gradient-to-b from-gray-600 to-gray-700 text-white rounded-xl border border-gray-700 px-4 py-3 shadow hover:from-gray-500 hover:to-gray-600 transition-colors",
-  FIELD: "w-full border border-gray-400 rounded-lg px-4 py-3 text-base bg-white",
+  CARD:
+    "border rounded-xl p-4 bg-white shadow",
+  BTN:
+    "w-full text-center rounded-xl px-4 py-3 shadow transition-colors " +
+    "text-[var(--btn-fg)] border " +
+    "border-[var(--btn-border)] " +
+    "bg-gradient-to-b from-[var(--btn-grad-from)] to-[var(--btn-grad-to)] " +
+    "hover:from-[var(--btn-grad-from-hover)] hover:to-[var(--btn-grad-to-hover)]",
+  FIELD:
+    "w-full rounded-lg px-4 py-3 text-base " +
+    "bg-[var(--field-bg)] border border-[var(--field-border)]",
   TAB_ACTIVE:
-    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors rounded-t-md border border-b-0 bg-white text-black border-white -mb-px shadow-[0_2px_0_rgba(0,0,0,0.15)]",
+    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors rounded-t-md border border-b-0 " +
+    "bg-[var(--tab-active-bg)] text-[var(--tab-active-fg)] border-[var(--tab-active-border)] -mb-px " +
+    "shadow-[var(--tab-active-shadow)]",
   TAB_INACTIVE:
-    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors rounded-t-md border border-b-0 bg-gradient-to-b from-gray-600 to-gray-700 text-white border-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]",
+    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors rounded-t-md border border-b-0 " +
+    "text-[var(--tab-inactive-fg)] border-[var(--tab-inactive-border)] " +
+    "bg-gradient-to-b from-[var(--tab-inactive-grad-from)] to-[var(--tab-inactive-grad-to)] " +
+    "hover:from-[var(--tab-inactive-hover-from)] hover:to-[var(--tab-inactive-hover-to)] " +
+    "shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]",
 };
 
 const CFG = {
@@ -208,6 +255,9 @@ export default function AskAssistant() {
   const priceScrollRef = useRef(null);
   const inputRef = useRef(null);
 
+  // Theme (DB-driven CSS variables)
+  const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
+
   // Pricing state
   const [priceUiCopy, setPriceUiCopy] = useState({});
   const [priceQuestions, setPriceQuestions] = useState([]);
@@ -256,6 +306,28 @@ export default function AskAssistant() {
       cancel = true;
     };
   }, [alias, apiBase]);
+
+  // Fetch brand theme once we know botId (DB-driven CSS)
+  useEffect(() => {
+    if (!botId) return;
+    let cancel = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`);
+        const data = await res.json();
+        if (cancel) return;
+        if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
+          // Merge with defaults so missing tokens still have sane values
+          setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
+        }
+      } catch {
+        // keep defaults if brand fails
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [botId, apiBase]);
 
   // Autosize ask box
   useEffect(() => {
@@ -557,16 +629,17 @@ export default function AskAssistant() {
 
   return (
     <div
-      className="w-screen min-h-[100dvh] h-[100dvh] bg-gray-100 p-0 md:p-2 md:flex md:items-center md:justify-center"
+      className="w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center"
+      style={themeVars}
     >
       <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-white border md:rounded-2xl md:shadow-xl flex flex-col overflow-hidden transition-all duration-300 rounded-none shadow-none">
         {/* Header */}
-        <div className="bg-black text-white px-4 sm:px-6">
+        <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)]">
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
               <img src={logo} alt="DemoHAL logo" className="h-10 object-contain" />
             </div>
-            <div className="text-lg sm:text-xl font-semibold text-white truncate max-w-[60%] text-right">
+            <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
               {selected
                 ? selected.title
                 : mode === "browse"
@@ -777,7 +850,7 @@ export default function AskAssistant() {
               <textarea
                 ref={inputRef}
                 rows={1}
-                className="w-full border border-gray-400 rounded-lg px-4 py-2 pr-14 text-base text-black placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px]"
+                className="w-full border border-[var(--field-border)] rounded-lg px-4 py-2 pr-14 text-base text-black placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px] bg-[var(--field-bg)]"
                 placeholder="Ask your question here"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -793,7 +866,7 @@ export default function AskAssistant() {
                 }}
               />
               <button aria-label="Send" onClick={sendMessage} className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95">
-                <ArrowUpCircleIcon className="w-8 h-8 text-red-600 hover:text-red-700" />
+                <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:text-[var(--send-color-hover)]" />
               </button>
             </div>
           ) : null}
