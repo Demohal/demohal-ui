@@ -9,7 +9,6 @@ import fallbackLogo from "../assets/logo.png";
  *  PATCH-READY CONSTANTS & UTILS  *
  * =============================== */
 
-/** Default CSS variable values (used until /brand loads). */
 const DEFAULT_THEME_VARS = {
   "--banner-bg": "#000000",
   "--banner-fg": "#FFFFFF",
@@ -43,7 +42,8 @@ const DEFAULT_THEME_VARS = {
 };
 
 const UI = {
-  CARD: "border rounded-xl p-4 bg-white shadow",
+  CARD:
+    "border rounded-xl p-4 bg-white shadow",
   BTN:
     "w-full text-center rounded-xl px-4 py-3 shadow transition-colors " +
     "text-[var(--btn-fg)] border " +
@@ -257,12 +257,15 @@ export default function AskAssistant() {
   // Theme (DB-driven CSS variables)
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
 
-  // NEW: brand assets (logo variants)
+  // Brand assets (logo variants)
   const [brandAssets, setBrandAssets] = useState({
     logo_url: null,
     logo_light_url: null,
     logo_dark_url: null,
   });
+
+  // Prevent brand FOUC: gate UI until brand is loaded at least once
+  const [brandReady, setBrandReady] = useState(false);
 
   // Pricing state
   const [priceUiCopy, setPriceUiCopy] = useState({});
@@ -281,7 +284,37 @@ export default function AskAssistant() {
     return (qs.get("alias") || qs.get("alais") || "demo").trim();
   }, []);
 
-  // Bot id resolver
+  // Fetch brand ASAP by alias (avoid waiting for botId)
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiBase}/brand?alias=${encodeURIComponent(alias)}`);
+        const data = await res.json();
+        if (cancel) return;
+
+        if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
+          setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
+        }
+        if (data?.ok && data?.assets) {
+          setBrandAssets({
+            logo_url: data.assets.logo_url || null,
+            logo_light_url: data.assets.logo_light_url || null,
+            logo_dark_url: data.assets.logo_dark_url || null,
+          });
+        }
+      } catch {
+        /* swallow; we'll reveal with defaults */
+      } finally {
+        if (!cancel) setBrandReady(true);
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [alias, apiBase]);
+
+  // Bot id resolver (parallel)
   useEffect(() => {
     let cancel = false;
     (async () => {
@@ -313,7 +346,7 @@ export default function AskAssistant() {
     };
   }, [alias, apiBase]);
 
-  // Fetch brand theme + assets once we know botId (DB-driven CSS + logo)
+  // Optional: re-fetch brand once with botId (no visual change if same)
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
@@ -327,14 +360,19 @@ export default function AskAssistant() {
           setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
         }
         if (data?.ok && data?.assets) {
-          setBrandAssets({
-            logo_url: data.assets.logo_url || null,
-            logo_light_url: data.assets.logo_light_url || null,
-            logo_dark_url: data.assets.logo_dark_url || null,
+          setBrandAssets((prev) => {
+            const next = {
+              logo_url: data.assets.logo_url || null,
+              logo_light_url: data.assets.logo_light_url || null,
+              logo_dark_url: data.assets.logo_dark_url || null,
+            };
+            // avoid unnecessary state churn
+            if (JSON.stringify(prev) === JSON.stringify(next)) return prev;
+            return next;
           });
         }
       } catch {
-        // keep defaults if brand fails
+        /* ignore */
       }
     })();
     return () => {
@@ -629,8 +667,15 @@ export default function AskAssistant() {
     );
   }
   if (!botId) {
+    // Still show shell while bot resolves; brand may already be applied
     return (
-      <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
+      <div
+        className={classNames(
+          "w-screen min-h-[100dvh] flex items-center justify-center bg-[var(--page-bg)] p-4 transition-opacity duration-200",
+          brandReady ? "opacity-100" : "opacity-0"
+        )}
+        style={themeVars}
+      >
         <div className="text-gray-700">Loading…</div>
       </div>
     );
@@ -639,7 +684,6 @@ export default function AskAssistant() {
   const showAskBottom = mode !== "price" || !!priceEstimate;
   const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
 
-  // Choose which logo to display (prefer explicit logo_url)
   const logoSrc =
     brandAssets.logo_url ||
     brandAssets.logo_light_url ||
@@ -648,7 +692,10 @@ export default function AskAssistant() {
 
   return (
     <div
-      className="w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center"
+      className={classNames(
+        "w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center transition-opacity duration-200",
+        brandReady ? "opacity-100" : "opacity-0"
+      )}
       style={themeVars}
     >
       <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-white border md:rounded-2xl md:shadow-xl flex flex-col overflow-hidden transition-all duration-300 rounded-none shadow-none">
