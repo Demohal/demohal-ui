@@ -10,6 +10,12 @@ import fallbackLogo from "../assets/logo.png";
  * =============================== */
 
 const DEFAULT_THEME_VARS = {
+  // Lighter docs buttons (fallbacks; can be overridden later)
+  "--btn-docs-grad-from": "#b1b3b4",
+  "--btn-docs-grad-to":   "#858789",
+  "--btn-docs-grad-from-hover": "#c2c4c5",
+  "--btn-docs-grad-to-hover":   "#9a9c9e", 
+  
   "--banner-bg": "#000000",
   "--banner-fg": "#FFFFFF",
   "--page-bg": "#F3F4F6",
@@ -50,6 +56,13 @@ const UI = {
     "border-[var(--btn-border)] " +
     "bg-gradient-to-b from-[var(--btn-grad-from)] to-[var(--btn-grad-to)] " +
     "hover:from-[var(--btn-grad-from-hover)] hover:to-[var(--btn-grad-to-hover)]",
+  
+  BTN_DOCS:
+  "w-full text-center rounded-xl px-4 py-3 shadow transition-colors " +
+  "text-[var(--btn-fg)] border border-[var(--btn-border)] " +
+  "bg-gradient-to-b from-[var(--btn-docs-grad-from)] to-[var(--btn-docs-grad-to)] " +
+  "hover:from-[var(--btn-docs-grad-from-hover)] hover:to-[var(--btn-docs-grad-to-hover)]",
+  
   FIELD:
     "w-full rounded-lg px-4 py-3 text-base " +
     "bg-[var(--field-bg)] border border-[var(--field-border)]",
@@ -87,9 +100,10 @@ function renderMirror(template, label) {
  *  SMALL PATCHABLE COMPONENTS *
  * ========================== */
 
-function Row({ item, onPick }) {
+function Row({ item, onPick, variant }) {
+  const btnClass = variant === "docs" ? UI.BTN_DOCS : UI.BTN;
   return (
-    <button data-patch="row-button" onClick={() => onPick(item)} className={UI.BTN} title={item.description || ""}>
+    <button data-patch="row-button" onClick={() => onPick(item)} className={btnClass} title={item.description || ""}>
       <div className="font-extrabold text-xs sm:text-sm">{item.title}</div>
       {item.description ? (
         <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">{item.description}</div>
@@ -851,6 +865,7 @@ export default function AskAssistant() {
                         <Row
                           key={it.id || it.url || it.title}
                           item={it}
+                          variant="docs"              // <-- lighter gradient here
                           onPick={(val) => {
                             setSelected(val);
                             requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
