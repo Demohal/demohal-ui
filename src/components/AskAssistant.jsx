@@ -11,8 +11,8 @@ import fallbackLogo from "../assets/logo.png";
 
 const DEFAULT_THEME_VARS = {
   // Lighter docs buttons (fallbacks; can be overridden later)
-  "--btn-docs-grad-from": "#b1b3b4",
-  "--btn-docs-grad-to":   "#858789",
+  "--btn-docs-grad-from": "#8b8f92",
+  "--btn-docs-grad-to":   "#5a5c5d",
   "--btn-docs-grad-from-hover": "#c2c4c5",
   "--btn-docs-grad-to-hover":   "#9a9c9e", 
   
