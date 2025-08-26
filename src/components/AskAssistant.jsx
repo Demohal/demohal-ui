@@ -295,7 +295,11 @@ export default function AskAssistant() {
   });
 
   // Prevent brand FOUC: gate UI until brand is loaded at least once
-  const [brandReady, setBrandReady] = useState(false);
+  // If no alias and no bot_id in the URL, there’s no brand fetch to wait for.
+  // In that case, start visible; otherwise gate until /brand finishes.
+  const initialBrandReady = useMemo(() => !(botIdFromUrl || alias), [botIdFromUrl, alias]);
+  const [brandReady, setBrandReady] = useState(initialBrandReady);
+
 
   // Pricing state
   const [priceUiCopy, setPriceUiCopy] = useState({});
@@ -331,6 +335,11 @@ export default function AskAssistant() {
     })();
     return () => { cancel = true; };
   }, [alias, apiBase, botId]);
+
+  useEffect(() => {
+    // If there’s nothing to resolve (no alias, no botId) and we somehow stayed gated, un-gate.
+    if (!botId && !alias && !brandReady) setBrandReady(true);
+  }, [botId, alias, brandReady]);
 
   // Fetch brand once we know botId (DB-driven CSS + logo)
   useEffect(() => {
