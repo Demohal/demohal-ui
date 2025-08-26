@@ -261,6 +261,9 @@ export default function AskAssistant() {
     return { alias: a, botIdFromUrl: b };
   }, []);
 
+  // Optional: allow a default alias via env, e.g., VITE_DEFAULT_ALIAS=demo
+  const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
+  
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [fatal, setFatal] = useState("");
 
@@ -336,10 +339,29 @@ export default function AskAssistant() {
     return () => { cancel = true; };
   }, [alias, apiBase, botId]);
 
+  // If neither bot_id nor alias present, try resolving defaultAlias once.
+  useEffect(() => {
+    if (botId || alias || !defaultAlias) return;
+    let cancel = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiBase}/bot-settings?alias=${encodeURIComponent(defaultAlias)}`);
+        const data = await res.json();
+        if (cancel) return;
+        const id = data?.ok ? data?.bot?.id : null;
+        if (id) setBotId(id);
+      } catch {
+        // ignore; UI will show a friendly prompt instead of a spinner
+      }
+    })();
+    return () => { cancel = true; };
+  }, [botId, alias, defaultAlias, apiBase]);
+ 
   useEffect(() => {
     // If there’s nothing to resolve (no alias, no botId) and we somehow stayed gated, un-gate.
     if (!botId && !alias && !brandReady) setBrandReady(true);
   }, [botId, alias, brandReady]);
+  
 
   // Fetch brand once we know botId (DB-driven CSS + logo)
   useEffect(() => {
@@ -687,10 +709,21 @@ export default function AskAssistant() {
         )}
         style={themeVars}
       >
-        <div className="text-gray-700">Loading…</div>
+        <div className="text-gray-800 text-center space-y-2">
+          <div className="text-lg font-semibold">No bot selected</div>
+          {alias ? (
+            <div className="text-sm text-gray-600">Resolving alias “{alias}”...</div>
+          ) : (
+            <div className="text-sm text-gray-600">
+              Provide a <code>?bot_id=…</code> or <code>?alias=…</code> in the URL
+              {defaultAlias ? <> (trying default alias “{defaultAlias}”)</> : null}.
+            </div>
+          )}
+        </div>
       </div>
     );
   }
+  
 
   const showAskBottom = mode !== "price" || !!priceEstimate;
   const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
