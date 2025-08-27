@@ -303,6 +303,13 @@ export default function AskAssistant() {
   const initialBrandReady = useMemo(() => !(botIdFromUrl || alias), [botIdFromUrl, alias]);
   const [brandReady, setBrandReady] = useState(initialBrandReady);
 
+  // NEW: Tab visibility flags
+  const [tabsEnabled, setTabsEnabled] = useState({
+    demos: false,
+    docs: false,
+    meeting: false,
+    price: false,
+  });
 
   // Pricing state
   const [priceUiCopy, setPriceUiCopy] = useState({});
@@ -326,6 +333,18 @@ export default function AskAssistant() {
         const data = await res.json();
         if (cancel) return;
         const id = data?.ok ? data?.bot?.id : null;
+
+        // NEW: tab flags from bot row when resolving by alias
+        const b = data?.ok ? data?.bot : null;
+        if (b) {
+          setTabsEnabled({
+            demos: !!b.show_browse_demos,
+            docs: !!b.show_browse_docs,
+            meeting: !!b.show_schedule_meeting,
+            price: !!b.show_price_estimate,
+          });
+        }
+
         if (id) {
           setBotId(id);
           setFatal("");
@@ -349,6 +368,18 @@ export default function AskAssistant() {
         const data = await res.json();
         if (cancel) return;
         const id = data?.ok ? data?.bot?.id : null;
+
+        // NEW: tab flags from bot row when using default alias
+        const b = data?.ok ? data?.bot : null;
+        if (b) {
+          setTabsEnabled({
+            demos: !!b.show_browse_demos,
+            docs: !!b.show_browse_docs,
+            meeting: !!b.show_schedule_meeting,
+            price: !!b.show_price_estimate,
+          });
+        }
+
         if (id) setBotId(id);
       } catch {
         // ignore; UI will show a friendly prompt instead of a spinner
@@ -392,6 +423,31 @@ export default function AskAssistant() {
     return () => {
       cancel = true;
     };
+  }, [botId, apiBase]);
+
+  // NEW: when botId is known (e.g., bot_id in URL), fetch bot-settings to get show_* flags
+  useEffect(() => {
+    if (!botId) return;
+    let cancel = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botId)}`);
+        const data = await res.json();
+        if (cancel) return;
+        const b = data?.ok ? data?.bot : null;
+        if (b) {
+          setTabsEnabled({
+            demos: !!b.show_browse_demos,
+            docs: !!b.show_browse_docs,
+            meeting: !!b.show_schedule_meeting,
+            price: !!b.show_price_estimate,
+          });
+        }
+      } catch {
+        // silent; tabs remain default false if call fails
+      }
+    })();
+    return () => { cancel = true; };
   }, [botId, apiBase]);
 
   // Autosize ask box
@@ -439,7 +495,14 @@ export default function AskAssistant() {
     try {
       const res = await fetch(`${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`);
       const data = await res.json();
-      setAgent(data?.ok ? data.agent : null);
+      const ag = data?.ok ? data.agent : null;
+      setAgent(ag);
+
+      // NEW: if external, open in a new tab immediately (with in-pane fallback link)
+      if (ag && ag.calendar_link_type && String(ag.calendar_link_type).toLowerCase() === "external" && ag.calendar_link) {
+        try { window.open(ag.calendar_link, "_blank", "noopener,noreferrer"); } catch (_) {}
+      }
+
       requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
     } catch {
       setAgent(null);
@@ -620,7 +683,6 @@ export default function AskAssistant() {
     setLastQuestion(outgoing);
     setInput("");
     setSelected(null);
-    setIsAnchored(false);
     setResponseText("");
     setHelperPhase("hidden");
     setItems([]);
@@ -686,12 +748,15 @@ export default function AskAssistant() {
   }, [selected, items]);
   const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
 
-  const tabs = [
-    { key: "demos", label: "Browse Demos", onClick: openBrowse },
-    { key: "docs", label: "Browse Documents", onClick: openBrowseDocs },
-    { key: "price", label: "Price Estimate", onClick: () => { setSelected(null); setMode("price"); } },
-    { key: "meeting", label: "Schedule Meeting", onClick: openMeeting },
-  ];
+  // NEW: dynamically build tabs from bot flags
+  const tabs = useMemo(() => {
+    const out = [];
+    if (tabsEnabled.demos) out.push({ key: "demos", label: "Browse Demos", onClick: openBrowse });
+    if (tabsEnabled.docs) out.push({ key: "docs", label: "Browse Documents", onClick: openBrowseDocs });
+    if (tabsEnabled.price) out.push({ key: "price", label: "Price Estimate", onClick: () => { setSelected(null); setMode("price"); } });
+    if (tabsEnabled.meeting) out.push({ key: "meeting", label: "Schedule Meeting", onClick: openMeeting });
+    return out;
+  }, [tabsEnabled]);
 
   if (fatal) {
     return (
@@ -804,14 +869,27 @@ export default function AskAssistant() {
                   {agent?.schedule_header ? (
                     <div className="mb-2 text-sm italic text-gray-600 whitespace-pre-line">{agent.schedule_header}</div>
                   ) : null}
-                  {agent?.calendar_link ? (
+
+                  {/* NEW: calendar_link_type handling */}
+                  {!agent ? (
+                    <div className="text-sm text-gray-600">Loading scheduling…</div>
+                  ) : agent.calendar_link_type && String(agent.calendar_link_type).toLowerCase() === "embed" && agent.calendar_link ? (
                     <iframe
                       title="Schedule a Meeting"
                       src={`${agent.calendar_link}?embed_domain=${embedDomain}&embed_type=Inline`}
                       style={{ width: "100%", height: "60vh", maxHeight: "640px" }}
                       className="rounded-xl border border-gray-200 shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
                     />
-                  ) : null}
+                  ) : agent.calendar_link_type && String(agent.calendar_link_type).toLowerCase() === "external" && agent.calendar_link ? (
+                    <div className="text-sm text-gray-700">
+                      We opened the scheduling page in a new tab. If it didn’t open,&nbsp;
+                      <a href={agent.calendar_link} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
+                        click here to open it
+                      </a>.
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-600">No scheduling link is configured.</div>
+                  )}
                 </div>
               </div>
             ) : selected ? (
