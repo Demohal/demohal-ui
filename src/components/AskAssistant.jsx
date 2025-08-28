@@ -348,7 +348,6 @@ export default function AskAssistant() {
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
         }
-
         if (id) {
           setBotId(id);
           setFatal("");
@@ -385,8 +384,7 @@ export default function AskAssistant() {
           setResponseText(b.welcome_message || "");
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
-        }
-       
+        }       
         if (id) setBotId(id);
       } catch {
         // ignore; UI will show a friendly prompt instead of a spinner
@@ -453,7 +451,6 @@ export default function AskAssistant() {
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
         }        
-        }
       } catch {
         // silent; tabs remain default false if call fails
       }
