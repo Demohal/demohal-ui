@@ -271,9 +271,10 @@ export default function AskAssistant() {
   const [mode, setMode] = useState("ask");
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
-  const [responseText, setResponseText] = useState(
-    "Welcome to DemoHAL where you can Let Your Product Sell Itself. From here you can ask technical or business related questions, watch short video demos based on your interest, review the document library for technical specifications, case studies, and other materials, book a meeting, or even get a  price quote. You can get started by watching this short video, or simply by asking your first question."
-  );
+  const [responseText, setResponseText] = useState("");
+  const [introVideoUrl, setIntroVideoUrl] = useState("");
+  const [showIntroVideo, setShowIntroVideo] = useState(false);
+
   const [loading, setLoading] = useState(false);
 
   const [items, setItems] = useState([]); // Ask suggestions
@@ -343,6 +344,9 @@ export default function AskAssistant() {
             meeting: !!b.show_schedule_meeting,
             price: !!b.show_price_estimate,
           });
+          setResponseText(b.welcome_message || "");
+          setIntroVideoUrl(b.intro_video_url || "");
+          setShowIntroVideo(!!b.show_intro_video);
         }
 
         if (id) {
@@ -378,8 +382,11 @@ export default function AskAssistant() {
             meeting: !!b.show_schedule_meeting,
             price: !!b.show_price_estimate,
           });
+          setResponseText(b.welcome_message || "");
+          setIntroVideoUrl(b.intro_video_url || "");
+          setShowIntroVideo(!!b.show_intro_video);
         }
-
+       
         if (id) setBotId(id);
       } catch {
         // ignore; UI will show a friendly prompt instead of a spinner
@@ -442,6 +449,10 @@ export default function AskAssistant() {
             meeting: !!b.show_schedule_meeting,
             price: !!b.show_price_estimate,
           });
+          setResponseText(b.welcome_message || "");
+          setIntroVideoUrl(b.intro_video_url || "");
+          setShowIntroVideo(!!b.show_intro_video);
+        }        
         }
       } catch {
         // silent; tabs remain default false if call fails
@@ -983,16 +994,18 @@ export default function AskAssistant() {
                 {!lastQuestion && !loading && (
                   <div className="space-y-3">
                     <div className="text-black text-base font-bold whitespace-pre-line">{responseText}</div>
-                    <div style={{ position: "relative", paddingTop: "56.25%" }}>
-                      <iframe
-                        src="https://player.vimeo.com/video/1102303359?badge=0&autopause=0&player_id=0&app_id=58479"
-                        title="DemoHAL Intro Video"
-                        frameBorder="0"
-                        allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
-                        referrerPolicy="strict-origin-when-cross-origin"
-                        style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
-                      />
-                    </div>
+                    {showIntroVideo && introVideoUrl ? (
+                      <div style={{ position: "relative", paddingTop: "56.25%" }}>
+                        <iframe
+                          src={introVideoUrl}
+                          title="Intro Video"
+                          frameBorder="0"
+                          allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
+                          referrerPolicy="strict-origin-when-cross-origin"
+                          style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
+                        />
+                      </div>
+                    ) : null}
                   </div>
                 )}
                 {lastQuestion ? <p className="text-base text-black italic text-center mb-2">"{lastQuestion}"</p> : null}
