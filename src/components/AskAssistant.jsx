@@ -286,6 +286,7 @@ export default function AskAssistant() {
 
   const contentRef = useRef(null);
   const inputRef = useRef(null);
+  const externalWinRef = useRef(null);  // holds the pre-opened tab for external calendars
 
   // Theme (DB-driven CSS variables)
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
@@ -492,22 +493,49 @@ export default function AskAssistant() {
     if (!botId) return;
     setSelected(null);
     setMode("meeting");
-    try {
-      const res = await fetch(`${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`);
-      const data = await res.json();
-      const ag = data?.ok ? data.agent : null;
-      setAgent(ag);
-
-      // NEW: if external, open in a new tab immediately (with in-pane fallback link)
-      if (ag && ag.calendar_link_type && String(ag.calendar_link_type).toLowerCase() === "external" && ag.calendar_link) {
-        try { window.open(ag.calendar_link, "_blank", "noopener,noreferrer"); } catch (_) {}
-      }
-
-      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-    } catch {
-      setAgent(null);
-    }
+    // Open a blank tab *synchronously* to preserve the user gesture.
+    // We’ll navigate it after we fetch the agent details (or close it if not needed).
+  let win = null;
+  try {
+    win = window.open("", "_blank", "noopener,noreferrer");
+  } catch (_) {
+    // Popup blocked → fallback link in-pane will still work
   }
+  externalWinRef.current = win;
+
+  try {
+    const res = await fetch(`${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`);
+    const data = await res.json();
+    const ag = data?.ok ? data.agent : null;
+    setAgent(ag);
+
+    const linkType = String(ag?.calendar_link_type || "").toLowerCase();
+    const link = ag?.calendar_link || "";
+
+    if (linkType === "external" && link) {
+      // Navigate the pre-opened tab to the external scheduler
+      if (externalWinRef.current && !externalWinRef.current.closed) {
+        try { externalWinRef.current.location = link; } catch {}
+        externalWinRef.current = null;
+      }
+    } else {
+      // Not external → close the spare tab if we opened one
+      if (externalWinRef.current && !externalWinRef.current.closed) {
+        try { externalWinRef.current.close(); } catch {}
+        externalWinRef.current = null;
+      }
+    }
+
+    requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+  } catch {
+    // On fetch error, close the spare tab if it exists
+    if (externalWinRef.current && !externalWinRef.current.closed) {
+      try { externalWinRef.current.close(); } catch {}
+      externalWinRef.current = null;
+    }
+    setAgent(null);
+  }
+}
 
   async function openBrowse() {
     if (!botId) return;
