@@ -652,19 +652,27 @@ export default function AskAssistant() {
       let label = "";
       if (q.type === "choice") {
         const o = opts.find((o) => o.key === ans);
-        label = o?.label ?? o?.name ?? String(ans);
+        const keyNorm = normKey(q.q_key);
+        if (["edition","editions","product","products","industry_edition","industry"].includes(keyNorm)) {
+          label = o?.name ?? o?.label ?? String(ans);
+        } else {
+          label = o?.label ?? String(ans);
+        }
       } else if (q.type === "multi_choice") {
         const picked = Array.isArray(ans) ? ans : [];
-        label = opts.filter((o) => picked.includes(o.key)).map((o) => o.label).join(", ");
+        label = opts
+          .filter((o) => picked.includes(o.key))
+          .map((o) => o.name ?? o.label)
+          .join(", ");
       } else {
         label = String(ans);
       }
       if (!label) continue;
-
-      const key = normKey(q.q_key);
+      
       let line = null;
-      if (q.mirror_template) line = renderMirror(q.mirror_template, label);
-      else line = null;   // no template → no helper line
+      if (q.mirror_template) {
+        line = renderMirror(q.mirror_template, label);
+      }
       if (line) lines.push(line);
     }
     return lines;
