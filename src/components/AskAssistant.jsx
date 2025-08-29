@@ -130,7 +130,7 @@ function OptionButton({ opt, selected, onClick }) {
       className={classNames(UI.BTN, selected && "ring-2 ring-white/60")}
       title={opt.tooltip || ""}
     >
-      <div className="font-extrabold text-xs sm:text-sm">{opt.label}</div>
+      <div className="font-extrabold text-xs sm:text-sm">{opt.label ?? opt.name ?? opt.key}</div>
       {opt.tooltip ? <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">{opt.tooltip}</div> : null}
     </button>
   );
@@ -652,7 +652,7 @@ export default function AskAssistant() {
       let label = "";
       if (q.type === "choice") {
         const o = opts.find((o) => o.key === ans);
-        label = o?.label || String(ans);
+        label = o?.label ?? o?.name ?? String(ans);
       } else if (q.type === "multi_choice") {
         const picked = Array.isArray(ans) ? ans : [];
         label = opts.filter((o) => picked.includes(o.key)).map((o) => o.label).join(", ");
@@ -664,8 +664,7 @@ export default function AskAssistant() {
       const key = normKey(q.q_key);
       let line = null;
       if (q.mirror_template) line = renderMirror(q.mirror_template, label);
-      else if (CFG.qKeys.product.includes(key)) line = `You have selected ${label}.`;
-      else if (CFG.qKeys.tier.includes(key)) line = `You stated that you execute ${label.toLowerCase()} commercial transactions per month.`;
+      else line = null;   // no template → no helper line
       if (line) lines.push(line);
     }
     return lines;
