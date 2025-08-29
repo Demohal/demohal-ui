@@ -3,8 +3,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
-import fallbackLogo from "../assets/logo.png";
-
 /* =============================== *
  *  PATCH-READY CONSTANTS & UTILS  *
  * =============================== */
@@ -413,14 +411,18 @@ export default function AskAssistant() {
           setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
         }
         if (data?.ok && data?.assets) {
+          const logos = {
+            url: data.assets.logo_url || null
+          };
           setBrandAssets({
-            logo_url: data.assets.logo_url || null,
-            logo_light_url: data.assets.logo_light_url || null,
-            logo_dark_url: data.assets.logo_dark_url || null,
+            logo_url: logos.url
           });
+          if (!logos.url) {
+            setFatal("Brand logo missing for this bot.");
+          }
         }
       } catch {
-        // keep defaults if brand fails
+        setFatal("Failed to load brand assets.");
       } finally {
         if (!cancel) setBrandReady(true);
       }
@@ -808,11 +810,7 @@ export default function AskAssistant() {
   const showAskBottom = mode !== "price" || !!priceEstimate;
   const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
 
-  const logoSrc =
-    brandAssets.logo_url ||
-    brandAssets.logo_light_url ||
-    brandAssets.logo_dark_url ||
-    fallbackLogo;
+  const logoSrc = brandAssets.logo_url;
 
   return (
     <div
@@ -827,7 +825,12 @@ export default function AskAssistant() {
         <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)]">
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
-              <img src={logoSrc} alt="Brand logo" className="h-10 object-contain" />
+              <img
+                src={logoSrc}
+                alt="Brand logo"
+                className="h-10 object-contain"
+                onError={() => setFatal("Brand logo failed to load.")}
+              />
             </div>
             <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
               {selected
