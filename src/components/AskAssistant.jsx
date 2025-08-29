@@ -207,7 +207,7 @@ function QuestionBlock({ q, value, onPick }) {
             <OptionButton
               key={opt.key || opt.id}
               opt={opt}
-              selected={q.type === "multi_choice" ? Array.isArray(value) && value.includes(opt.key) : value === opt.key}
+              selected={q.type === "multi" ? Array.isArray(value) && value.includes(opt.key) : value === opt.key}
               onClick={() => onPick(q, opt)}
             />
           ))}
@@ -635,7 +635,7 @@ export default function AskAssistant() {
     for (const q of priceQuestions) {
       const v = priceAnswers[q.q_key];
       const empty =
-        (q.type === "multi_choice" && Array.isArray(v) && v.length === 0) || v === undefined || v === null || v === "";
+        (q.type === "multi" && Array.isArray(v) && v.length === 0) || v === undefined || v === null || v === "";
       if (empty && q.group === "estimation" && q.required !== false) return q;
     }
     return null;
@@ -650,7 +650,7 @@ export default function AskAssistant() {
       if (ans === undefined || ans === null || ans === "" || (Array.isArray(ans) && ans.length === 0)) continue;
       const opts = q.options || [];
       let label = "";
-      if (q.type === "choice") {
+      if (q.type === "single") {
         const o = opts.find((o) => o.key === ans);
         const keyNorm = normKey(q.q_key);
         if (["edition","editions","product","products","industry_edition","industry"].includes(keyNorm)) {
@@ -658,7 +658,7 @@ export default function AskAssistant() {
         } else {
           label = o?.label ?? String(ans);
         }
-      } else if (q.type === "multi_choice") {
+      } else if (q.type === "multi") {
         const picked = Array.isArray(ans) ? ans : [];
         label = opts
           .filter((o) => picked.includes(o.key))
@@ -681,7 +681,7 @@ export default function AskAssistant() {
   // Actions used in multiple panes
   function handlePickOption(q, opt) {
     setPriceAnswers((prev) => {
-      if (q.type === "multi_choice") {
+      if (q.type === "multi") {
         const curr = Array.isArray(prev[q.q_key]) ? prev[q.q_key] : [];
         const exists = curr.includes(opt.key);
         const next = exists ? curr.filter((k) => k !== opt.key) : [...curr, opt.key];
