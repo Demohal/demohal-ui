@@ -261,13 +261,26 @@ export default function AskAssistant() {
 
   // Optional: allow a default alias via env, e.g., VITE_DEFAULT_ALIAS=demo
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
-  // Branding mode guard (?mode=branding) with legacy support (?branding=1/true/yes)
-  const brandingMode = useMemo(() => {
-    try {
-      const qs = new URLSearchParams(window.location.search);
-      const val = (qs.get("mode") || qs.get("branding") || "").toLowerCase();
-      return val === "branding" || val === "1" || val === "true" || val === "yes";
-    } catch { return false; }
+// Branding mode: sticky once detected; robust against URL changes
+  const [brandingMode, setBrandingMode] = useState(false);
+  useEffect(() => {
+    const compute = () => {
+      try {
+        const qs = new URLSearchParams(window.location.search);
+        const v = (qs.get("mode") || qs.get("branding") || "").toLowerCase();
+        return v === "branding" || v === "1" || v === "true" || v === "yes";
+      } catch { return false; }
+    };
+    const update = () => {
+      if (compute()) setBrandingMode(true); // sticky once true
+    };
+    update();
+    window.addEventListener("popstate", update);
+    window.addEventListener("hashchange", update);
+    return () => {
+      window.removeEventListener("popstate", update);
+      window.removeEventListener("hashchange", update);
+    };
   }, []);
 
   
@@ -800,16 +813,7 @@ export default function AskAssistant() {
         )}
         style={themeVars}
       >
-        
-        {brandingMode ? (
-          <div className="fixed left-3 top-3 z-[9999] select-none">
-            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-900 border border-yellow-300 shadow-sm">
-              <span className="w-2 h-2 rounded-full bg-yellow-600 animate-pulse"></span>
-              Branding mode ON
-            </span>
-          </div>
-        ) : null}
-<div className="text-gray-800 text-center space-y-2">
+        <div className="text-gray-800 text-center space-y-2">
           <div className="text-lg font-semibold">No bot selected</div>
           {alias ? (
             <div className="text-sm text-gray-600">Resolving alias “{alias}”...</div>
