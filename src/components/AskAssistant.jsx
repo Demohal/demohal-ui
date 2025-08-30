@@ -892,7 +892,7 @@ export default function AskAssistant() {
       {brandingMode ? (
         <>
           {/* Left control rail */}
-          <div className="fixed left-2 top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-3 w-56 space-y-3 max-h-[75vh] overflow-auto">
+          <div className="fixed left-2 top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-3 max-h-[75vh] overflow-auto">
             <div className="font-semibold text-xs tracking-wide uppercase text-gray-700">Controls</div>
             {/* Upload/Logo URL */}
             <div className="space-y-1">
@@ -919,7 +919,7 @@ export default function AskAssistant() {
           </div>
 
           {/* Right color picker rail */}
-          <div className="fixed right-2 top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-3 w-56 space-y-2 max-h-[75vh] overflow-auto">
+          <div className="fixed right-2 top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-2 max-h-[75vh] overflow-auto">
             <div className="font-semibold text-xs tracking-wide uppercase text-gray-700">Colors</div>
             <label className="flex items-center justify-between text-xs">Banner Title <input type="color" value={brandDraft.css_vars["--banner-fg"] || themeVars["--banner-fg"]} onChange={(e)=>updateCssVar("--banner-fg", e.target.value)} /></label>
             <label className="flex items-center justify-between text-xs">Banner Background <input type="color" value={brandDraft.css_vars["--banner-bg"] || themeVars["--banner-bg"]} onChange={(e)=>updateCssVar("--banner-bg", e.target.value)} /></label>
