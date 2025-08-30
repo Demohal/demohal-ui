@@ -266,30 +266,6 @@ export default function AskAssistant() {
   
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [fatal, setFatal] = useState("");
-  // Position side rails flush with app card edges
-  const appRef = useRef(null);
-  const [railPos, setRailPos] = useState({ left: 12, right: 12 });
-  useEffect(() => {
-    const calc = () => {
-      const el = appRef.current;
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      const gap = 4;           // px gap between rails and card
-      const railW = 320;        // matches w-80
-      setRailPos({
-        left: Math.max(8, Math.round(r.left - gap - railW)),
-        right: Math.round(r.right + gap)
-      });
-    };
-    calc();
-    window.addEventListener("resize", calc);
-    window.addEventListener("scroll", calc, { passive: true });
-    return () => {
-      window.removeEventListener("resize", calc);
-      window.removeEventListener("scroll", calc);
-    };
-  }, []);
-
 
   // Modes: ask | browse | docs | price | meeting
   const [mode, setMode] = useState("ask");
@@ -916,99 +892,35 @@ export default function AskAssistant() {
       {brandingMode ? (
         <>
           {/* Left control rail */}
-          <div className="fixed z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-3 w-80 space-y-3 max-h-[75vh] overflow-auto text-black" style={{ left: railPos.left, top: 80 }}>
-            <div className="font-semibold text-xs tracking-wide uppercase text-black">Controls</div>
+          <div className="fixed left-2 top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-3 w-56 space-y-3 max-h-[75vh] overflow-auto">
+            <div className="font-semibold text-xs tracking-wide uppercase text-gray-700">Controls</div>
             {/* Upload/Logo URL */}
             <div className="space-y-1">
-              <div className="text-[11px] font-medium text-black">Logo URL</div>
+              <div className="text-[11px] font-medium">Logo URL</div>
               <input className="w-full border rounded px-2 py-1 text-xs" placeholder="https://..." value={brandAssets.logo_url || ""} onChange={(e) => setBrandAssets(a => ({...a, logo_url: e.target.value}))} />
             </div>
             {/* Show toggles */}
             <div className="space-y-1">
-              <div className="text-[11px] font-medium text-black">Show Sections</div>
-              <label className="flex items-center gap-2 text-xs text-black"><input type="checkbox" checked={tabsEnabled.demos} onChange={(e)=>setTabsEnabled(t=>({...t, demos:e.target.checked}))}/> Browse Demos</label>
-              <label className="flex items-center gap-2 text-xs text-black"><input type="checkbox" checked={tabsEnabled.docs} onChange={(e)=>setTabsEnabled(t=>({...t, docs:e.target.checked}))}/> Browse Documents</label>
-              <label className="flex items-center gap-2 text-xs text-black"><input type="checkbox" checked={tabsEnabled.price} onChange={(e)=>setTabsEnabled(t=>({...t, price:e.target.checked}))}/> Price Estimate</label>
-              <label className="flex items-center gap-2 text-xs text-black"><input type="checkbox" checked={tabsEnabled.meeting} onChange={(e)=>setTabsEnabled(t=>({...t, meeting:e.target.checked}))}/> Schedule Meeting</label>
+              <div className="text-[11px] font-medium">Show Sections</div>
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={tabsEnabled.demos} onChange={(e)=>setTabsEnabled(t=>({...t, demos:e.target.checked}))}/> Browse Demos</label>
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={tabsEnabled.docs} onChange={(e)=>setTabsEnabled(t=>({...t, docs:e.target.checked}))}/> Browse Documents</label>
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={tabsEnabled.price} onChange={(e)=>setTabsEnabled(t=>({...t, price:e.target.checked}))}/> Price Estimate</label>
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={tabsEnabled.meeting} onChange={(e)=>setTabsEnabled(t=>({...t, meeting:e.target.checked}))}/> Schedule Meeting</label>
             </div>
             {/* Text editors toggles */}
             <div className="space-y-1">
-              <div className="text-[11px] font-medium text-black">Text Editors</div>
+              <div className="text-[11px] font-medium">Text Editors</div>
               <button className="w-full text-left text-xs border rounded px-2 py-1" onClick={()=>setEditing(e=>({...e, welcome:!e.welcome}))}>Edit Welcome Message</button>
               <button className="w-full text-left text-xs border rounded px-2 py-1" onClick={()=>setMode('price') || setEditing(e=>({...e, priceIntro:true}))}>Edit Price Introduction</button>
               <button className="w-full text-left text-xs border rounded px-2 py-1" onClick={()=>setMode('price') || setEditing(e=>({...e, priceOutro:true}))}>Edit Price CTA</button>
               <div className="text-[11px] font-medium mt-2">Intro Video Link</div>
-              {/* Editor panel in left rail */}
-              {(editing.welcome || editing.priceIntro || editing.priceOutro || editing.scheduleHeader) ? (
-                <div className="mt-3 border-t pt-3">
-                  <div className="text-[11px] font-semibold text-black mb-1">
-                    {editing.welcome ? "Welcome Message" : editing.priceIntro ? "Price Introduction" : editing.priceOutro ? "Price CTA" : "Schedule Header"}
-                  </div>
-                  {editing.priceIntro ? (
-                    <div className="space-y-2">
-                      <input
-                        className="w-full border rounded px-2 py-2 text-sm"
-                        placeholder="Intro heading"
-                        value={brandDraft.text.ui_copy?.intro?.heading || ""}
-                        onChange={(e) => updateDraftText("ui_copy.intro.heading", e.target.value)}
-                      />
-                      <textarea
-                        className="w-full h-40 border rounded px-2 py-2 text-sm"
-                        placeholder="Intro body"
-                        value={brandDraft.text.ui_copy?.intro?.body || ""}
-                        onChange={(e) => updateDraftText("ui_copy.intro.body", e.target.value)}
-                      />
-                    </div>
-                  ) : editing.priceOutro ? (
-                    <div className="space-y-2">
-                      <input
-                        className="w-full border rounded px-2 py-2 text-sm"
-                        placeholder="CTA heading"
-                        value={brandDraft.text.ui_copy?.outro?.heading || ""}
-                        onChange={(e) => updateDraftText("ui_copy.outro.heading", e.target.value)}
-                      />
-                      <textarea
-                        className="w-full h-40 border rounded px-2 py-2 text-sm"
-                        placeholder="CTA body"
-                        value={brandDraft.text.ui_copy?.outro?.body || ""}
-                        onChange={(e) => updateDraftText("ui_copy.outro.body", e.target.value)}
-                      />
-                    </div>
-                  ) : editing.welcome ? (
-                    <textarea
-                      className="w-full h-40 border rounded px-2 py-2 text-sm"
-                      rows={6}
-                      placeholder="Welcome message"
-                      value={brandDraft.text.welcome_message || ""}
-                      onChange={(e) => updateDraftText("welcome_message", e.target.value)}
-                    />
-                  ) : (
-                    <textarea
-                      className="w-full h-40 border rounded px-2 py-2 text-sm"
-                      rows={6}
-                      placeholder="Schedule header"
-                      value={brandDraft.text.schedule_header || ""}
-                      onChange={(e) => updateDraftText("schedule_header", e.target.value)}
-                    />
-                  )}
-                  <div className="flex gap-2 mt-2">
-                    <button className="px-3 py-1 rounded border border-gray-300 bg-white text-xs" onClick={() => setEditing({ welcome:false, priceIntro:false, priceOutro:false, scheduleHeader:false })}>
-                      Close
-                    </button>
-                    <button className="px-3 py-1 rounded border border-blue-600 bg-blue-600 text-white text-xs disabled:opacity-50" onClick={publishDraft} disabled={!brandDraft.dirty}>
-                      Publish
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-
               <input className="w-full border rounded px-2 py-1 text-xs" placeholder="https://..." value={introVideoUrl || ""} onChange={(e)=>setIntroVideoUrl(e.target.value)} />
             </div>
           </div>
 
           {/* Right color picker rail */}
-          <div className="fixed z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-3 w-80 space-y-2 max-h-[75vh] overflow-auto text-black" style={{ left: railPos.right, top: 80 }}>
-            <div className="font-semibold text-xs tracking-wide uppercase text-black">Colors</div>
+          <div className="fixed right-2 top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-3 w-56 space-y-2 max-h-[75vh] overflow-auto">
+            <div className="font-semibold text-xs tracking-wide uppercase text-gray-700">Colors</div>
             <label className="flex items-center justify-between text-xs">Banner Title <input type="color" value={brandDraft.css_vars["--banner-fg"] || themeVars["--banner-fg"]} onChange={(e)=>updateCssVar("--banner-fg", e.target.value)} /></label>
             <label className="flex items-center justify-between text-xs">Banner Background <input type="color" value={brandDraft.css_vars["--banner-bg"] || themeVars["--banner-bg"]} onChange={(e)=>updateCssVar("--banner-bg", e.target.value)} /></label>
             <label className="flex items-center justify-between text-xs">Tab Titles <input type="color" value={brandDraft.css_vars["--tab-active-fg"] || themeVars["--tab-active-fg"]} onChange={(e)=>updateCssVar("--tab-active-fg", e.target.value)} /></label>
@@ -1054,99 +966,35 @@ export default function AskAssistant() {
       {brandingMode ? (
         <>
           {/* Left control rail */}
-          <div className="fixed z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-3 w-80 space-y-3 max-h-[75vh] overflow-auto text-black" style={{ left: railPos.left, top: 80 }}>
-            <div className="font-semibold text-xs tracking-wide uppercase text-black">Controls</div>
+          <div className="fixed left-2 top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-3 w-56 space-y-3 max-h-[75vh] overflow-auto">
+            <div className="font-semibold text-xs tracking-wide uppercase text-gray-700">Controls</div>
             {/* Upload/Logo URL */}
             <div className="space-y-1">
-              <div className="text-[11px] font-medium text-black">Logo URL</div>
+              <div className="text-[11px] font-medium">Logo URL</div>
               <input className="w-full border rounded px-2 py-1 text-xs" placeholder="https://..." value={brandAssets.logo_url || ""} onChange={(e) => setBrandAssets(a => ({...a, logo_url: e.target.value}))} />
             </div>
             {/* Show toggles */}
             <div className="space-y-1">
-              <div className="text-[11px] font-medium text-black">Show Sections</div>
-              <label className="flex items-center gap-2 text-xs text-black"><input type="checkbox" checked={tabsEnabled.demos} onChange={(e)=>setTabsEnabled(t=>({...t, demos:e.target.checked}))}/> Browse Demos</label>
-              <label className="flex items-center gap-2 text-xs text-black"><input type="checkbox" checked={tabsEnabled.docs} onChange={(e)=>setTabsEnabled(t=>({...t, docs:e.target.checked}))}/> Browse Documents</label>
-              <label className="flex items-center gap-2 text-xs text-black"><input type="checkbox" checked={tabsEnabled.price} onChange={(e)=>setTabsEnabled(t=>({...t, price:e.target.checked}))}/> Price Estimate</label>
-              <label className="flex items-center gap-2 text-xs text-black"><input type="checkbox" checked={tabsEnabled.meeting} onChange={(e)=>setTabsEnabled(t=>({...t, meeting:e.target.checked}))}/> Schedule Meeting</label>
+              <div className="text-[11px] font-medium">Show Sections</div>
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={tabsEnabled.demos} onChange={(e)=>setTabsEnabled(t=>({...t, demos:e.target.checked}))}/> Browse Demos</label>
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={tabsEnabled.docs} onChange={(e)=>setTabsEnabled(t=>({...t, docs:e.target.checked}))}/> Browse Documents</label>
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={tabsEnabled.price} onChange={(e)=>setTabsEnabled(t=>({...t, price:e.target.checked}))}/> Price Estimate</label>
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={tabsEnabled.meeting} onChange={(e)=>setTabsEnabled(t=>({...t, meeting:e.target.checked}))}/> Schedule Meeting</label>
             </div>
             {/* Text editors toggles */}
             <div className="space-y-1">
-              <div className="text-[11px] font-medium text-black">Text Editors</div>
+              <div className="text-[11px] font-medium">Text Editors</div>
               <button className="w-full text-left text-xs border rounded px-2 py-1" onClick={()=>setEditing(e=>({...e, welcome:!e.welcome}))}>Edit Welcome Message</button>
               <button className="w-full text-left text-xs border rounded px-2 py-1" onClick={()=>{setMode('price'); setEditing(e=>({...e, priceIntro:true}));}}>Edit Price Introduction</button>
               <button className="w-full text-left text-xs border rounded px-2 py-1" onClick={()=>{setMode('price'); setEditing(e=>({...e, priceOutro:true}));}}>Edit Price CTA</button>
               <div className="text-[11px] font-medium mt-2">Intro Video Link</div>
-              {/* Editor panel in left rail */}
-              {(editing.welcome || editing.priceIntro || editing.priceOutro || editing.scheduleHeader) ? (
-                <div className="mt-3 border-t pt-3">
-                  <div className="text-[11px] font-semibold text-black mb-1">
-                    {editing.welcome ? "Welcome Message" : editing.priceIntro ? "Price Introduction" : editing.priceOutro ? "Price CTA" : "Schedule Header"}
-                  </div>
-                  {editing.priceIntro ? (
-                    <div className="space-y-2">
-                      <input
-                        className="w-full border rounded px-2 py-2 text-sm"
-                        placeholder="Intro heading"
-                        value={brandDraft.text.ui_copy?.intro?.heading || ""}
-                        onChange={(e) => updateDraftText("ui_copy.intro.heading", e.target.value)}
-                      />
-                      <textarea
-                        className="w-full h-40 border rounded px-2 py-2 text-sm"
-                        placeholder="Intro body"
-                        value={brandDraft.text.ui_copy?.intro?.body || ""}
-                        onChange={(e) => updateDraftText("ui_copy.intro.body", e.target.value)}
-                      />
-                    </div>
-                  ) : editing.priceOutro ? (
-                    <div className="space-y-2">
-                      <input
-                        className="w-full border rounded px-2 py-2 text-sm"
-                        placeholder="CTA heading"
-                        value={brandDraft.text.ui_copy?.outro?.heading || ""}
-                        onChange={(e) => updateDraftText("ui_copy.outro.heading", e.target.value)}
-                      />
-                      <textarea
-                        className="w-full h-40 border rounded px-2 py-2 text-sm"
-                        placeholder="CTA body"
-                        value={brandDraft.text.ui_copy?.outro?.body || ""}
-                        onChange={(e) => updateDraftText("ui_copy.outro.body", e.target.value)}
-                      />
-                    </div>
-                  ) : editing.welcome ? (
-                    <textarea
-                      className="w-full h-40 border rounded px-2 py-2 text-sm"
-                      rows={6}
-                      placeholder="Welcome message"
-                      value={brandDraft.text.welcome_message || ""}
-                      onChange={(e) => updateDraftText("welcome_message", e.target.value)}
-                    />
-                  ) : (
-                    <textarea
-                      className="w-full h-40 border rounded px-2 py-2 text-sm"
-                      rows={6}
-                      placeholder="Schedule header"
-                      value={brandDraft.text.schedule_header || ""}
-                      onChange={(e) => updateDraftText("schedule_header", e.target.value)}
-                    />
-                  )}
-                  <div className="flex gap-2 mt-2">
-                    <button className="px-3 py-1 rounded border border-gray-300 bg-white text-xs" onClick={() => setEditing({ welcome:false, priceIntro:false, priceOutro:false, scheduleHeader:false })}>
-                      Close
-                    </button>
-                    <button className="px-3 py-1 rounded border border-blue-600 bg-blue-600 text-white text-xs disabled:opacity-50" onClick={publishDraft} disabled={!brandDraft.dirty}>
-                      Publish
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-
               <input className="w-full border rounded px-2 py-1 text-xs" placeholder="https://..." value={introVideoUrl || ""} onChange={(e)=>setIntroVideoUrl(e.target.value)} />
             </div>
           </div>
 
           {/* Right color picker rail */}
-          <div className="fixed z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-3 w-80 space-y-2 max-h-[75vh] overflow-auto text-black" style={{ left: railPos.right, top: 80 }}>
-            <div className="font-semibold text-xs tracking-wide uppercase text-black">Colors</div>
+          <div className="fixed right-2 top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-3 w-56 space-y-2 max-h-[75vh] overflow-auto">
+            <div className="font-semibold text-xs tracking-wide uppercase text-gray-700">Colors</div>
             <label className="flex items-center justify-between text-xs">Banner Title <input type="color" value={brandDraft.css_vars["--banner-fg"] || themeVars["--banner-fg"]} onChange={(e)=>updateCssVar("--banner-fg", e.target.value)} /></label>
             <label className="flex items-center justify-between text-xs">Banner Background <input type="color" value={brandDraft.css_vars["--banner-bg"] || themeVars["--banner-bg"]} onChange={(e)=>updateCssVar("--banner-bg", e.target.value)} /></label>
             <label className="flex items-center justify-between text-xs">Tab Titles <input type="color" value={brandDraft.css_vars["--tab-active-fg"] || themeVars["--tab-active-fg"]} onChange={(e)=>updateCssVar("--tab-active-fg", e.target.value)} /></label>
@@ -1160,7 +1008,7 @@ export default function AskAssistant() {
         </>
       ) : null}
 
-      <div ref={appRef} className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] border border-[var(--card-border)] md:rounded-[var(--radius-card)] [box-shadow:var(--shadow-card)] flex flex-col overflow-hidden transition-all duration-300">
+      <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] border border-[var(--card-border)] md:rounded-[var(--radius-card)] [box-shadow:var(--shadow-card)] flex flex-col overflow-hidden transition-all duration-300">
         {/* Header */}
         <div className="relative px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)]">
           <div className="flex items-center justify-between w-full py-3">
@@ -1213,7 +1061,12 @@ export default function AskAssistant() {
           ✎
         </button>
       ) : null}
-      
+      {brandingMode && editing.priceIntro ? (
+        <div className="mt-2 space-y-2">
+          <input className="w-full border p-2 rounded" placeholder="Intro heading" value={brandDraft.text.ui_copy.intro.heading} onChange={(e) => updateDraftText("ui_copy.intro.heading", e.target.value)} />
+          <textarea className="w-full border p-2 rounded" rows={4} placeholder="Intro body" value={brandDraft.text.ui_copy.intro.body} onChange={(e) => updateDraftText("ui_copy.intro.body", e.target.value)} />
+        </div>
+      ) : null}
     </div>
               ) : null}
             </div>
@@ -1244,7 +1097,9 @@ export default function AskAssistant() {
                       {brandingMode ? (
                         <button className="absolute -top-2 -right-2 text-xs bg-white border rounded px-2 py-0.5" onClick={() => setEditing((e) => ({ ...e, scheduleHeader: !e.scheduleHeader }))}>✎</button>
                       ) : null}
-                      
+                      {brandingMode && editing.scheduleHeader ? (
+                        <textarea className="w-full border p-2 rounded mt-2" rows={3} placeholder="Schedule header" value={brandDraft.text.schedule_header} onChange={(e) => updateDraftText("schedule_header", e.target.value)} />
+                      ) : null}
                     </div>
                   ) : null}
 
@@ -1365,7 +1220,9 @@ export default function AskAssistant() {
                       {brandingMode ? (
                         <button className="absolute -top-2 -right-2 text-xs bg-white border rounded px-2 py-0.5" onClick={() => setEditing((e) => ({ ...e, welcome: !e.welcome }))}>✎</button>
                       ) : null}
-                      
+                      {brandingMode && editing.welcome ? (
+                        <textarea className="w-full border p-2 rounded mt-2" rows={3} placeholder="Welcome message" value={brandDraft.text.welcome_message} onChange={(e) => updateDraftText("welcome_message", e.target.value)} />
+                      ) : null}
                     </div>
                     {showIntroVideo && introVideoUrl ? (
                       <div style={{ position: "relative", paddingTop: "56.25%" }}>
@@ -1391,7 +1248,9 @@ export default function AskAssistant() {
                       {brandingMode ? (
                         <button className="absolute -top-2 -right-2 text-xs bg-white border rounded px-2 py-0.5" onClick={() => setEditing((e) => ({ ...e, welcome: !e.welcome }))}>✎</button>
                       ) : null}
-                      
+                      {brandingMode && editing.welcome ? (
+                        <textarea className="w-full border p-2 rounded mt-2" rows={3} placeholder="Welcome message" value={brandDraft.text.welcome_message} onChange={(e) => updateDraftText("welcome_message", e.target.value)} />
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
