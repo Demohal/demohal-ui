@@ -1057,9 +1057,6 @@ export default function AskAssistant() {
           "This tool provides a quick estimate based on your selections. Final pricing may vary by configuration, usage, and implementation."))
       }
       {brandingMode ? (
-        <button className="absolute -top-2 -right-2 text-xs bg-white border rounded px-2 py-0.5" onClick={() => setEditing((e) => ({ ...e, priceIntro: !e.priceIntro }))}>
-          ✎
-        </button>
       ) : null}
       {brandingMode && editing.priceIntro ? (
         <div className="mt-2 space-y-2">
@@ -1094,15 +1091,11 @@ export default function AskAssistant() {
                   {(brandingMode ? (brandDraft.text.schedule_header || agent?.schedule_header) : agent?.schedule_header) ? (
                     <div className="relative mb-2 text-sm italic text-gray-600 whitespace-pre-line">
                       {brandingMode ? (brandDraft.text.schedule_header || agent?.schedule_header || "") : (agent?.schedule_header || "")}
-                      {brandingMode ? (
-                        <button className="absolute -top-2 -right-2 text-xs bg-white border rounded px-2 py-0.5" onClick={() => setEditing((e) => ({ ...e, scheduleHeader: !e.scheduleHeader }))}>✎</button>
-                      ) : null}
                       {brandingMode && editing.scheduleHeader ? (
                         <textarea className="w-full border p-2 rounded mt-2" rows={3} placeholder="Schedule header" value={brandDraft.text.schedule_header} onChange={(e) => updateDraftText("schedule_header", e.target.value)} />
                       ) : null}
                     </div>
                   ) : null}
-
                   {/* NEW: calendar_link_type handling */}
                   {!agent ? (
                     <div className="text-sm text-gray-600">Loading scheduling…</div>
@@ -1217,9 +1210,6 @@ export default function AskAssistant() {
                   <div className="space-y-3">
                     <div className="relative text-black text-base font-bold whitespace-pre-line">
                       {brandingMode ? (brandDraft.text.welcome_message || responseText) : responseText}
-                      {brandingMode ? (
-                        <button className="absolute -top-2 -right-2 text-xs bg-white border rounded px-2 py-0.5" onClick={() => setEditing((e) => ({ ...e, welcome: !e.welcome }))}>✎</button>
-                      ) : null}
                       {brandingMode && editing.welcome ? (
                         <textarea className="w-full border p-2 rounded mt-2" rows={3} placeholder="Welcome message" value={brandDraft.text.welcome_message} onChange={(e) => updateDraftText("welcome_message", e.target.value)} />
                       ) : null}
@@ -1245,9 +1235,6 @@ export default function AskAssistant() {
                   ) : lastQuestion ? (
                     <div className="relative text-black text-base font-bold whitespace-pre-line">
                       {brandingMode ? (brandDraft.text.welcome_message || responseText) : responseText}
-                      {brandingMode ? (
-                        <button className="absolute -top-2 -right-2 text-xs bg-white border rounded px-2 py-0.5" onClick={() => setEditing((e) => ({ ...e, welcome: !e.welcome }))}>✎</button>
-                      ) : null}
                       {brandingMode && editing.welcome ? (
                         <textarea className="w-full border p-2 rounded mt-2" rows={3} placeholder="Welcome message" value={brandDraft.text.welcome_message} onChange={(e) => updateDraftText("welcome_message", e.target.value)} />
                       ) : null}
