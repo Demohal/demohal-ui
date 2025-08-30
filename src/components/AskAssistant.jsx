@@ -128,7 +128,7 @@ function OptionButton({ opt, selected, onClick }) {
       className={classNames(UI.BTN, selected && "ring-2 ring-white/60")}
       title={opt.tooltip || ""}
     >
-      <div className="font-extrabold text-xs sm:text-sm">{opt.label ?? opt.name ?? opt.key}</div>
+      <div className="font-extrabold text-xs sm:text-sm">{opt.label ?? opt.key}</div>
       {opt.tooltip ? <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">{opt.tooltip}</div> : null}
     </button>
   );
@@ -259,15 +259,9 @@ export default function AskAssistant() {
     return { alias: a, botIdFromUrl: b };
   }, []);
 
-  // Branding mode guard (?branding=1)
-  const brandingMode = useMemo(() => {
-    try {
-      const qs = new URLSearchParams(window.location.search);
-      return (qs.get("branding") || "") === "1";
-    } catch { return false; }
-  }, []);
-
-  // Optional: allow a default alias via env, e.g., VITE_DEFAULT_ALIAS=demo
+    // DEV ONLY: hardwired branding on for prototype
+  const brandingMode = true;
+// Optional: allow a default alias via env, e.g., VITE_DEFAULT_ALIAS=demo
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
   
   const [botId, setBotId] = useState(botIdFromUrl || "");
@@ -763,11 +757,7 @@ export default function AskAssistant() {
       if (q.type === "single") {
         const o = opts.find((o) => o.key === ans);
         const keyNorm = normKey(q.q_key);
-        if (["edition","editions","product","products","industry_edition","industry"].includes(keyNorm)) {
-          label = o?.name ?? o?.label ?? String(ans);
-        } else {
-          label = o?.label ?? String(ans);
-        }
+        label = o?.label ?? String(ans);
       } else if (q.type === "multi") {
         const picked = Array.isArray(ans) ? ans : [];
         label = opts
@@ -973,6 +963,51 @@ export default function AskAssistant() {
       )}
       style={themeVars}
     >
+      {brandingMode ? (
+        <>
+          {/* Left control rail */}
+          <div className="fixed left-2 top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-3 w-56 space-y-3 max-h-[75vh] overflow-auto">
+            <div className="font-semibold text-xs tracking-wide uppercase text-gray-700">Controls</div>
+            {/* Upload/Logo URL */}
+            <div className="space-y-1">
+              <div className="text-[11px] font-medium">Logo URL</div>
+              <input className="w-full border rounded px-2 py-1 text-xs" placeholder="https://..." value={brandAssets.logo_url || ""} onChange={(e) => setBrandAssets(a => ({...a, logo_url: e.target.value}))} />
+            </div>
+            {/* Show toggles */}
+            <div className="space-y-1">
+              <div className="text-[11px] font-medium">Show Sections</div>
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={tabsEnabled.demos} onChange={(e)=>setTabsEnabled(t=>({...t, demos:e.target.checked}))}/> Browse Demos</label>
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={tabsEnabled.docs} onChange={(e)=>setTabsEnabled(t=>({...t, docs:e.target.checked}))}/> Browse Documents</label>
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={tabsEnabled.price} onChange={(e)=>setTabsEnabled(t=>({...t, price:e.target.checked}))}/> Price Estimate</label>
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={tabsEnabled.meeting} onChange={(e)=>setTabsEnabled(t=>({...t, meeting:e.target.checked}))}/> Schedule Meeting</label>
+            </div>
+            {/* Text editors toggles */}
+            <div className="space-y-1">
+              <div className="text-[11px] font-medium">Text Editors</div>
+              <button className="w-full text-left text-xs border rounded px-2 py-1" onClick={()=>setEditing(e=>({...e, welcome:!e.welcome}))}>Edit Welcome Message</button>
+              <button className="w-full text-left text-xs border rounded px-2 py-1" onClick={()=>{setMode('price'); setEditing(e=>({...e, priceIntro:true}));}}>Edit Price Introduction</button>
+              <button className="w-full text-left text-xs border rounded px-2 py-1" onClick={()=>{setMode('price'); setEditing(e=>({...e, priceOutro:true}));}}>Edit Price CTA</button>
+              <div className="text-[11px] font-medium mt-2">Intro Video Link</div>
+              <input className="w-full border rounded px-2 py-1 text-xs" placeholder="https://..." value={introVideoUrl || ""} onChange={(e)=>setIntroVideoUrl(e.target.value)} />
+            </div>
+          </div>
+
+          {/* Right color picker rail */}
+          <div className="fixed right-2 top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-3 w-56 space-y-2 max-h-[75vh] overflow-auto">
+            <div className="font-semibold text-xs tracking-wide uppercase text-gray-700">Colors</div>
+            <label className="flex items-center justify-between text-xs">Banner Title <input type="color" value={brandDraft.css_vars["--banner-fg"] || themeVars["--banner-fg"]} onChange={(e)=>updateCssVar("--banner-fg", e.target.value)} /></label>
+            <label className="flex items-center justify-between text-xs">Banner Background <input type="color" value={brandDraft.css_vars["--banner-bg"] || themeVars["--banner-bg"]} onChange={(e)=>updateCssVar("--banner-bg", e.target.value)} /></label>
+            <label className="flex items-center justify-between text-xs">Tab Titles <input type="color" value={brandDraft.css_vars["--tab-active-fg"] || themeVars["--tab-active-fg"]} onChange={(e)=>updateCssVar("--tab-active-fg", e.target.value)} /></label>
+            <label className="flex items-center justify-between text-xs">Tab Background <input type="color" value={brandDraft.css_vars["--tab-active-bg"] || themeVars["--tab-active-bg"]} onChange={(e)=>updateCssVar("--tab-active-bg", e.target.value)} /></label>
+            <label className="flex items-center justify-between text-xs">Card Background <input type="color" value={brandDraft.css_vars["--card-bg"] || themeVars["--card-bg"]} onChange={(e)=>updateCssVar("--card-bg", e.target.value)} /></label>
+            <label className="flex items-center justify-between text-xs">Message Field BG <input type="color" value={brandDraft.css_vars["--field-bg"] || themeVars["--field-bg"]} onChange={(e)=>updateCssVar("--field-bg", e.target.value)} /></label>
+            <label className="flex items-center justify-between text-xs">Message Field Border <input type="color" value={brandDraft.css_vars["--field-border"] || themeVars["--field-border"]} onChange={(e)=>updateCssVar("--field-border", e.target.value)} /></label>
+            <label className="flex items-center justify-between text-xs">Send Button <input type="color" value={brandDraft.css_vars["--send-color"] || themeVars["--send-color"]} onChange={(e)=>updateCssVar("--send-color", e.target.value)} /></label>
+            <label className="flex items-center justify-between text-xs">Send Hover <input type="color" value={brandDraft.css_vars["--send-color-hover"] || themeVars["--send-color-hover"]} onChange={(e)=>updateCssVar("--send-color-hover", e.target.value)} /></label>
+          </div>
+        </>
+      ) : null}
+
       <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] border border-[var(--card-border)] md:rounded-[var(--radius-card)] [box-shadow:var(--shadow-card)] flex flex-col overflow-hidden transition-all duration-300">
         {/* Header */}
         <div className="relative px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)]">
