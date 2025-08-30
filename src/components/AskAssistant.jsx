@@ -110,11 +110,11 @@ function Row({ item, onPick, variant }) {
   const btnClass = variant === "docs" ? UI.BTN_DOCS : UI.BTN;
   return (
     <button data-patch="row-button" onClick={() => onPick(item)} className={btnClass} title={item.description || ""}>
-      <div className="font-extrabold text-xs sm:text-sm">{item.title}</div>
+      <div className="font-extrabold text-base">{item.title}</div>
       {item.description ? (
-        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">{item.description}</div>
+        <div className="mt-1 text-sm opacity-90">{item.description}</div>
       ) : item.functions_text ? (
-        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">{item.functions_text}</div>
+        <div className="mt-1 text-sm opacity-90">{item.functions_text}</div>
       ) : null}
     </button>
   );
@@ -128,8 +128,8 @@ function OptionButton({ opt, selected, onClick }) {
       className={classNames(UI.BTN, selected && "ring-2 ring-white/60")}
       title={opt.tooltip || ""}
     >
-      <div className="font-extrabold text-xs sm:text-sm">{opt.label ?? opt.key}</div>
-      {opt.tooltip ? <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">{opt.tooltip}</div> : null}
+      <div className="font-extrabold text-base">{opt.label}</div>
+      {opt.tooltip ? <div className="mt-1 text-sm opacity-90">{opt.tooltip}</div> : null}
     </button>
   );
 }
@@ -893,7 +893,7 @@ export default function AskAssistant() {
         <>
           {/* Left control rail */}
           <div className="fixed left-2 top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-3 max-h-[75vh] overflow-auto">
-            <div className="font-semibold text-xs tracking-wide uppercase text-gray-700">Controls</div>
+            <div className="font-semibold text-sm tracking-wide uppercase text-black">
             {/* Upload/Logo URL */}
             <div className="space-y-1">
               <div className="text-[11px] font-medium">Logo URL</div>
