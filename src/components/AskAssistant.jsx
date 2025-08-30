@@ -893,7 +893,7 @@ export default function AskAssistant() {
         <>
           {/* Left control rail */}
           <div className="fixed left-2 top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-3 max-h-[75vh] overflow-auto">
-            <div className="font-semibold text-sm tracking-wide uppercase text-black">
+            <div className="font-semibold text-sm tracking-wide uppercase text-black">Controls</div>
             {/* Upload/Logo URL */}
             <div className="space-y-1">
               <div className="text-[11px] font-medium">Logo URL</div>
