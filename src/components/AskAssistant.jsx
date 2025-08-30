@@ -1056,8 +1056,7 @@ export default function AskAssistant() {
         ) + (brandingMode ? (brandDraft.text.ui_copy?.intro?.body || "") : (priceUiCopy?.intro?.body ||
           "This tool provides a quick estimate based on your selections. Final pricing may vary by configuration, usage, and implementation."))
       }
-      {brandingMode ? (
-      ) : null}
+      {/* branding placeholder removed */}
       {brandingMode && editing.priceIntro ? (
         <div className="mt-2 space-y-2">
           <input className="w-full border p-2 rounded" placeholder="Intro heading" value={brandDraft.text.ui_copy.intro.heading} onChange={(e) => updateDraftText("ui_copy.intro.heading", e.target.value)} />
