@@ -274,8 +274,8 @@ export default function AskAssistant() {
       const el = appRef.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
-      const gap = 12;           // px gap between rails and card
-      const railW = 288;        // matches w-72
+      const gap = 4;           // px gap between rails and card
+      const railW = 320;        // matches w-80
       setRailPos({
         left: Math.max(8, Math.round(r.left - gap - railW)),
         right: Math.round(r.right + gap)
@@ -916,7 +916,7 @@ export default function AskAssistant() {
       {brandingMode ? (
         <>
           {/* Left control rail */}
-          <div className="fixed z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-3 w-72 space-y-3 max-h-[75vh] overflow-auto text-black" style={{ left: railPos.left, top: 80 }}>
+          <div className="fixed z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-3 w-80 space-y-3 max-h-[75vh] overflow-auto text-black" style={{ left: railPos.left, top: 80 }}>
             <div className="font-semibold text-xs tracking-wide uppercase text-black">Controls</div>
             {/* Upload/Logo URL */}
             <div className="space-y-1">
@@ -938,12 +938,76 @@ export default function AskAssistant() {
               <button className="w-full text-left text-xs border rounded px-2 py-1" onClick={()=>setMode('price') || setEditing(e=>({...e, priceIntro:true}))}>Edit Price Introduction</button>
               <button className="w-full text-left text-xs border rounded px-2 py-1" onClick={()=>setMode('price') || setEditing(e=>({...e, priceOutro:true}))}>Edit Price CTA</button>
               <div className="text-[11px] font-medium mt-2">Intro Video Link</div>
+              {/* Editor panel in left rail */}
+              {(editing.welcome || editing.priceIntro || editing.priceOutro || editing.scheduleHeader) ? (
+                <div className="mt-3 border-t pt-3">
+                  <div className="text-[11px] font-semibold text-black mb-1">
+                    {editing.welcome ? "Welcome Message" : editing.priceIntro ? "Price Introduction" : editing.priceOutro ? "Price CTA" : "Schedule Header"}
+                  </div>
+                  {editing.priceIntro ? (
+                    <div className="space-y-2">
+                      <input
+                        className="w-full border rounded px-2 py-2 text-sm"
+                        placeholder="Intro heading"
+                        value={brandDraft.text.ui_copy?.intro?.heading || ""}
+                        onChange={(e) => updateDraftText("ui_copy.intro.heading", e.target.value)}
+                      />
+                      <textarea
+                        className="w-full h-40 border rounded px-2 py-2 text-sm"
+                        placeholder="Intro body"
+                        value={brandDraft.text.ui_copy?.intro?.body || ""}
+                        onChange={(e) => updateDraftText("ui_copy.intro.body", e.target.value)}
+                      />
+                    </div>
+                  ) : editing.priceOutro ? (
+                    <div className="space-y-2">
+                      <input
+                        className="w-full border rounded px-2 py-2 text-sm"
+                        placeholder="CTA heading"
+                        value={brandDraft.text.ui_copy?.outro?.heading || ""}
+                        onChange={(e) => updateDraftText("ui_copy.outro.heading", e.target.value)}
+                      />
+                      <textarea
+                        className="w-full h-40 border rounded px-2 py-2 text-sm"
+                        placeholder="CTA body"
+                        value={brandDraft.text.ui_copy?.outro?.body || ""}
+                        onChange={(e) => updateDraftText("ui_copy.outro.body", e.target.value)}
+                      />
+                    </div>
+                  ) : editing.welcome ? (
+                    <textarea
+                      className="w-full h-40 border rounded px-2 py-2 text-sm"
+                      rows={6}
+                      placeholder="Welcome message"
+                      value={brandDraft.text.welcome_message || ""}
+                      onChange={(e) => updateDraftText("welcome_message", e.target.value)}
+                    />
+                  ) : (
+                    <textarea
+                      className="w-full h-40 border rounded px-2 py-2 text-sm"
+                      rows={6}
+                      placeholder="Schedule header"
+                      value={brandDraft.text.schedule_header || ""}
+                      onChange={(e) => updateDraftText("schedule_header", e.target.value)}
+                    />
+                  )}
+                  <div className="flex gap-2 mt-2">
+                    <button className="px-3 py-1 rounded border border-gray-300 bg-white text-xs" onClick={() => setEditing({ welcome:false, priceIntro:false, priceOutro:false, scheduleHeader:false })}>
+                      Close
+                    </button>
+                    <button className="px-3 py-1 rounded border border-blue-600 bg-blue-600 text-white text-xs disabled:opacity-50" onClick={publishDraft} disabled={!brandDraft.dirty}>
+                      Publish
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
               <input className="w-full border rounded px-2 py-1 text-xs" placeholder="https://..." value={introVideoUrl || ""} onChange={(e)=>setIntroVideoUrl(e.target.value)} />
             </div>
           </div>
 
           {/* Right color picker rail */}
-          <div className="fixed z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-3 w-72 space-y-2 max-h-[75vh] overflow-auto text-black" style={{ left: railPos.right, top: 80 }}>
+          <div className="fixed z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-3 w-80 space-y-2 max-h-[75vh] overflow-auto text-black" style={{ left: railPos.right, top: 80 }}>
             <div className="font-semibold text-xs tracking-wide uppercase text-black">Colors</div>
             <label className="flex items-center justify-between text-xs">Banner Title <input type="color" value={brandDraft.css_vars["--banner-fg"] || themeVars["--banner-fg"]} onChange={(e)=>updateCssVar("--banner-fg", e.target.value)} /></label>
             <label className="flex items-center justify-between text-xs">Banner Background <input type="color" value={brandDraft.css_vars["--banner-bg"] || themeVars["--banner-bg"]} onChange={(e)=>updateCssVar("--banner-bg", e.target.value)} /></label>
@@ -990,7 +1054,7 @@ export default function AskAssistant() {
       {brandingMode ? (
         <>
           {/* Left control rail */}
-          <div className="fixed z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-3 w-72 space-y-3 max-h-[75vh] overflow-auto text-black" style={{ left: railPos.left, top: 80 }}>
+          <div className="fixed z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-3 w-80 space-y-3 max-h-[75vh] overflow-auto text-black" style={{ left: railPos.left, top: 80 }}>
             <div className="font-semibold text-xs tracking-wide uppercase text-black">Controls</div>
             {/* Upload/Logo URL */}
             <div className="space-y-1">
@@ -1012,12 +1076,76 @@ export default function AskAssistant() {
               <button className="w-full text-left text-xs border rounded px-2 py-1" onClick={()=>{setMode('price'); setEditing(e=>({...e, priceIntro:true}));}}>Edit Price Introduction</button>
               <button className="w-full text-left text-xs border rounded px-2 py-1" onClick={()=>{setMode('price'); setEditing(e=>({...e, priceOutro:true}));}}>Edit Price CTA</button>
               <div className="text-[11px] font-medium mt-2">Intro Video Link</div>
+              {/* Editor panel in left rail */}
+              {(editing.welcome || editing.priceIntro || editing.priceOutro || editing.scheduleHeader) ? (
+                <div className="mt-3 border-t pt-3">
+                  <div className="text-[11px] font-semibold text-black mb-1">
+                    {editing.welcome ? "Welcome Message" : editing.priceIntro ? "Price Introduction" : editing.priceOutro ? "Price CTA" : "Schedule Header"}
+                  </div>
+                  {editing.priceIntro ? (
+                    <div className="space-y-2">
+                      <input
+                        className="w-full border rounded px-2 py-2 text-sm"
+                        placeholder="Intro heading"
+                        value={brandDraft.text.ui_copy?.intro?.heading || ""}
+                        onChange={(e) => updateDraftText("ui_copy.intro.heading", e.target.value)}
+                      />
+                      <textarea
+                        className="w-full h-40 border rounded px-2 py-2 text-sm"
+                        placeholder="Intro body"
+                        value={brandDraft.text.ui_copy?.intro?.body || ""}
+                        onChange={(e) => updateDraftText("ui_copy.intro.body", e.target.value)}
+                      />
+                    </div>
+                  ) : editing.priceOutro ? (
+                    <div className="space-y-2">
+                      <input
+                        className="w-full border rounded px-2 py-2 text-sm"
+                        placeholder="CTA heading"
+                        value={brandDraft.text.ui_copy?.outro?.heading || ""}
+                        onChange={(e) => updateDraftText("ui_copy.outro.heading", e.target.value)}
+                      />
+                      <textarea
+                        className="w-full h-40 border rounded px-2 py-2 text-sm"
+                        placeholder="CTA body"
+                        value={brandDraft.text.ui_copy?.outro?.body || ""}
+                        onChange={(e) => updateDraftText("ui_copy.outro.body", e.target.value)}
+                      />
+                    </div>
+                  ) : editing.welcome ? (
+                    <textarea
+                      className="w-full h-40 border rounded px-2 py-2 text-sm"
+                      rows={6}
+                      placeholder="Welcome message"
+                      value={brandDraft.text.welcome_message || ""}
+                      onChange={(e) => updateDraftText("welcome_message", e.target.value)}
+                    />
+                  ) : (
+                    <textarea
+                      className="w-full h-40 border rounded px-2 py-2 text-sm"
+                      rows={6}
+                      placeholder="Schedule header"
+                      value={brandDraft.text.schedule_header || ""}
+                      onChange={(e) => updateDraftText("schedule_header", e.target.value)}
+                    />
+                  )}
+                  <div className="flex gap-2 mt-2">
+                    <button className="px-3 py-1 rounded border border-gray-300 bg-white text-xs" onClick={() => setEditing({ welcome:false, priceIntro:false, priceOutro:false, scheduleHeader:false })}>
+                      Close
+                    </button>
+                    <button className="px-3 py-1 rounded border border-blue-600 bg-blue-600 text-white text-xs disabled:opacity-50" onClick={publishDraft} disabled={!brandDraft.dirty}>
+                      Publish
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
               <input className="w-full border rounded px-2 py-1 text-xs" placeholder="https://..." value={introVideoUrl || ""} onChange={(e)=>setIntroVideoUrl(e.target.value)} />
             </div>
           </div>
 
           {/* Right color picker rail */}
-          <div className="fixed z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-3 w-72 space-y-2 max-h-[75vh] overflow-auto text-black" style={{ left: railPos.right, top: 80 }}>
+          <div className="fixed z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-3 w-80 space-y-2 max-h-[75vh] overflow-auto text-black" style={{ left: railPos.right, top: 80 }}>
             <div className="font-semibold text-xs tracking-wide uppercase text-black">Colors</div>
             <label className="flex items-center justify-between text-xs">Banner Title <input type="color" value={brandDraft.css_vars["--banner-fg"] || themeVars["--banner-fg"]} onChange={(e)=>updateCssVar("--banner-fg", e.target.value)} /></label>
             <label className="flex items-center justify-between text-xs">Banner Background <input type="color" value={brandDraft.css_vars["--banner-bg"] || themeVars["--banner-bg"]} onChange={(e)=>updateCssVar("--banner-bg", e.target.value)} /></label>
@@ -1085,12 +1213,7 @@ export default function AskAssistant() {
           ✎
         </button>
       ) : null}
-      {brandingMode && editing.priceIntro ? (
-        <div className="mt-2 space-y-2">
-          <input className="w-full border p-2 rounded" placeholder="Intro heading" value={brandDraft.text.ui_copy.intro.heading} onChange={(e) => updateDraftText("ui_copy.intro.heading", e.target.value)} />
-          <textarea className="w-full border p-2 rounded" rows={4} placeholder="Intro body" value={brandDraft.text.ui_copy.intro.body} onChange={(e) => updateDraftText("ui_copy.intro.body", e.target.value)} />
-        </div>
-      ) : null}
+      
     </div>
               ) : null}
             </div>
@@ -1121,9 +1244,7 @@ export default function AskAssistant() {
                       {brandingMode ? (
                         <button className="absolute -top-2 -right-2 text-xs bg-white border rounded px-2 py-0.5" onClick={() => setEditing((e) => ({ ...e, scheduleHeader: !e.scheduleHeader }))}>✎</button>
                       ) : null}
-                      {brandingMode && editing.scheduleHeader ? (
-                        <textarea className="w-full border p-2 rounded mt-2" rows={3} placeholder="Schedule header" value={brandDraft.text.schedule_header} onChange={(e) => updateDraftText("schedule_header", e.target.value)} />
-                      ) : null}
+                      
                     </div>
                   ) : null}
 
@@ -1244,9 +1365,7 @@ export default function AskAssistant() {
                       {brandingMode ? (
                         <button className="absolute -top-2 -right-2 text-xs bg-white border rounded px-2 py-0.5" onClick={() => setEditing((e) => ({ ...e, welcome: !e.welcome }))}>✎</button>
                       ) : null}
-                      {brandingMode && editing.welcome ? (
-                        <textarea className="w-full border p-2 rounded mt-2" rows={3} placeholder="Welcome message" value={brandDraft.text.welcome_message} onChange={(e) => updateDraftText("welcome_message", e.target.value)} />
-                      ) : null}
+                      
                     </div>
                     {showIntroVideo && introVideoUrl ? (
                       <div style={{ position: "relative", paddingTop: "56.25%" }}>
@@ -1272,9 +1391,7 @@ export default function AskAssistant() {
                       {brandingMode ? (
                         <button className="absolute -top-2 -right-2 text-xs bg-white border rounded px-2 py-0.5" onClick={() => setEditing((e) => ({ ...e, welcome: !e.welcome }))}>✎</button>
                       ) : null}
-                      {brandingMode && editing.welcome ? (
-                        <textarea className="w-full border p-2 rounded mt-2" rows={3} placeholder="Welcome message" value={brandDraft.text.welcome_message} onChange={(e) => updateDraftText("welcome_message", e.target.value)} />
-                      ) : null}
+                      
                     </div>
                   ) : null}
                 </div>
