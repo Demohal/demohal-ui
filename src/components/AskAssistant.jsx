@@ -54,6 +54,16 @@ const DEFAULT_THEME_VARS = {
   "--btn-docs-grad-to-hover": "#9a9c9e",
 };
 
+
+// --- Branding hard flag (module-level) ---
+const BRANDING_FLAG = (() => {
+  try {
+    const qs = new URLSearchParams(window.location.search);
+    const v = (qs.get("mode") || qs.get("branding") || "").toLowerCase();
+    return v === "branding" || v === "1" || v === "true" || v === "yes";
+  } catch { return false; }
+})();
+// -----------------------------------------
 const UI = {
   CARD: "border rounded-xl p-4 bg-white shadow",
   BTN:
@@ -261,27 +271,7 @@ export default function AskAssistant() {
 
   // Optional: allow a default alias via env, e.g., VITE_DEFAULT_ALIAS=demo
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
-  // Branding mode: sticky once detected; robust against URL changes
-  const [brandingMode, setBrandingMode] = useState(false);
-  useEffect(() => {
-    const compute = () => {
-      try {
-        const qs = new URLSearchParams(window.location.search);
-        const v = (qs.get("mode") || qs.get("branding") || "").toLowerCase();
-        return v === "branding" || v === "1" || v === "true" || v === "yes";
-      } catch { return false; }
-    };
-    const update = () => {
-      if (compute()) setBrandingMode(true);
-    };
-    update();
-    window.addEventListener("popstate", update);
-    window.addEventListener("hashchange", update);
-    return () => {
-      window.removeEventListener("popstate", update);
-      window.removeEventListener("hashchange", update);
-    };
-  }, []);
+  const brandingMode = BRANDING_FLAG;
 
   
   const [botId, setBotId] = useState(botIdFromUrl || "");
@@ -813,15 +803,6 @@ export default function AskAssistant() {
         )}
         style={themeVars}
       >
-        {brandingMode ? (
-          <div className="fixed left-3 top-3 z-[9999] select-none">
-            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-900 border border-yellow-300 shadow-sm">
-              <span className="w-2 h-2 rounded-full bg-yellow-600 animate-pulse"></span>
-              Branding mode ON
-            </span>
-          </div>
-        ) : null}
-
         <div className="text-gray-800 text-center space-y-2">
           <div className="text-lg font-semibold">No bot selected</div>
           {alias ? (
