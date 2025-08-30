@@ -54,16 +54,6 @@ const DEFAULT_THEME_VARS = {
   "--btn-docs-grad-to-hover": "#9a9c9e",
 };
 
-
-// --- Branding hard flag (module-level) ---
-const BRANDING_FLAG = (() => {
-  try {
-    const qs = new URLSearchParams(window.location.search);
-    const v = (qs.get("mode") || qs.get("branding") || "").toLowerCase();
-    return v === "branding" || v === "1" || v === "true" || v === "yes";
-  } catch { return false; }
-})();
-// -----------------------------------------
 const UI = {
   CARD: "border rounded-xl p-4 bg-white shadow",
   BTN:
@@ -269,10 +259,16 @@ export default function AskAssistant() {
     return { alias: a, botIdFromUrl: b };
   }, []);
 
+  // Branding mode guard (?branding=1)
+  const brandingMode = useMemo(() => {
+    try {
+      const qs = new URLSearchParams(window.location.search);
+      return (qs.get("branding") || "") === "1";
+    } catch { return false; }
+  }, []);
+
   // Optional: allow a default alias via env, e.g., VITE_DEFAULT_ALIAS=demo
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
-  const brandingMode = BRANDING_FLAG;
-
   
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [fatal, setFatal] = useState("");
@@ -300,6 +296,23 @@ export default function AskAssistant() {
 
   // Theme (DB-driven CSS variables)
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
+  // BRANDING DRAFT (live preview; publish later)
+  const [brandDraft, setBrandDraft] = useState({
+    css_vars: {},
+    text: {
+      welcome_message: "",
+      ui_copy: { intro: { heading: "", body: "" }, outro: { heading: "", body: "" } },
+      schedule_header: "",
+    },
+    dirty: false,
+  });
+  const [editing, setEditing] = useState({
+    welcome: false,
+    priceIntro: false,
+    priceOutro: false,
+    scheduleHeader: false,
+  });
+
 
   // Brand assets (logo variants)
   const [brandAssets, setBrandAssets] = useState({
@@ -443,6 +456,89 @@ export default function AskAssistant() {
       cancel = true;
     };
   }, [botId, apiBase]);
+  // Initialize BRANDING DRAFT once brand + bot copy are available (branding mode only)
+  useEffect(() => {
+    if (!brandingMode || !botId) return;
+    let cancel = false;
+    (async () => {
+      try {
+        const [botRes, priceRes, agentRes] = await Promise.all([
+          fetch(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botId)}`),
+          fetch(`${apiBase}/pricing/questions?bot_id=${encodeURIComponent(botId)}`),
+          fetch(`${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`),
+        ]);
+        const botJ = await botRes.json().catch(() => ({}));
+        const priceJ = await priceRes.json().catch(() => ({}));
+        const agentJ = await agentRes.json().catch(() => ({}));
+        if (cancel) return;
+        const welcome_message = botJ?.ok ? (botJ.bot?.welcome_message || "") : "";
+        const ui_copy = (priceJ?.ok ? (priceJ.ui_copy || {}) : {});
+        const schedule_header = agentJ?.ok ? (agentJ.agent?.schedule_header || "") : "";
+        const editable = [
+          "--banner-bg","--banner-fg",
+          "--page-bg","--card-bg","--card-border",
+          "--tab-active-bg","--tab-active-fg",
+          "--field-bg","--field-border",
+          "--send-color","--send-color-hover"
+        ];
+        const css_vars = {};
+        for (const k of editable) css_vars[k] = themeVars[k];
+        setBrandDraft({
+          css_vars,
+          text: {
+            welcome_message,
+            ui_copy: {
+              intro: { heading: ui_copy?.intro?.heading || "", body: ui_copy?.intro?.body || "" },
+              outro: { heading: ui_copy?.outro?.heading || "", body: ui_copy?.outro?.body || "" }
+            },
+            schedule_header
+          },
+          dirty: false
+        });
+      } catch {}
+    })();
+    return () => { cancel = true; };
+  }, [brandingMode, botId, apiBase, themeVars]);
+  // Helpers to update draft + live preview
+  const updateCssVar = (name, value) => {
+    setThemeVars((prev) => ({ ...prev, [name]: value }));
+    setBrandDraft((prev) => ({ ...prev, css_vars: { ...prev.css_vars, [name]: value }, dirty: true }));
+  };
+  const updateDraftText = (path, value) => {
+    setBrandDraft((prev) => {
+      const next = JSON.parse(JSON.stringify(prev.text));
+      const parts = path.split(".");
+      let p = next;
+      while (parts.length > 1) p = p[parts.shift()];
+      p[parts[0]] = value;
+      return { ...prev, text: next, dirty: true };
+    });
+  };
+  const discardDraft = () => {
+    setBrandDraft((prev) => ({ ...prev, dirty: false }));
+  };
+  const publishDraft = async () => {
+    try {
+      const payload = {
+        bot_id: botId,
+        css_vars: brandDraft.css_vars,
+        welcome_message: brandDraft.text.welcome_message,
+        ui_copy: brandDraft.text.ui_copy,
+        schedule_header: brandDraft.text.schedule_header,
+      };
+      const res = await fetch(`${apiBase}/brand/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!j?.ok) throw new Error(j?.error || "save_failed");
+      setBrandDraft((prev) => ({ ...prev, dirty: false }));
+    } catch (e) {
+      alert("Failed to publish branding changes.");
+    }
+  };
+
 
   // NEW: when botId is known (e.g., bot_id in URL), fetch bot-settings to get show_* flags
   useEffect(() => {
@@ -803,6 +899,51 @@ export default function AskAssistant() {
         )}
         style={themeVars}
       >
+      {brandingMode ? (
+        <>
+          {/* Left control rail */}
+          <div className="fixed left-2 top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-3 w-56 space-y-3 max-h-[75vh] overflow-auto">
+            <div className="font-semibold text-xs tracking-wide uppercase text-gray-700">Controls</div>
+            {/* Upload/Logo URL */}
+            <div className="space-y-1">
+              <div className="text-[11px] font-medium">Logo URL</div>
+              <input className="w-full border rounded px-2 py-1 text-xs" placeholder="https://..." value={brandAssets.logo_url || ""} onChange={(e) => setBrandAssets(a => ({...a, logo_url: e.target.value}))} />
+            </div>
+            {/* Show toggles */}
+            <div className="space-y-1">
+              <div className="text-[11px] font-medium">Show Sections</div>
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={tabsEnabled.demos} onChange={(e)=>setTabsEnabled(t=>({...t, demos:e.target.checked}))}/> Browse Demos</label>
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={tabsEnabled.docs} onChange={(e)=>setTabsEnabled(t=>({...t, docs:e.target.checked}))}/> Browse Documents</label>
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={tabsEnabled.price} onChange={(e)=>setTabsEnabled(t=>({...t, price:e.target.checked}))}/> Price Estimate</label>
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={tabsEnabled.meeting} onChange={(e)=>setTabsEnabled(t=>({...t, meeting:e.target.checked}))}/> Schedule Meeting</label>
+            </div>
+            {/* Text editors toggles */}
+            <div className="space-y-1">
+              <div className="text-[11px] font-medium">Text Editors</div>
+              <button className="w-full text-left text-xs border rounded px-2 py-1" onClick={()=>setEditing(e=>({...e, welcome:!e.welcome}))}>Edit Welcome Message</button>
+              <button className="w-full text-left text-xs border rounded px-2 py-1" onClick={()=>setMode('price') || setEditing(e=>({...e, priceIntro:true}))}>Edit Price Introduction</button>
+              <button className="w-full text-left text-xs border rounded px-2 py-1" onClick={()=>setMode('price') || setEditing(e=>({...e, priceOutro:true}))}>Edit Price CTA</button>
+              <div className="text-[11px] font-medium mt-2">Intro Video Link</div>
+              <input className="w-full border rounded px-2 py-1 text-xs" placeholder="https://..." value={introVideoUrl || ""} onChange={(e)=>setIntroVideoUrl(e.target.value)} />
+            </div>
+          </div>
+
+          {/* Right color picker rail */}
+          <div className="fixed right-2 top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-3 w-56 space-y-2 max-h-[75vh] overflow-auto">
+            <div className="font-semibold text-xs tracking-wide uppercase text-gray-700">Colors</div>
+            <label className="flex items-center justify-between text-xs">Banner Title <input type="color" value={brandDraft.css_vars["--banner-fg"] || themeVars["--banner-fg"]} onChange={(e)=>updateCssVar("--banner-fg", e.target.value)} /></label>
+            <label className="flex items-center justify-between text-xs">Banner Background <input type="color" value={brandDraft.css_vars["--banner-bg"] || themeVars["--banner-bg"]} onChange={(e)=>updateCssVar("--banner-bg", e.target.value)} /></label>
+            <label className="flex items-center justify-between text-xs">Tab Titles <input type="color" value={brandDraft.css_vars["--tab-active-fg"] || themeVars["--tab-active-fg"]} onChange={(e)=>updateCssVar("--tab-active-fg", e.target.value)} /></label>
+            <label className="flex items-center justify-between text-xs">Tab Background <input type="color" value={brandDraft.css_vars["--tab-active-bg"] || themeVars["--tab-active-bg"]} onChange={(e)=>updateCssVar("--tab-active-bg", e.target.value)} /></label>
+            <label className="flex items-center justify-between text-xs">Card Background <input type="color" value={brandDraft.css_vars["--card-bg"] || themeVars["--card-bg"]} onChange={(e)=>updateCssVar("--card-bg", e.target.value)} /></label>
+            <label className="flex items-center justify-between text-xs">Message Field BG <input type="color" value={brandDraft.css_vars["--field-bg"] || themeVars["--field-bg"]} onChange={(e)=>updateCssVar("--field-bg", e.target.value)} /></label>
+            <label className="flex items-center justify-between text-xs">Message Field Border <input type="color" value={brandDraft.css_vars["--field-border"] || themeVars["--field-border"]} onChange={(e)=>updateCssVar("--field-border", e.target.value)} /></label>
+            <label className="flex items-center justify-between text-xs">Send Button <input type="color" value={brandDraft.css_vars["--send-color"] || themeVars["--send-color"]} onChange={(e)=>updateCssVar("--send-color", e.target.value)} /></label>
+            <label className="flex items-center justify-between text-xs">Send Hover <input type="color" value={brandDraft.css_vars["--send-color-hover"] || themeVars["--send-color-hover"]} onChange={(e)=>updateCssVar("--send-color-hover", e.target.value)} /></label>
+          </div>
+        </>
+      ) : null}
+
         <div className="text-gray-800 text-center space-y-2">
           <div className="text-lg font-semibold">No bot selected</div>
           {alias ? (
@@ -834,7 +975,7 @@ export default function AskAssistant() {
     >
       <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] border border-[var(--card-border)] md:rounded-[var(--radius-card)] [box-shadow:var(--shadow-card)] flex flex-col overflow-hidden transition-all duration-300">
         {/* Header */}
-        <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)]">
+        <div className="relative px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)]">
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
               <img
@@ -859,7 +1000,8 @@ export default function AskAssistant() {
             </div>
           </div>
           <TabsNav mode={mode} tabs={tabs} />
-        </div>
+          </div>
+
 
         {/* PRICE MODE */}
         {mode === "price" ? (
@@ -867,11 +1009,30 @@ export default function AskAssistant() {
             <div className="px-6 pt-3 pb-2" data-patch="price-intro">
               <PriceMirror lines={mirrorLines.length ? mirrorLines : null} />
               {!mirrorLines.length ? (
-                <div className="text-black text-base font-bold whitespace-pre-line">
-                  {((priceUiCopy?.intro?.heading || "").trim() ? `${priceUiCopy.intro.heading.trim()}\n\n` : "") +
-                    (priceUiCopy?.intro?.body ||
-                      "This tool provides a quick estimate based on your selections. Final pricing may vary by configuration, usage, and implementation.")}
-                </div>
+                <div className="text-black text-base font-bold whitespace-pre-line relative">
+      {
+        (
+          ((brandingMode ? (brandDraft.text.ui_copy?.intro?.heading || "") : (priceUiCopy?.intro?.heading || "")).trim()
+            ? `${(brandingMode ? brandDraft.text.ui_copy?.intro?.heading : priceUiCopy?.intro?.heading).trim()}
+
+`
+            : ""
+          )
+        ) + (brandingMode ? (brandDraft.text.ui_copy?.intro?.body || "") : (priceUiCopy?.intro?.body ||
+          "This tool provides a quick estimate based on your selections. Final pricing may vary by configuration, usage, and implementation."))
+      }
+      {brandingMode ? (
+        <button className="absolute -top-2 -right-2 text-xs bg-white border rounded px-2 py-0.5" onClick={() => setEditing((e) => ({ ...e, priceIntro: !e.priceIntro }))}>
+          ✎
+        </button>
+      ) : null}
+      {brandingMode && editing.priceIntro ? (
+        <div className="mt-2 space-y-2">
+          <input className="w-full border p-2 rounded" placeholder="Intro heading" value={brandDraft.text.ui_copy.intro.heading} onChange={(e) => updateDraftText("ui_copy.intro.heading", e.target.value)} />
+          <textarea className="w-full border p-2 rounded" rows={4} placeholder="Intro body" value={brandDraft.text.ui_copy.intro.body} onChange={(e) => updateDraftText("ui_copy.intro.body", e.target.value)} />
+        </div>
+      ) : null}
+    </div>
               ) : null}
             </div>
             <div ref={priceScrollRef} className="px-6 pt-0 pb-6 flex-1 overflow-y-auto">
@@ -881,8 +1042,7 @@ export default function AskAssistant() {
                 <EstimateCard
                   estimate={priceEstimate}
                   outroText={
-                    ((priceUiCopy?.outro?.heading || "").trim() ? `${priceUiCopy.outro.heading.trim()}\n\n` : "") +
-                    (priceUiCopy?.outro?.body || "")
+                    ((brandingMode ? (brandDraft.text.ui_copy?.outro?.heading || "") : (priceUiCopy?.outro?.heading || "")).trim() ? `${(brandingMode ? brandDraft.text.ui_copy?.outro?.heading : priceUiCopy?.outro?.heading).trim()}\n\n` : "") + (brandingMode ? (brandDraft.text.ui_copy?.outro?.body || "") : (priceUiCopy?.outro?.body || ""))
                   }
                 />
               )}
@@ -896,8 +1056,16 @@ export default function AskAssistant() {
             {mode === "meeting" ? (
               <div className="w-full flex-1 flex flex-col" data-patch="meeting-pane">
                 <div className="bg-white pt-2 pb-2">
-                  {agent?.schedule_header ? (
-                    <div className="mb-2 text-sm italic text-gray-600 whitespace-pre-line">{agent.schedule_header}</div>
+                  {(brandingMode ? (brandDraft.text.schedule_header || agent?.schedule_header) : agent?.schedule_header) ? (
+                    <div className="relative mb-2 text-sm italic text-gray-600 whitespace-pre-line">
+                      {brandingMode ? (brandDraft.text.schedule_header || agent?.schedule_header || "") : (agent?.schedule_header || "")}
+                      {brandingMode ? (
+                        <button className="absolute -top-2 -right-2 text-xs bg-white border rounded px-2 py-0.5" onClick={() => setEditing((e) => ({ ...e, scheduleHeader: !e.scheduleHeader }))}>✎</button>
+                      ) : null}
+                      {brandingMode && editing.scheduleHeader ? (
+                        <textarea className="w-full border p-2 rounded mt-2" rows={3} placeholder="Schedule header" value={brandDraft.text.schedule_header} onChange={(e) => updateDraftText("schedule_header", e.target.value)} />
+                      ) : null}
+                    </div>
                   ) : null}
 
                   {/* NEW: calendar_link_type handling */}
@@ -1012,7 +1180,15 @@ export default function AskAssistant() {
               <div className="w-full flex-1 flex flex-col">
                 {!lastQuestion && !loading && (
                   <div className="space-y-3">
-                    <div className="text-black text-base font-bold whitespace-pre-line">{responseText}</div>
+                    <div className="relative text-black text-base font-bold whitespace-pre-line">
+                      {brandingMode ? (brandDraft.text.welcome_message || responseText) : responseText}
+                      {brandingMode ? (
+                        <button className="absolute -top-2 -right-2 text-xs bg-white border rounded px-2 py-0.5" onClick={() => setEditing((e) => ({ ...e, welcome: !e.welcome }))}>✎</button>
+                      ) : null}
+                      {brandingMode && editing.welcome ? (
+                        <textarea className="w-full border p-2 rounded mt-2" rows={3} placeholder="Welcome message" value={brandDraft.text.welcome_message} onChange={(e) => updateDraftText("welcome_message", e.target.value)} />
+                      ) : null}
+                    </div>
                     {showIntroVideo && introVideoUrl ? (
                       <div style={{ position: "relative", paddingTop: "56.25%" }}>
                         <iframe
@@ -1032,7 +1208,15 @@ export default function AskAssistant() {
                   {loading ? (
                     <p className="text-gray-500 font-semibold animate-pulse">Thinking…</p>
                   ) : lastQuestion ? (
-                    <p className="text-black text-base font-bold whitespace-pre-line">{responseText}</p>
+                    <div className="relative text-black text-base font-bold whitespace-pre-line">
+                      {brandingMode ? (brandDraft.text.welcome_message || responseText) : responseText}
+                      {brandingMode ? (
+                        <button className="absolute -top-2 -right-2 text-xs bg-white border rounded px-2 py-0.5" onClick={() => setEditing((e) => ({ ...e, welcome: !e.welcome }))}>✎</button>
+                      ) : null}
+                      {brandingMode && editing.welcome ? (
+                        <textarea className="w-full border p-2 rounded mt-2" rows={3} placeholder="Welcome message" value={brandDraft.text.welcome_message} onChange={(e) => updateDraftText("welcome_message", e.target.value)} />
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
                 {helperPhase !== "hidden" && (
