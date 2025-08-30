@@ -261,7 +261,7 @@ export default function AskAssistant() {
 
   // Optional: allow a default alias via env, e.g., VITE_DEFAULT_ALIAS=demo
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
-// Branding mode: sticky once detected; robust against URL changes
+  // Branding mode: sticky once detected; robust against URL changes
   const [brandingMode, setBrandingMode] = useState(false);
   useEffect(() => {
     const compute = () => {
@@ -812,6 +812,15 @@ export default function AskAssistant() {
           brandReady ? "opacity-100" : "opacity-0"
         )}
         style={themeVars}
+        {brandingMode ? (
+          <div className="fixed left-3 top-3 z-[9999] select-none">
+            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-900 border border-yellow-300 shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-yellow-600 animate-pulse"></span>
+              Branding mode ON
+            </span>
+          </div>
+        ) : null}
+
       >
         <div className="text-gray-800 text-center space-y-2">
           <div className="text-lg font-semibold">No bot selected</div>
@@ -841,6 +850,15 @@ export default function AskAssistant() {
         brandReady ? "opacity-100" : "opacity-0"
       )}
       style={themeVars}
+        {brandingMode ? (
+          <div className="fixed left-3 top-3 z-[9999] select-none">
+            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-900 border border-yellow-300 shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-yellow-600 animate-pulse"></span>
+              Branding mode ON
+            </span>
+          </div>
+        ) : null}
+
     >
       <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] border border-[var(--card-border)] md:rounded-[var(--radius-card)] [box-shadow:var(--shadow-card)] flex flex-col overflow-hidden transition-all duration-300">
         {/* Header */}
