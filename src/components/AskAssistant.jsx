@@ -259,14 +259,6 @@ export default function AskAssistant() {
     return { alias: a, botIdFromUrl: b };
   }, []);
 
-  // Branding mode guard (?branding=1)
-  const brandingMode = useMemo(() => {
-    try {
-      const qs = new URLSearchParams(window.location.search);
-      return (qs.get("branding") || "") === "1";
-    } catch { return false; }
-  }, []);
-
   // Optional: allow a default alias via env, e.g., VITE_DEFAULT_ALIAS=demo
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
   
@@ -296,23 +288,6 @@ export default function AskAssistant() {
 
   // Theme (DB-driven CSS variables)
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
-  // BRANDING DRAFT (live preview; publish later)
-  const [brandDraft, setBrandDraft] = useState({
-    css_vars: {},
-    text: {
-      welcome_message: "",
-      ui_copy: { intro: { heading: "", body: "" }, outro: { heading: "", body: "" } },
-      schedule_header: "",
-    },
-    dirty: false,
-  });
-  const [editing, setEditing] = useState({
-    welcome: false,
-    priceIntro: false,
-    priceOutro: false,
-    scheduleHeader: false,
-  });
-
 
   // Brand assets (logo variants)
   const [brandAssets, setBrandAssets] = useState({
@@ -456,89 +431,6 @@ export default function AskAssistant() {
       cancel = true;
     };
   }, [botId, apiBase]);
-  // Initialize BRANDING DRAFT once brand + bot copy are available (branding mode only)
-  useEffect(() => {
-    if (!brandingMode || !botId) return;
-    let cancel = false;
-    (async () => {
-      try {
-        const [botRes, priceRes, agentRes] = await Promise.all([
-          fetch(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botId)}`),
-          fetch(`${apiBase}/pricing/questions?bot_id=${encodeURIComponent(botId)}`),
-          fetch(`${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`),
-        ]);
-        const botJ = await botRes.json().catch(() => ({}));
-        const priceJ = await priceRes.json().catch(() => ({}));
-        const agentJ = await agentRes.json().catch(() => ({}));
-        if (cancel) return;
-        const welcome_message = botJ?.ok ? (botJ.bot?.welcome_message || "") : "";
-        const ui_copy = (priceJ?.ok ? (priceJ.ui_copy || {}) : {});
-        const schedule_header = agentJ?.ok ? (agentJ.agent?.schedule_header || "") : "";
-        const editable = [
-          "--banner-bg","--banner-fg",
-          "--page-bg","--card-bg","--card-border",
-          "--tab-active-bg","--tab-active-fg",
-          "--field-bg","--field-border",
-          "--send-color","--send-color-hover"
-        ];
-        const css_vars = {};
-        for (const k of editable) css_vars[k] = themeVars[k];
-        setBrandDraft({
-          css_vars,
-          text: {
-            welcome_message,
-            ui_copy: {
-              intro: { heading: ui_copy?.intro?.heading || "", body: ui_copy?.intro?.body || "" },
-              outro: { heading: ui_copy?.outro?.heading || "", body: ui_copy?.outro?.body || "" }
-            },
-            schedule_header
-          },
-          dirty: false
-        });
-      } catch {}
-    })();
-    return () => { cancel = true; };
-  }, [brandingMode, botId, apiBase, themeVars]);
-  // Helpers to update draft + live preview
-  const updateCssVar = (name, value) => {
-    setThemeVars((prev) => ({ ...prev, [name]: value }));
-    setBrandDraft((prev) => ({ ...prev, css_vars: { ...prev.css_vars, [name]: value }, dirty: true }));
-  };
-  const updateDraftText = (path, value) => {
-    setBrandDraft((prev) => {
-      const next = JSON.parse(JSON.stringify(prev.text));
-      const parts = path.split(".");
-      let p = next;
-      while (parts.length > 1) p = p[parts.shift()];
-      p[parts[0]] = value;
-      return { ...prev, text: next, dirty: true };
-    });
-  };
-  const discardDraft = () => {
-    setBrandDraft((prev) => ({ ...prev, dirty: false }));
-  };
-  const publishDraft = async () => {
-    try {
-      const payload = {
-        bot_id: botId,
-        css_vars: brandDraft.css_vars,
-        welcome_message: brandDraft.text.welcome_message,
-        ui_copy: brandDraft.text.ui_copy,
-        schedule_header: brandDraft.text.schedule_header,
-      };
-      const res = await fetch(`${apiBase}/brand/save`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const j = await res.json().catch(() => ({}));
-      if (!j?.ok) throw new Error(j?.error || "save_failed");
-      setBrandDraft((prev) => ({ ...prev, dirty: false }));
-    } catch (e) {
-      alert("Failed to publish branding changes.");
-    }
-  };
-
 
   // NEW: when botId is known (e.g., bot_id in URL), fetch bot-settings to get show_* flags
   useEffect(() => {
@@ -930,7 +822,7 @@ export default function AskAssistant() {
     >
       <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] border border-[var(--card-border)] md:rounded-[var(--radius-card)] [box-shadow:var(--shadow-card)] flex flex-col overflow-hidden transition-all duration-300">
         {/* Header */}
-        <div className="relative px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)]">
+        <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)]">
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
               <img
@@ -955,33 +847,7 @@ export default function AskAssistant() {
             </div>
           </div>
           <TabsNav mode={mode} tabs={tabs} />
-          {brandingMode ? (
-            <div className="absolute top-2 left-2 flex gap-2">
-              <label className="flex items-center gap-1 bg-white/80 rounded px-2 py-1 text-xs">
-                BG <input type="color" value={brandDraft.css_vars["--banner-bg"] || themeVars["--banner-bg"]} onChange={(e) => updateCssVar("--banner-bg", e.target.value)} />
-              </label>
-              <label className="flex items-center gap-1 bg-white/80 rounded px-2 py-1 text-xs">
-                FG <input type="color" value={brandDraft.css_vars["--banner-fg"] || themeVars["--banner-fg"]} onChange={(e) => updateCssVar("--banner-fg", e.target.value)} />
-              </label>
-            </div>
-          ) : null}
-
         </div>
-
-
-        {brandingMode ? (
-          <div className="px-4 py-2 bg-yellow-50 border-b border-yellow-200 text-yellow-900 text-sm flex items-center justify-between">
-            <div className="font-semibold">Branding mode (draft preview)</div>
-            <div className="flex gap-2">
-              <button className="px-3 py-1 rounded border border-gray-300 bg-white" onClick={discardDraft} disabled={!brandDraft.dirty}>
-                Discard
-              </button>
-              <button className="px-3 py-1 rounded border border-blue-600 bg-blue-600 text-white disabled:opacity-50" onClick={publishDraft} disabled={!brandDraft.dirty}>
-                Publish
-              </button>
-            </div>
-          </div>
-        ) : null}
 
         {/* PRICE MODE */}
         {mode === "price" ? (
@@ -989,30 +855,11 @@ export default function AskAssistant() {
             <div className="px-6 pt-3 pb-2" data-patch="price-intro">
               <PriceMirror lines={mirrorLines.length ? mirrorLines : null} />
               {!mirrorLines.length ? (
-                <div className="text-black text-base font-bold whitespace-pre-line relative">
-      {
-        (
-          ((brandingMode ? (brandDraft.text.ui_copy?.intro?.heading || "") : (priceUiCopy?.intro?.heading || "")).trim()
-            ? `${(brandingMode ? brandDraft.text.ui_copy?.intro?.heading : priceUiCopy?.intro?.heading).trim()}
-
-`
-            : ""
-          )
-        ) + (brandingMode ? (brandDraft.text.ui_copy?.intro?.body || "") : (priceUiCopy?.intro?.body ||
-          "This tool provides a quick estimate based on your selections. Final pricing may vary by configuration, usage, and implementation."))
-      }
-      {brandingMode ? (
-        <button className="absolute -top-2 -right-2 text-xs bg-white border rounded px-2 py-0.5" onClick={() => setEditing((e) => ({ ...e, priceIntro: !e.priceIntro }))}>
-          ✎
-        </button>
-      ) : null}
-      {brandingMode && editing.priceIntro ? (
-        <div className="mt-2 space-y-2">
-          <input className="w-full border p-2 rounded" placeholder="Intro heading" value={brandDraft.text.ui_copy.intro.heading} onChange={(e) => updateDraftText("ui_copy.intro.heading", e.target.value)} />
-          <textarea className="w-full border p-2 rounded" rows={4} placeholder="Intro body" value={brandDraft.text.ui_copy.intro.body} onChange={(e) => updateDraftText("ui_copy.intro.body", e.target.value)} />
-        </div>
-      ) : null}
-    </div>
+                <div className="text-black text-base font-bold whitespace-pre-line">
+                  {((priceUiCopy?.intro?.heading || "").trim() ? `${priceUiCopy.intro.heading.trim()}\n\n` : "") +
+                    (priceUiCopy?.intro?.body ||
+                      "This tool provides a quick estimate based on your selections. Final pricing may vary by configuration, usage, and implementation.")}
+                </div>
               ) : null}
             </div>
             <div ref={priceScrollRef} className="px-6 pt-0 pb-6 flex-1 overflow-y-auto">
@@ -1022,7 +869,8 @@ export default function AskAssistant() {
                 <EstimateCard
                   estimate={priceEstimate}
                   outroText={
-                    ((brandingMode ? (brandDraft.text.ui_copy?.outro?.heading || "") : (priceUiCopy?.outro?.heading || "")).trim() ? `${(brandingMode ? brandDraft.text.ui_copy?.outro?.heading : priceUiCopy?.outro?.heading).trim()}\n\n` : "") + (brandingMode ? (brandDraft.text.ui_copy?.outro?.body || "") : (priceUiCopy?.outro?.body || ""))
+                    ((priceUiCopy?.outro?.heading || "").trim() ? `${priceUiCopy.outro.heading.trim()}\n\n` : "") +
+                    (priceUiCopy?.outro?.body || "")
                   }
                 />
               )}
@@ -1036,16 +884,8 @@ export default function AskAssistant() {
             {mode === "meeting" ? (
               <div className="w-full flex-1 flex flex-col" data-patch="meeting-pane">
                 <div className="bg-white pt-2 pb-2">
-                  {(brandingMode ? (brandDraft.text.schedule_header || agent?.schedule_header) : agent?.schedule_header) ? (
-                    <div className="relative mb-2 text-sm italic text-gray-600 whitespace-pre-line">
-                      {brandingMode ? (brandDraft.text.schedule_header || agent?.schedule_header || "") : (agent?.schedule_header || "")}
-                      {brandingMode ? (
-                        <button className="absolute -top-2 -right-2 text-xs bg-white border rounded px-2 py-0.5" onClick={() => setEditing((e) => ({ ...e, scheduleHeader: !e.scheduleHeader }))}>✎</button>
-                      ) : null}
-                      {brandingMode && editing.scheduleHeader ? (
-                        <textarea className="w-full border p-2 rounded mt-2" rows={3} placeholder="Schedule header" value={brandDraft.text.schedule_header} onChange={(e) => updateDraftText("schedule_header", e.target.value)} />
-                      ) : null}
-                    </div>
+                  {agent?.schedule_header ? (
+                    <div className="mb-2 text-sm italic text-gray-600 whitespace-pre-line">{agent.schedule_header}</div>
                   ) : null}
 
                   {/* NEW: calendar_link_type handling */}
@@ -1160,15 +1000,7 @@ export default function AskAssistant() {
               <div className="w-full flex-1 flex flex-col">
                 {!lastQuestion && !loading && (
                   <div className="space-y-3">
-                    <div className="relative text-black text-base font-bold whitespace-pre-line">
-                      {brandingMode ? (brandDraft.text.welcome_message || responseText) : responseText}
-                      {brandingMode ? (
-                        <button className="absolute -top-2 -right-2 text-xs bg-white border rounded px-2 py-0.5" onClick={() => setEditing((e) => ({ ...e, welcome: !e.welcome }))}>✎</button>
-                      ) : null}
-                      {brandingMode && editing.welcome ? (
-                        <textarea className="w-full border p-2 rounded mt-2" rows={3} placeholder="Welcome message" value={brandDraft.text.welcome_message} onChange={(e) => updateDraftText("welcome_message", e.target.value)} />
-                      ) : null}
-                    </div>
+                    <div className="text-black text-base font-bold whitespace-pre-line">{responseText}</div>
                     {showIntroVideo && introVideoUrl ? (
                       <div style={{ position: "relative", paddingTop: "56.25%" }}>
                         <iframe
@@ -1188,15 +1020,7 @@ export default function AskAssistant() {
                   {loading ? (
                     <p className="text-gray-500 font-semibold animate-pulse">Thinking…</p>
                   ) : lastQuestion ? (
-                    <div className="relative text-black text-base font-bold whitespace-pre-line">
-                      {brandingMode ? (brandDraft.text.welcome_message || responseText) : responseText}
-                      {brandingMode ? (
-                        <button className="absolute -top-2 -right-2 text-xs bg-white border rounded px-2 py-0.5" onClick={() => setEditing((e) => ({ ...e, welcome: !e.welcome }))}>✎</button>
-                      ) : null}
-                      {brandingMode && editing.welcome ? (
-                        <textarea className="w-full border p-2 rounded mt-2" rows={3} placeholder="Welcome message" value={brandDraft.text.welcome_message} onChange={(e) => updateDraftText("welcome_message", e.target.value)} />
-                      ) : null}
-                    </div>
+                    <p className="text-black text-base font-bold whitespace-pre-line">{responseText}</p>
                   ) : null}
                 </div>
                 {helperPhase !== "hidden" && (
@@ -1243,19 +1067,6 @@ export default function AskAssistant() {
                   }
                 }}
               />
-              {brandingMode ? (
-                <div className="absolute -top-10 left-0 flex gap-2">
-                  <label className="flex items-center gap-1 bg-white/80 rounded px-2 py-1 text-xs">
-                    Field BG <input type="color" value={brandDraft.css_vars["--field-bg"] || themeVars["--field-bg"]} onChange={(e) => updateCssVar("--field-bg", e.target.value)} />
-                  </label>
-                  <label className="flex items-center gap-1 bg-white/80 rounded px-2 py-1 text-xs">
-                    Field Border <input type="color" value={brandDraft.css_vars["--field-border"] || themeVars["--field-border"]} onChange={(e) => updateCssVar("--field-border", e.target.value)} />
-                  </label>
-                  <label className="flex items-center gap-1 bg-white/80 rounded px-2 py-1 text-xs">
-                    Send <input type="color" value={brandDraft.css_vars["--send-color"] || themeVars["--send-color"]} onChange={(e) => updateCssVar("--send-color", e.target.value)} />
-                  </label>
-                </div>
-              ) : null}
               <button aria-label="Send" onClick={sendMessage} className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95">
                 <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:text-[var(--send-color-hover)]" />
               </button>
