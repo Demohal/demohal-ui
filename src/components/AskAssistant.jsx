@@ -438,233 +438,25 @@ function BottomAskBar({ askText, setAskText, onSend }) {
 // [DH-SECTION-END] BOTTOM_ASK_BAR
 
 // [DH-SECTION-BEGIN] PRICE_MODE
-{mode === "price" ? (
-  <div className="px-4 sm:px-6 py-4" data-section="PRICE_MODE">
-    <div className="text-xl font-bold mb-2">Price Estimate</div>
-
-    {priceLoading ? (
-      <div className="text-sm text-gray-600">Loading questions…</div>
-    ) : (
-      <div className="space-y-4">
-        {priceQs.map((q) => (
-          <div key={q.id || q.q_key} className="border rounded-lg p-3 bg-white">
-            <div className="font-extrabold text-base">{q.prompt || q.q_key}</div>
-            {q.help_text ? (
-              <div className="mt-1 text-sm opacity-90">{q.help_text}</div>
-            ) : null}
-
-            {Array.isArray(q.options) && q.options.length > 0 ? (
-              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {q.options.map((opt) => {
-                  const key = opt.key || opt.id || opt.label;
-                  const active = priceAnswers[q.q_key] === key;
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setAnswer(q.q_key, key)}
-                      className={classNames(
-                        "w-full text-left rounded-xl px-4 py-3 border bg-white transition-transform hover:translate-y-[1px] active:scale-95",
-                        active ? "border-black" : "border-gray-300"
-                      )}
-                    >
-                      <div className="font-extrabold text-base">{opt.label}</div>
-                      {opt.tooltip ? (
-                        <div className="mt-1 text-sm opacity-90">{opt.tooltip}</div>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null}
-          </div>
-        ))}
-
-        <div className="pt-2 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={runEstimate}
-            disabled={estimating || priceQs.length === 0}
-            className={UI.BTN}
-          >
-            <div className="font-extrabold text-base">
-              {estimating ? "Estimating…" : "Get Estimate"}
-            </div>
-          </button>
-
-          {estimate ? (
-            <div className="ml-2 text-sm">
-              <div className="font-semibold">
-                Total: {estimate.currency_code || "USD"} {estimate.total_min} – {estimate.total_max}
-              </div>
-            </div>
-          ) : null}
-        </div>
-      </div>
-    )}
-  </div>
-) : null}
+{/* folded into COMPONENT_OPEN */}
 // [DH-SECTION-END] PRICE_MODE
 
 // [DH-SECTION-BEGIN] MEETING_PANE
-{mode === "meeting" ? (
-  <div className="px-4 sm:px-6 py-4" data-section="MEETING_PANE">
-    <div className="text-xl font-bold mb-2">Schedule a Meeting</div>
-
-    {meetingLoading ? (
-      <div className="text-sm text-gray-600">Loading…</div>
-    ) : (
-      <div className="space-y-3">
-        {meetingAgent?.schedule_header ? (
-          <div className="text-sm">{meetingAgent.schedule_header}</div>
-        ) : (
-          <div className="text-sm">Pick a time that works for you.</div>
-        )}
-
-        <div className="border rounded-lg p-3 bg-white">
-          <div className="font-extrabold text-base">
-            {meetingAgent?.name || "Sales Team"}
-          </div>
-          {meetingAgent?.email ? (
-            <div className="mt-1 text-sm opacity-90">{meetingAgent.email}</div>
-          ) : null}
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            {meetingAgent?.calendar_link ? (
-              <a
-                href={meetingAgent.calendar_link}
-                target="_blank"
-                rel="noreferrer"
-                className={UI.BTN}
-              >
-                <div className="font-extrabold text-base">
-                  {meetingAgent?.calendar_link_type === "cal"
-                    ? "Open Calendar"
-                    : "Book a Meeting"}
-                </div>
-              </a>
-            ) : (
-              <button type="button" className={UI.BTN} disabled>
-                <div className="font-extrabold text-base">Calendar Unavailable</div>
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    )}
-  </div>
-) : null}
+{/* folded into COMPONENT_OPEN */}
 // [DH-SECTION-END] MEETING_PANE
+
 // [DH-SECTION-BEGIN] ASK_PANE
-{mode === "ask" ? (
-  <div className="px-4 sm:px-6 py-4" data-section="ASK_PANE">
-    <div className="text-xl font-bold mb-2">Ask the Assistant</div>
-
-    <div className="space-y-3">
-      {/* Conversation */}
-      <div className="border rounded-lg p-3 bg-white">
-        {messages?.length === 0 ? (
-          <div className="text-sm text-gray-600">
-            Ask a question to get started.
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {messages.map((m, i) => (
-              <div key={i} className={m.role === "user" ? "text-black" : "text-gray-800"}>
-                <div className="text-xs uppercase opacity-60">{m.role}</div>
-                <div className="text-sm whitespace-pre-wrap">{m.text}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Latest answer preview (optional) */}
-      {responseText ? (
-        <div className="border rounded-lg p-3 bg-white">
-          <div className="font-extrabold text-base">Answer</div>
-          <div className="mt-1 text-sm opacity-90 whitespace-pre-wrap">{responseText}</div>
-        </div>
-      ) : null}
-
-      {/* Quick actions (examples) */}
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          className={UI.BTN}
-          onClick={() => onSend?.("Show me how to adjust the banner colors.")}
-          disabled={sending}
-        >
-          <div className="font-extrabold text-base">Banner Colors</div>
-        </button>
-        <button
-          type="button"
-          className={UI.BTN}
-          onClick={() => onSend?.("How do I change tab styles?")}
-          disabled={sending}
-        >
-          <div className="font-extrabold text-base">Tab Styles</div>
-        </button>
-      </div>
-    </div>
-  </div>
-) : null}
+{/* folded into COMPONENT_OPEN */}
 // [DH-SECTION-END] ASK_PANE
-// [DH-SECTION-BEGIN] BROWSE_PANE
-{mode === "browse" ? (
-  <div className="px-4 sm:px-6 py-4" data-section="BROWSE_PANE">
-    <div className="text-xl font-bold mb-2">Browse Demos</div>
 
-    {browseLoading ? (
-      <div className="text-sm text-gray-600">Loading…</div>
-    ) : browseItems?.length === 0 ? (
-      <div className="text-sm text-gray-600">No demos found.</div>
-    ) : (
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {browseItems.map((it) => (
-          <a
-            key={it.id}
-            href={it.url}
-            target="_blank"
-            rel="noreferrer"
-            className={UI.BTN}
-          >
-            <div className="font-extrabold text-base">Watch “{it.title}”</div>
-          </a>
-        ))}
-      </div>
-    )}
-  </div>
-) : null}
+// [DH-SECTION-BEGIN] BROWSE_PANE
+{/* folded into COMPONENT_OPEN */}
 // [DH-SECTION-END] BROWSE_PANE
 
 // [DH-SECTION-BEGIN] DOCS_PANE
-{mode === "docs" ? (
-  <div className="px-4 sm:px-6 py-4" data-section="DOCS_PANE">
-    <div className="text-xl font-bold mb-2">Browse Documents</div>
-
-    {docsLoading ? (
-      <div className="text-sm text-gray-600">Loading…</div>
-    ) : docsItems?.length === 0 ? (
-      <div className="text-sm text-gray-600">No documents found.</div>
-    ) : (
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {docsItems.map((it) => (
-          <a
-            key={it.id}
-            href={it.url}
-            target="_blank"
-            rel="noreferrer"
-            className={UI.BTN_DOCS}
-          >
-            <div className="font-extrabold text-base">Read “{it.title}”</div>
-          </a>
-        ))}
-      </div>
-    )}
-  </div>
-) : null}
+{/* folded into COMPONENT_OPEN */}
 // [DH-SECTION-END] DOCS_PANE
+
 // [DH-SECTION-BEGIN] TABS_NAV
 function TabsNav({ mode, tabs }) {
     return (
@@ -768,8 +560,40 @@ function buildTabs({ brandingMode, tabsEnabled, setSelected, setMode, openBrowse
 // [DH-SECTION-END] TABS_CONFIG
 // [DH-SECTION-BEGIN] COMPONENT_OPEN
 export default function AskAssistant() {
+  // ===== Branding state & helpers (must exist before other UI) =====
+  // If you already have BRAND_STATE_AND_EFFECTS elsewhere, remove it — this block supersedes it.
+  const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
+  const [brandAssets, setBrandAssets] = useState({ logo_url: null });
+  const [brandingMode, setBrandingMode] = useState(false);
+  const [brandDraft, setBrandDraft] = useState({ css_vars: {} });
+
+  function updateCssVar(key, value) {
+    setBrandDraft((prev) => ({ css_vars: { ...(prev.css_vars || {}), [key]: value } }));
+    setThemeVars((prev) => ({ ...prev, [key]: value }));
+  }
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        if (typeof botId === "undefined" || !botId) return;
+        const base = (typeof apiBase !== "undefined" && apiBase) || "";
+        const res = await fetch(`${base}/brand?bot_id=${encodeURIComponent(botId)}`);
+        const data = await res.json();
+        if (!active) return;
+        if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
+          setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
+        }
+        if (data?.ok && data?.assets) {
+          setBrandAssets({ logo_url: data.assets.logo_url || null });
+        }
+      } catch {}
+    })();
+    return () => { active = false; };
+  }, []);
+
   // ===== Core UI =====
-  const [mode, setMode] = useState("ask");            // "ask" | "browse" | "docs" | "price" | "meeting"
+  const [mode, setMode] = useState("ask");   // "ask" | "browse" | "docs" | "price" | "meeting"
   const [selected, setSelected] = useState(null);
   const contentRef = useRef(null);
 
@@ -778,7 +602,6 @@ export default function AskAssistant() {
   const [messages, setMessages] = useState([]);
   const [responseText, setResponseText] = useState("");
   const [sending, setSending] = useState(false);
-
   async function onSend(text) {
     // FIX: explicit grouping for ?? with || (no syntax error)
     const t = (((text ?? askText)) || "").trim();
@@ -787,7 +610,6 @@ export default function AskAssistant() {
     setAskText("");
     setSending(true);
     try {
-      // TODO: wire to backend; placeholder response
       const reply = "Branding mode is available. Use the side rails to adjust theme.";
       setResponseText(reply);
       setMessages((m) => [...m, { role: "assistant", text: reply }]);
@@ -799,10 +621,8 @@ export default function AskAssistant() {
   // ===== Browse demos =====
   const [browseItems, setBrowseItems] = useState([]);
   const [browseLoading, setBrowseLoading] = useState(false);
-
   function openBrowse() {
-    setMode("browse");
-    setSelected(null);
+    setMode("browse"); setSelected(null);
     (async () => {
       try {
         if (typeof apiBase === "undefined") return;
@@ -813,21 +633,16 @@ export default function AskAssistant() {
         const res = await fetch(`${apiBase}/browse-demos?${params.toString()}`);
         const data = await res.json();
         setBrowseItems(Array.isArray(data?.items) ? data.items : []);
-      } catch {
-        setBrowseItems([]);
-      } finally {
-        setBrowseLoading(false);
-      }
+      } catch { setBrowseItems([]); }
+      finally { setBrowseLoading(false); }
     })();
   }
 
   // ===== Browse docs =====
   const [docsItems, setDocsItems] = useState([]);
   const [docsLoading, setDocsLoading] = useState(false);
-
   function openBrowseDocs() {
-    setMode("docs");
-    setSelected(null);
+    setMode("docs"); setSelected(null);
     (async () => {
       try {
         if (typeof apiBase === "undefined") return;
@@ -838,11 +653,8 @@ export default function AskAssistant() {
         const res = await fetch(`${apiBase}/browse-docs?${params.toString()}`);
         const data = await res.json();
         setDocsItems(Array.isArray(data?.items) ? data.items : []);
-      } catch {
-        setDocsItems([]);
-      } finally {
-        setDocsLoading(false);
-      }
+      } catch { setDocsItems([]); }
+      finally { setDocsLoading(false); }
     })();
   }
 
@@ -852,7 +664,6 @@ export default function AskAssistant() {
   const [priceAnswers, setPriceAnswers] = useState({});
   const [estimate, setEstimate] = useState(null);
   const [estimating, setEstimating] = useState(false);
-
   useEffect(() => {
     let on = true;
     (async () => {
@@ -866,46 +677,27 @@ export default function AskAssistant() {
         const data = await res.json();
         if (!on) return;
         if (data?.ok && Array.isArray(data.questions)) setPriceQs(data.questions);
-      } catch {
-        /* silent */
-      } finally {
-        if (on) setPriceLoading(false);
-      }
+      } catch {}
+      finally { if (on) setPriceLoading(false); }
     })();
     return () => { on = false; };
   }, []);
-
-  function setAnswer(qKey, val) {
-    setPriceAnswers((prev) => ({ ...prev, [qKey]: val }));
-    setEstimate(null);
-  }
-
+  function setAnswer(qKey, val) { setPriceAnswers((p) => ({ ...p, [qKey]: val })); setEstimate(null); }
   async function runEstimate() {
     try {
       if (typeof apiBase === "undefined") return;
-      const payload = {
-        bot_id: (typeof botId !== "undefined" && botId) || undefined,
-        answers: priceAnswers,
-      };
+      const payload = { bot_id: (typeof botId !== "undefined" && botId) || undefined, answers: priceAnswers };
       setEstimating(true);
-      const res = await fetch(`${apiBase}/pricing/estimate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const res = await fetch(`${apiBase}/pricing/estimate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const data = await res.json();
       setEstimate(data?.ok ? data : null);
-    } catch {
-      setEstimate(null);
-    } finally {
-      setEstimating(false);
-    }
+    } catch { setEstimate(null); }
+    finally { setEstimating(false); }
   }
 
   // ===== Meeting pane =====
   const [meetingAgent, setMeetingAgent] = useState(null);
   const [meetingLoading, setMeetingLoading] = useState(false);
-
   useEffect(() => {
     let on = true;
     (async () => {
@@ -917,40 +709,33 @@ export default function AskAssistant() {
         const data = await res.json();
         if (!on) return;
         if (data?.ok && data.agent) setMeetingAgent(data.agent);
-      } catch { /* silent */ }
+      } catch {}
       finally { if (on) setMeetingLoading(false); }
     })();
     return () => { on = false; };
   }, []);
-
-  function openMeeting() {
-    setMode("meeting");
-    setSelected(null);
-  }
+  function openMeeting() { setMode("meeting"); setSelected(null); }
 
   // ===== Tabs =====
   const tabsEnabled = { ask: true, demos: true, docs: true, price: true, meeting: true };
-
   const tabs = useMemo(
     () =>
       buildTabs({
-        brandingMode,
-        tabsEnabled,
-        setSelected,
-        setMode,
-        openBrowse,
-        openBrowseDocs,
-        openMeeting,
-        contentRef,
+        brandingMode, tabsEnabled, setSelected, setMode,
+        openBrowse, openBrowseDocs, openMeeting, contentRef,
       }),
     [brandingMode, setSelected, setMode]
   );
 
-  // ===== Layout open =====
+  // ===== Render (self-contained open + close) =====
   return (
     <ThemeScope vars={themeVars}>
       {/* Banner */}
-      <HeaderBanner brandAssets={brandAssets} brandingMode={brandingMode} setBrandingMode={setBrandingMode} />
+      <HeaderBanner
+        brandAssets={brandAssets}
+        brandingMode={brandingMode}
+        setBrandingMode={setBrandingMode}
+      />
 
       {/* Tabs + branding nav */}
       <div className="w-full">
@@ -967,7 +752,7 @@ export default function AskAssistant() {
         />
       </div>
 
-      {/* Main content container (centered card layout) */}
+      {/* Main content */}
       <div className="relative mx-auto max-w-3xl">
         {/* Side rails */}
         <BrandControlRail brandingMode={brandingMode} setBrandingMode={setBrandingMode} />
@@ -980,47 +765,190 @@ export default function AskAssistant() {
 
         {/* Scrollable content area */}
         <div ref={contentRef} className="min-h-[50vh]">
+          {/* ASK */}
+          {mode === "ask" ? (
+            <div className="px-4 sm:px-6 py-4" data-section="ASK_PANE">
+              <div className="text-xl font-bold mb-2">Ask the Assistant</div>
+              <div className="space-y-3">
+                <div className="border rounded-lg p-3 bg-white">
+                  {messages.length === 0 ? (
+                    <div className="text-sm text-gray-600">Ask a question to get started.</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {messages.map((m, i) => (
+                        <div key={i} className={m.role === "user" ? "text-black" : "text-gray-800"}>
+                          <div className="text-xs uppercase opacity-60">{m.role}</div>
+                          <div className="text-sm whitespace-pre-wrap">{m.text}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
-// [DH-SECTION-BEGIN] SMALL_COMPONENTS
-function Row({ item, onClick, active }) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            className={classNames(
-                "w-full text-left rounded-xl px-4 py-3 border bg-white transition-transform hover:translate-y-[1px] active:scale-95",
-                active ? "border-black" : "border-gray-300"
-            )}
-        >
-            <div className="font-extrabold text-base">{item.title}</div>
-            {item.description ? (
-                <div className="mt-1 text-sm opacity-90">{item.description}</div>
-            ) : null}
-            {item.functions_text ? (
-                <div className="mt-1 text-sm opacity-90">{item.functions_text}</div>
-            ) : null}
-        </button>
-    );
-}
+                {responseText ? (
+                  <div className="border rounded-lg p-3 bg-white">
+                    <div className="font-extrabold text-base">Answer</div>
+                    <div className="mt-1 text-sm opacity-90 whitespace-pre-wrap">{responseText}</div>
+                  </div>
+                ) : null}
 
-function OptionButton({ opt, onClick, active }) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            className={classNames(
-                "w-full text-left rounded-xl px-4 py-3 border bg-white transition-transform hover:translate-y-[1px] active:scale-95",
-                active ? "border-black" : "border-gray-300"
-            )}
-        >
-            <div className="font-extrabold text-base">{opt.label}</div>
-            {opt.tooltip ? (
-                <div className="mt-1 text-sm opacity-90">{opt.tooltip}</div>
-            ) : null}
-        </button>
-    );
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className={UI.BTN} onClick={() => onSend("Show me how to adjust the banner colors.")} disabled={sending}>
+                    <div className="font-extrabold text-base">Banner Colors</div>
+                  </button>
+                  <button type="button" className={UI.BTN} onClick={() => onSend("How do I change tab styles?")} disabled={sending}>
+                    <div className="font-extrabold text-base">Tab Styles</div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* BROWSE */}
+          {mode === "browse" ? (
+            <div className="px-4 sm:px-6 py-4" data-section="BROWSE_PANE">
+              <div className="text-xl font-bold mb-2">Browse Demos</div>
+              {browseLoading ? (
+                <div className="text-sm text-gray-600">Loading…</div>
+              ) : browseItems.length === 0 ? (
+                <div className="text-sm text-gray-600">No demos found.</div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {browseItems.map((it) => (
+                    <a key={it.id} href={it.url} target="_blank" rel="noreferrer" className={UI.BTN}>
+                      <div className="font-extrabold text-base">Watch “{it.title}”</div>
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {/* DOCS */}
+          {mode === "docs" ? (
+            <div className="px-4 sm:px-6 py-4" data-section="DOCS_PANE">
+              <div className="text-xl font-bold mb-2">Browse Documents</div>
+              {docsLoading ? (
+                <div className="text-sm text-gray-600">Loading…</div>
+              ) : docsItems.length === 0 ? (
+                <div className="text-sm text-gray-600">No documents found.</div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {docsItems.map((it) => (
+                    <a key={it.id} href={it.url} target="_blank" rel="noreferrer" className={UI.BTN_DOCS}>
+                      <div className="font-extrabold text-base">Read “{it.title}”</div>
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {/* PRICE */}
+          {mode === "price" ? (
+            <div className="px-4 sm:px-6 py-4" data-section="PRICE_MODE">
+              <div className="text-xl font-bold mb-2">Price Estimate</div>
+              {priceLoading ? (
+                <div className="text-sm text-gray-600">Loading questions…</div>
+              ) : (
+                <div className="space-y-4">
+                  {priceQs.map((q) => (
+                    <div key={q.id || q.q_key} className="border rounded-lg p-3 bg-white">
+                      <div className="font-extrabold text-base">{q.prompt || q.q_key}</div>
+                      {q.help_text ? <div className="mt-1 text-sm opacity-90">{q.help_text}</div> : null}
+                      {Array.isArray(q.options) && q.options.length > 0 ? (
+                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {q.options.map((opt) => {
+                            const key = opt.key || opt.id || opt.label;
+                            const active = priceAnswers[q.q_key] === key;
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={() => setAnswer(q.q_key, key)}
+                                className={classNames(
+                                  "w-full text-left rounded-xl px-4 py-3 border bg-white transition-transform hover:translate-y-[1px] active:scale-95",
+                                  active ? "border-black" : "border-gray-300"
+                                )}
+                              >
+                                <div className="font-extrabold text-base">{opt.label}</div>
+                                {opt.tooltip ? <div className="mt-1 text-sm opacity-90">{opt.tooltip}</div> : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                  <div className="pt-2 flex items-center gap-2">
+                    <button type="button" onClick={runEstimate} disabled={estimating || priceQs.length === 0} className={UI.BTN}>
+                      <div className="font-extrabold text-base">{estimating ? "Estimating…" : "Get Estimate"}</div>
+                    </button>
+                    {estimate ? (
+                      <div className="ml-2 text-sm">
+                        <div className="font-semibold">
+                          Total: {estimate.currency_code || "USD"} {estimate.total_min} – {estimate.total_max}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {/* MEETING */}
+          {mode === "meeting" ? (
+            <div className="px-4 sm:px-6 py-4" data-section="MEETING_PANE">
+              <div className="text-xl font-bold mb-2">Schedule a Meeting</div>
+              {meetingLoading ? (
+                <div className="text-sm text-gray-600">Loading…</div>
+              ) : (
+                <div className="space-y-3">
+                  {meetingAgent?.schedule_header ? (
+                    <div className="text-sm">{meetingAgent.schedule_header}</div>
+                  ) : (
+                    <div className="text-sm">Pick a time that works for you.</div>
+                  )}
+                  <div className="border rounded-lg p-3 bg-white">
+                    <div className="font-extrabold text-base">{meetingAgent?.name || "Sales Team"}</div>
+                    {meetingAgent?.email ? <div className="mt-1 text-sm opacity-90">{meetingAgent.email}</div> : null}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {meetingAgent?.calendar_link ? (
+                        <a href={meetingAgent.calendar_link} target="_blank" rel="noreferrer" className={UI.BTN}>
+                          <div className="font-extrabold text-base">
+                            {meetingAgent?.calendar_link_type === "cal" ? "Open Calendar" : "Book a Meeting"}
+                          </div>
+                        </a>
+                      ) : (
+                        <button type="button" className={UI.BTN} disabled>
+                          <div className="font-extrabold text-base">Calendar Unavailable</div>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div> {/* close scrollable content area */}
+      </div>   {/* close main content container */}
+
+      {/* Bottom Ask Bar */}
+      <BottomAskBar askText={askText} setAskText={setAskText} onSend={onSend} />
+    </ThemeScope>
+  );
 }
-// [DH-SECTION-END] SMALL_COMPONENTS           
+// [DH-SECTION-END] COMPONENT_OPEN
+
+{/* [DH-SECTION-BEGIN] SMALL_COMPONENTS */}
+{/* intentionally left empty to avoid function declarations inside JSX */}
+{/* [DH-SECTION-END] SMALL_COMPONENTS */}
+
+// [DH-SECTION-BEGIN] COMPONENT_CLOSE
+{/* obsolete — closed inside COMPONENT_OPEN */}
+// [DH-SECTION-END] COMPONENT_CLOSE
+
 // [DH-SECTION-BEGIN] REVISION_FOOTER
 // REVISION: AskAssistant.jsx | Sectioned branding refactor + rails placement + hover effects
 // NOTES: Controls/Colors rails flush to card edges; black labels/separators; no hover color; tabs inert in branding.
