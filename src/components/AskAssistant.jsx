@@ -1100,90 +1100,479 @@ export default function AskAssistant() {
 
    // [SECTION 6 BEGIN]
 
-    const showAskBottom = mode !== "price" || !!priceEstimate;
-    const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
+  const showAskBottom = mode !== "price" || !!priceEstimate;
+  const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
 
-    const logoSrc = brandAssets.logo_url;
+  const logoSrc =
+    brandAssets.logo_url ||
+    brandAssets.logo_light_url ||
+    brandAssets.logo_dark_url ||
+    fallbackLogo;
 
-    return (
-        <div
-            className={classNames(
-                "w-screen min-h-[100dvh] h-[100dvh] bg-[var(--pa...items-center md:justify-center transition-opacity duration-200",
-                brandReady ? "opacity-100" : "opacity-0"
-            )}
-            style={themeVars}
-        >
-            {brandingMode ? (
-                <>
-                    {/* Left control rail — anchored relative to the 720px app container */}
-                    <div
-                      className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-3 max-h-[75vh] overflow-auto text-black"
-                      style={{ left: "calc(50% - 360px - 18rem - 8px)" }}  // 18rem = w-72, 8px gap
-                    >
-                        <div className="font-semibold text-xs tracking-wide uppercase text-black">Controls</div>
+  return (
+    <div
+      className={classNames(
+        "w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center transition-opacity duration-200",
+        brandReady ? "opacity-100" : "opacity-0"
+      )}
+      style={themeVars}
+    >
+      {/* BRANDING RAILS (anchored to the 720px app container) */}
+      {brandingMode ? (
+        <>
+          {/* Left control rail — left of the 720px card, 8px gap */}
+          <div
+            className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-3 max-h-[75vh] overflow-auto text-black"
+            style={{ left: "calc(50% - 360px - 18rem - 8px)" }} /* 18rem = w-72 */
+          >
+            <div className="font-semibold text-xs tracking-wide uppercase text-black">Controls</div>
 
-                        {/* Upload/Logo URL */}
-                        <div className="space-y-1">
-                            <div className="text-[11px] font-medium">Logo URL</div>
-                            <input className="w-full border roun...=> setBrandAssets(a => ({ ...a, logo_url: e.target.value }))} />
-                        </div>
-
-                        {/* Show toggles */}
-                        <div className="space-y-1">
-                            <div className="text-[11px] font-medium">Show Sections</div>
-                            <label className="flex items-center ...=> ({ ...t, demos: e.target.checked }))} /> Browse Demos</label>
-                            <label className="flex items-center ...({ ...t, docs: e.target.checked }))} /> Browse Documents</label>
-                            <label className="flex items-center ... ({ ...t, price: e.target.checked }))} /> Price Estimate</label>
-                            <label className="flex items-center ......t, meeting: e.target.checked }))} /> Schedule Meeting</label>
-                        </div>
-
-                        {/* Text editors toggles */}
-                        <div className="space-y-1">
-                            <div className="text-[11px] font-medium">Text Editors</div>
-                            <button className="w-full text-left ... ({ ...e, welcome: !e.welcome }))}>Edit Welcome Message</button>
-                            <button className="w-full text-left ... ...e, priceIntro: true })); }}>Edit Price Introduction</button>
-                            <button className="w-full text-left ...etEditing(e => ({ ...e, priceOutro: true })); }}>Edit Price CTA</button>
-                        </div>
-
-                        {/* Intro video link */}
-                        <div className="space-y-1">
-                            <div className="text-[11px] font-medium">Intro Video Link</div>
-                            <input className="w-full border round... onChange={(e) => setIntroVideoUrl(e.target.value)} />
-                        </div>
-                    </div>
-
-                    {/* Right color picker rail — anchored relative to the 720px app container */}
-                    <div
-                      className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-2 max-h-[75vh] overflow-auto text-black"
-                      style={{ left: "calc(50% + 360px + 8px)" }}  // hug the card’s right edge with 8px gap
-                    >
-                        <div className="font-semibold text-xs tracking-wide uppercase text-black">Colors</div>
-
-                        <label className="flex items-center justify-between text-xs">Banner Title <input type="color" value={brandDraft.css_vars["--banner-fg"] || themeVars["--banner-fg"]} onChange={(e)=>updateCssVar("--banner-fg", e.target.value)} /></label>
-                        <label className="flex items-center justify-between text-xs">Banner Background <input type="color" value={brandDraft.css_vars["--banner-bg"] || themeVars["--banner-bg"]} onChange={(e)=>updateCssVar("--banner-bg", e.target.value)} /></label>
-
-                        <div className="border-t border-black/10 my-1" />
-
-                        <label className="flex items-center justify-between text-xs">Tab Titles <input type="color" value={brandDraft.css_vars["--tab-active-fg"] || themeVars["--tab-active-fg"]} onChange={(e)=>updateCssVar("--tab-active-fg", e.target.value)} /></label>
-                        <label className="flex items-center justify-between text-xs">Tab Background <input type="color" value={brandDraft.css_vars["--tab-active-bg"] || themeVars["--tab-active-bg"]} onChange={(e)=>updateCssVar("--tab-active-bg", e.target.value)} /></label>
-
-                        <div className="border-t border-black/10 my-1" />
-
-                        <label className="flex items-center justify-between text-xs">Card Background <input type="color" value={brandDraft.css_vars["--card-bg"] || themeVars["--card-bg"]} onChange={(e)=>updateCssVar("--card-bg", e.target.value)} /></label>
-                        <label className="flex items-center justify-between text-xs">Message Field BG <input type="color" value={brandDraft.css_vars["--field-bg"] || themeVars["--field-bg"]} onChange={(e)=>updateCssVar("--field-bg", e.target.value)} /></label>
-
-                        <div className="border-t border-black/10 my-1" />
-
-                        <label className="flex items-center justify-between text-xs">Send Button <input type="color" value={brandDraft.css_vars["--send-color"] || themeVars["--send-color"]} onChange={(e)=>updateCssVar("--send-color", e.target.value)} /></label>
-                        <label className="flex items-center justify-between text-xs">Send Hover <input type="color" value={brandDraft.css_vars["--send-color-hover"] || themeVars["--send-color-hover"]} onChange={(e)=>updateCssVar("--send-color-hover", e.target.value)} /></label>
-                    </div>
-                </>
-            ) : null}
-
-            {/* Main content wrapper (unchanged) */}
-            <div className="w-full max-w-[720px] h-[100dvh] md:h...var(--card-border)] md:rounded-[var(--radius-card)] [box-shadow: ...]">
-                {/* ... remainder of Section 6 content exactly as in baseline ... */}
+            {/* Logo URL */}
+            <div className="space-y-1">
+              <div className="text-[11px] font-medium">Logo URL</div>
+              <input
+                className="w-full border rounded-md px-2 py-1 text-[12px] text-black"
+                placeholder="https://…"
+                value={brandAssets.logo_url || ""}
+                onChange={(e) => setBrandAssets((a) => ({ ...a, logo_url: e.target.value }))}
+              />
             </div>
+
+            {/* Show toggles */}
+            <div className="space-y-1">
+              <div className="text-[11px] font-medium">Show Sections</div>
+              <label className="flex items-center justify-between text-[12px]">
+                <span>Browse Demos</span>
+                <input
+                  type="checkbox"
+                  checked={!!tabsEnabled.demos}
+                  onChange={(e) =>
+                    setTabsEnabled((t) => ({ ...t, demos: e.target.checked }))
+                  }
+                />
+              </label>
+              <label className="flex items-center justify-between text-[12px]">
+                <span>Browse Documents</span>
+                <input
+                  type="checkbox"
+                  checked={!!tabsEnabled.docs}
+                  onChange={(e) =>
+                    setTabsEnabled((t) => ({ ...t, docs: e.target.checked }))
+                  }
+                />
+              </label>
+              <label className="flex items-center justify-between text-[12px]">
+                <span>Price Estimate</span>
+                <input
+                  type="checkbox"
+                  checked={!!tabsEnabled.price}
+                  onChange={(e) =>
+                    setTabsEnabled((t) => ({ ...t, price: e.target.checked }))
+                  }
+                />
+              </label>
+              <label className="flex items-center justify-between text-[12px]">
+                <span>Schedule Meeting</span>
+                <input
+                  type="checkbox"
+                  checked={!!tabsEnabled.meeting}
+                  onChange={(e) =>
+                    setTabsEnabled((t) => ({ ...t, meeting: e.target.checked }))
+                  }
+                />
+              </label>
+            </div>
+
+            {/* Text Editors */}
+            <div className="space-y-1">
+              <div className="text-[11px] font-medium">Text Editors</div>
+              <button
+                className="w-full text-left border rounded-md px-2 py-1 text-[12px]"
+                onClick={() => setEditing((e) => ({ ...e, welcome: !e.welcome }))}
+              >
+                Edit Welcome Message
+              </button>
+              <button
+                className="w-full text-left border rounded-md px-2 py-1 text-[12px]"
+                onClick={() => setEditing((e) => ({ ...e, priceIntro: true }))}
+              >
+                Edit Price Introduction
+              </button>
+              <button
+                className="w-full text-left border rounded-md px-2 py-1 text-[12px]"
+                onClick={() => setEditing((e) => ({ ...e, priceOutro: true }))}
+              >
+                Edit Price CTA
+              </button>
+            </div>
+
+            {/* Intro video link */}
+            <div className="space-y-1">
+              <div className="text-[11px] font-medium">Intro Video Link</div>
+              <input
+                className="w-full border rounded-md px-2 py-1 text-[12px] text-black"
+                placeholder="https://www.youtube.com/embed/…"
+                value={introVideoUrl || ""}
+                onChange={(e) => setIntroVideoUrl(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Right color rail — right of the 720px card, 8px gap */}
+          <div
+            className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-2 max-h-[75vh] overflow-auto text-black"
+            style={{ left: "calc(50% + 360px + 8px)" }}
+          >
+            <div className="font-semibold text-xs tracking-wide uppercase text-black">Colors</div>
+
+            <label className="flex items-center justify-between text-xs">
+              Banner Title
+              <input
+                type="color"
+                value={brandDraft.css_vars["--banner-fg"] || themeVars["--banner-fg"]}
+                onChange={(e) => updateCssVar("--banner-fg", e.target.value)}
+              />
+            </label>
+            <label className="flex items-center justify-between text-xs">
+              Banner Background
+              <input
+                type="color"
+                value={brandDraft.css_vars["--banner-bg"] || themeVars["--banner-bg"]}
+                onChange={(e) => updateCssVar("--banner-bg", e.target.value)}
+              />
+            </label>
+
+            <div className="border-t border-black/10 my-1" />
+
+            <label className="flex items-center justify-between text-xs">
+              Tab Titles
+              <input
+                type="color"
+                value={brandDraft.css_vars["--tab-active-fg"] || themeVars["--tab-active-fg"]}
+                onChange={(e) => updateCssVar("--tab-active-fg", e.target.value)}
+              />
+            </label>
+            <label className="flex items-center justify-between text-xs">
+              Tab Background
+              <input
+                type="color"
+                value={brandDraft.css_vars["--tab-active-bg"] || themeVars["--tab-active-bg"]}
+                onChange={(e) => updateCssVar("--tab-active-bg", e.target.value)}
+              />
+            </label>
+
+            <div className="border-t border-black/10 my-1" />
+
+            <label className="flex items-center justify-between text-xs">
+              Card Background
+              <input
+                type="color"
+                value={brandDraft.css_vars["--card-bg"] || themeVars["--card-bg"]}
+                onChange={(e) => updateCssVar("--card-bg", e.target.value)}
+              />
+            </label>
+            <label className="flex items-center justify-between text-xs">
+              Message Field BG
+              <input
+                type="color"
+                value={brandDraft.css_vars["--field-bg"] || themeVars["--field-bg"]}
+                onChange={(e) => updateCssVar("--field-bg", e.target.value)}
+              />
+            </label>
+
+            <div className="border-t border-black/10 my-1" />
+
+            <label className="flex items-center justify-between text-xs">
+              Send Button
+              <input
+                type="color"
+                value={brandDraft.css_vars["--send-color"] || themeVars["--send-color"]}
+                onChange={(e) => updateCssVar("--send-color", e.target.value)}
+              />
+            </label>
+            <label className="flex items-center justify-between text-xs">
+              Send Hover
+              <input
+                type="color"
+                value={brandDraft.css_vars["--send-color-hover"] || themeVars["--send-color-hover"]}
+                onChange={(e) => updateCssVar("--send-color-hover", e.target.value)}
+              />
+            </label>
+          </div>
+        </>
+      ) : null}
+
+      {/* Main card */}
+      <div className="w-full max-w-[720px] h-[100dvh] md:h-[96dvh] bg-white border border-[var(--card-border)] md:rounded-[var(--radius-card)] [box-shadow:var(--shadow-card)] flex flex-col transition-all duration-300">
+        {/* Header */}
+        <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)]">
+          <div className="flex items-center justify-between w-full py-3">
+            <div className="flex items-center gap-3">
+              <img src={logoSrc} alt="Brand logo" className="h-10 object-contain" />
+            </div>
+            <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
+              {selected
+                ? selected.title
+                : mode === "browse"
+                ? "Browse Demos"
+                : mode === "docs"
+                ? "Browse Documents"
+                : mode === "price"
+                ? "Price Estimate"
+                : mode === "meeting"
+                ? "Schedule Meeting"
+                : "Ask the Assistant"}
+            </div>
+          </div>
+          <TabsNav mode={mode} tabs={tabs} />
         </div>
-    );
+
+        {/* PRICE MODE */}
+        {mode === "price" ? (
+          <>
+            <div className="px-6 pt-3 pb-2" data-patch="price-intro">
+              <PriceMirror lines={mirrorLines.length ? mirrorLines : null} />
+              {!mirrorLines.length ? (
+                <div className="text-black text-base font-bold whitespace-pre-line">
+                  {((priceUiCopy?.intro?.heading || "").trim()
+                    ? `${priceUiCopy.intro.heading.trim()}\n\n`
+                    : "") +
+                    (priceUiCopy?.intro?.body ||
+                      "This tool provides a quick estimate based on your selections. Final pricing may vary by configuration, usage, and implementation.")}
+                </div>
+              ) : null}
+            </div>
+            <div ref={priceScrollRef} className="px-6 pt-0 pb-6 flex-1 overflow-y-auto">
+              {!priceQuestions?.length ? null : nextPriceQuestion ? (
+                <QuestionBlock
+                  q={nextPriceQuestion}
+                  value={priceAnswers[nextPriceQuestion.q_key]}
+                  onPick={handlePickOption}
+                />
+              ) : (
+                <EstimateCard
+                  estimate={priceEstimate}
+                  outroText={
+                    ((priceUiCopy?.outro?.heading || "").trim()
+                      ? `${priceUiCopy.outro.heading.trim()}\n\n`
+                      : "") + (priceUiCopy?.outro?.body || "")
+                  }
+                />
+              )}
+              {priceBusy ? <div className="mt-2 text-sm text-gray-500">Calculating…</div> : null}
+              {priceErr ? <div className="mt-2 text-sm text-red-600">{priceErr}</div> : null}
+            </div>
+          </>
+        ) : (
+          /* OTHER MODES */
+          <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
+            {mode === "meeting" ? (
+              <div className="w-full flex-1 flex flex-col" data-patch="meeting-pane">
+                <div className="bg-white pt-2 pb-2">
+                  {agent?.schedule_header ? (
+                    <div className="mb-2 text-sm italic text-gray-600 whitespace-pre-line">
+                      {agent.schedule_header}
+                    </div>
+                  ) : null}
+
+                  {/* calendar_link_type handling */}
+                  {!agent ? (
+                    <div className="text-sm text-gray-600">Loading scheduling…</div>
+                  ) : agent.calendar_link_type &&
+                    String(agent.calendar_link_type).toLowerCase() === "embed" &&
+                    agent.calendar_link ? (
+                    <iframe
+                      title="Schedule a Meeting"
+                      src={`${agent.calendar_link}?embed_domain=${embedDomain}&embed_type=Inline`}
+                      style={{ width: "100%", height: "60vh", maxHeight: "640px" }}
+                      className="rounded-xl border border-gray-200 shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
+                    />
+                  ) : agent.calendar_link_type &&
+                    String(agent.calendar_link_type).toLowerCase() === "external" &&
+                    agent.calendar_link ? (
+                    <div className="text-sm text-gray-700">
+                      We opened the scheduling page in a new tab. If it didn’t open,&nbsp;
+                      <a
+                        href={agent.calendar_link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 underline"
+                      >
+                        click here to open it
+                      </a>
+                      .
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-600">No scheduling link is configured.</div>
+                  )}
+                </div>
+              </div>
+            ) : selected ? (
+              <div className="w-full flex-1 flex flex-col">
+                {mode === "docs" ? (
+                  <div className="bg-white pt-2 pb-2">
+                    <iframe
+                      className="w-full h-[65vh] md:h-[78vh] rounded-xl border border-gray-200 shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
+                      src={selected.url}
+                      title={selected.title}
+                    />
+                  </div>
+                ) : (
+                  <div className="bg-white pt-2 pb-2">
+                    <div style={{ position: "relative", paddingTop: "56.25%" }}>
+                      <iframe
+                        style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
+                        src={selected.url}
+                        title={selected.title}
+                        className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      />
+                    </div>
+                    {mode === "ask" && (visibleUnderVideo || []).length > 0 && (
+                      <>
+                        <div className="flex items-center justify-between mt-1 mb-3">
+                          <p className="italic text-gray-600">Recommended demos</p>
+                          <span />
+                        </div>
+                        <div className="flex flex-col gap-3">
+                          {visibleUnderVideo.map((it) => (
+                            <Row
+                              key={it.id || it.url || it.title}
+                              item={it}
+                              onPick={(val) => normalizeAndSelectDemo(val)}
+                            />
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : mode === "browse" ? (
+              <div className="w-full flex-1 flex flex-col">
+                {(browseItems || []).length > 0 && (
+                  <>
+                    <div className="flex items-center justify-between mt-2 mb-3">
+                      <p className="italic text-gray-600">Select a demo to view it</p>
+                      <span />
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      {browseItems.map((it) => (
+                        <Row
+                          key={it.id || it.url || it.title}
+                          item={it}
+                          onPick={(val) => normalizeAndSelectDemo(val)}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : mode === "docs" ? (
+              <div className="w-full flex-1 flex flex-col">
+                {(browseDocs || []).length > 0 && (
+                  <>
+                    <div className="flex items-center justify-between mt-2 mb-3">
+                      <p className="italic text-gray-600">Select a document to view it</p>
+                      <span />
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      {browseDocs.map((it) => (
+                        <Row
+                          key={it.id || it.url || it.title}
+                          item={it}
+                          variant="docs"
+                          onPick={(val) => {
+                            setSelected(val);
+                            requestAnimationFrame(() =>
+                              contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+                            );
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="w-full flex-1 flex flex-col">
+                {!lastQuestion && !loading && (
+                  <div className="space-y-3">
+                    <div className="text-black text-base font-bold whitespace-pre-line">{responseText}</div>
+                    {showIntroVideo && introVideoUrl ? (
+                      <div style={{ position: "relative", paddingTop: "56.25%" }}>
+                        <iframe
+                          src={introVideoUrl}
+                          title="Intro Video"
+                          frameBorder="0"
+                          allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
+                          referrerPolicy="strict-origin-when-cross-origin"
+                          style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+                <div className="bg-white rounded-lg px-4 py-3 min-h-[90px] flex items-center">
+                  {loading ? (
+                    <p className="text-gray-500 font-semibold animate-pulse">Thinking…</p>
+                  ) : lastQuestion ? (
+                    <p className="text-black text-base font-bold whitespace-pre-line">{responseText}</p>
+                  ) : null}
+                </div>
+                {helperPhase !== "hidden" && (
+                  <div className="flex items-center justify-between mt-3 mb-2">
+                    <p className="italic text-gray-600">Recommended demos</p>
+                    <span />
+                  </div>
+                )}
+                {helperPhase === "buttons" && (items || []).length > 0 && (
+                  <div className="flex flex-col gap-3">
+                    {items.map((it) => (
+                      <Row key={it.id || it.url || it.title} item={it} onPick={(val) => normalizeAndSelectDemo(val)} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Bottom Ask Bar */}
+        <div className="px-4 py-3 border-t border-gray-200" data-patch="ask-bottom-bar">
+          {showAskBottom ? (
+            <div className="relative w-full">
+              <textarea
+                ref={inputRef}
+                rows={1}
+                className="w-full border border-[var(--field-border)] rounded-lg px-4 py-2 pr-14 text-base text-black placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px] bg-[var(--field-bg)]"
+                placeholder="Ask your question here"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onInput={(e) => {
+                  e.currentTarget.style.height = "auto";
+                  e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                  }
+                }}
+              />
+              <button
+                aria-label="Send"
+                onClick={sendMessage}
+                className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
+              >
+                <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:text-[var(--send-color-hover)]" />
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+
 // [SECTION 6 END]
