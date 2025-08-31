@@ -1351,7 +1351,12 @@ export default function AskAssistant() {
                       {agent.schedule_header}
                     </div>
                   ) : null}
-                  {/* calendar_link_type handling */}
+                  
+                    {/* END OF SECTION 6 */}
+
+                    {/* BEGIN SECTION 7 */}
+                    
+                    {/* calendar_link_type handling */}
                   {!agent ? (
                     <div className="text-sm text-gray-600">Loading scheduling…</div>
                   ) : agent.calendar_link_type &&
@@ -1551,4 +1556,4 @@ export default function AskAssistant() {
     </div>
   );
 }
-// [SECTION 6 END]
+// [SECTION 7 END]
