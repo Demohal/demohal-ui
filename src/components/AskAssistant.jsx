@@ -111,10 +111,7 @@ function QuestionBlock({ q, value, onPick }) {
         </div>
     );
 }
-
-
-
-
+export default function AskAssistant() {
 
     useEffect(() => {
         
@@ -1339,6 +1336,7 @@ function QuestionBlock({ q, value, onPick }) {
       </div>
     </div>
   );
+} // end AskAssistant
 
 
 
