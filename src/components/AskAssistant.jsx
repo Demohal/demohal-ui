@@ -1,30 +1,28 @@
-// [SECTION 1 BEGIN]
 
-/* src/components/AskAssistant.jsx */
+
+
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import Row from "./shared/Row";
 import TabsNav from "./shared/TabsNav";
-/* =============================== *
- *  PATCH-READY CONSTANTS & UTILS  *
- * =============================== */
 
-/** Default CSS variable values (used until /brand loads). */
+
+
 const DEFAULT_THEME_VARS = {
-    // Page + card
+    
     "--banner-bg": "#000000",
     "--banner-fg": "#FFFFFF",
     "--page-bg": "#F3F4F6",
 
-    // Card
+    
     "--card-bg": "#FFFFFF",
     "--card-border": "#E5E7EB",
     "--radius-card": "16px",
     "--shadow-card": "0 8px 24px 0 rgba(0,0,0,0.08)",
 
-    // Tabs
+    
     "--tab-active-bg": "#FFFFFF",
     "--tab-active-fg": "#000000",
     "--tab-active-border": "#FFFFFF",
@@ -36,11 +34,11 @@ const DEFAULT_THEME_VARS = {
     "--tab-inactive-fg": "#FFFFFF",
     "--tab-inactive-border": "#374151",
 
-    // Fields
+    
     "--field-bg": "#FFFFFF",
     "--field-border": "#E5E7EB",
 
-    // Buttons (Demos)
+    
     "--btn-grad-from": "#94A3B8",
     "--btn-grad-to": "#64748B",
     "--btn-grad-from-hover": "#B0BCCA",
@@ -48,7 +46,7 @@ const DEFAULT_THEME_VARS = {
     "--btn-fg": "#0B1220",
     "--btn-border": "#CBD5E1",
 
-    // Docs buttons (lighter gradient than demos)
+    
     "--btn-docs-grad-from": "#b1b3b4",
     "--btn-docs-grad-to": "#858789",
     "--btn-docs-grad-from-hover": "#c2c4c5",
@@ -80,19 +78,15 @@ const UI = {
         "hover:[background:linear-gradient(to_bottom,var(--tab-inactive-hover-from),var(--tab-inactive-hover-to))]",
 };
 
-/* ====== helper fns (unchanged)… your existing code here ====== */
-
-// (All existing helpers, hooks, and constants in Section 1 remain unchanged.)
-// The only removal is the inline `function Row(...) { … }` block,
-// which is now provided by `src/components/shared/Row.jsx` via the imports above.
-
-/** COMPONENT START */
-export default function AskAssistant() {
-
-// [SECTION 1 END]
 
 
-// [SECTION 2 BEGIN]
+
+
+
+
+
+
+
 
 function QuestionBlock({ q, value, onPick }) {
     return (
@@ -118,17 +112,17 @@ function QuestionBlock({ q, value, onPick }) {
     );
 }
 
-// [SECTION 2 END]
 
-// [SECTION 3 BEGIN]
+
+
 
     useEffect(() => {
-        // If there’s nothing to resolve (no alias, no botId) and we somehow stayed gated, un-gate.
+        
         if (!botId && !alias && !brandReady) setBrandReady(true);
     }, [botId, alias, brandReady]);
 
 
-    // Fetch brand once we know botId (DB-driven CSS + logo)
+    
     useEffect(() => {
         if (!botId) return;
         let cancel = false;
@@ -162,7 +156,7 @@ function QuestionBlock({ q, value, onPick }) {
             cancel = true;
         };
     }, [botId, apiBase]);
-    // Initialize BRANDING DRAFT once brand + bot copy are available (branding mode only)
+    
     useEffect(() => {
         if (!brandingMode || !botId) return;
         let cancel = false;
@@ -205,7 +199,7 @@ function QuestionBlock({ q, value, onPick }) {
         })();
         return () => { cancel = true; };
     }, [brandingMode, botId, apiBase, themeVars]);
-    // Helpers to update draft + live preview
+    
     const updateCssVar = (name, value) => {
         setThemeVars((prev) => ({ ...prev, [name]: value }));
         setBrandDraft((prev) => ({ ...prev, css_vars: { ...prev.css_vars, [name]: value }, dirty: true }));
@@ -246,7 +240,7 @@ function QuestionBlock({ q, value, onPick }) {
     };
 
 
-    // NEW: when botId is known (e.g., bot_id in URL), fetch bot-settings to get show_* flags
+    
     useEffect(() => {
         if (!botId) return;
         let cancel = false;
@@ -268,13 +262,13 @@ function QuestionBlock({ q, value, onPick }) {
                     setShowIntroVideo(!!b.show_intro_video);
                 }
             } catch {
-                // silent; tabs remain default false if call fails
+                
             }
         })();
         return () => { cancel = true; };
     }, [botId, apiBase]);
 
-    // Autosize ask box
+    
     useEffect(() => {
         const el = inputRef.current;
         if (!el) return;
@@ -282,7 +276,7 @@ function QuestionBlock({ q, value, onPick }) {
         el.style.height = `${el.scrollHeight}px`;
     }, [input]);
 
-    // Release video/doc sticky when scrolling
+    
     useEffect(() => {
         const el = contentRef.current;
         if (!el || !selected) return;
@@ -293,9 +287,9 @@ function QuestionBlock({ q, value, onPick }) {
         return () => el.removeEventListener("scroll", onScroll);
     }, [selected, isAnchored]);
 
-    // Helpers
+    
     async function normalizeAndSelectDemo(item) {
-        // Normalize demo URL to an embeddable form via backend
+        
         try {
             const r = await fetch(`${apiBase}/render-video-iframe`, {
                 method: "POST",
@@ -312,9 +306,9 @@ function QuestionBlock({ q, value, onPick }) {
         }
     }
 
-    // [SECTION 3 END]
+    
 
-    // [SECTION 4 BEGIN]
+    
 
     async function openMeeting() {
         if (!botId) return;
@@ -326,7 +320,7 @@ function QuestionBlock({ q, value, onPick }) {
             const ag = data?.ok ? data.agent : null;
             setAgent(ag);
 
-            // NEW: if external, open in a new tab immediately (with in-pane fallback link)
+            
             if (ag && ag.calendar_link_type && String(ag.calendar_link_type).toLowerCase() === "external" && ag.calendar_link) {
                 try { window.open(ag.calendar_link, "_blank", "noopener,noreferrer"); } catch (_) { }
             }
@@ -383,7 +377,7 @@ function QuestionBlock({ q, value, onPick }) {
         }
     }
 
-    // Pricing loader
+    
     const priceScrollRef = useRef(null);
     useEffect(() => {
         if (mode !== "price" || !botId) return;
@@ -409,7 +403,7 @@ function QuestionBlock({ q, value, onPick }) {
         };
     }, [mode, botId, apiBase]);
 
-    // Pricing: compute estimate when inputs ready
+    
     useEffect(() => {
         const haveAll = (() => {
             if (!priceQuestions?.length) return false;
@@ -449,7 +443,7 @@ function QuestionBlock({ q, value, onPick }) {
         };
     }, [mode, botId, apiBase, priceQuestions, priceAnswers]);
 
-    // Next unanswered (required) question
+    
     const nextPriceQuestion = useMemo(() => {
         if (!priceQuestions?.length) return null;
         for (const q of priceQuestions) {
@@ -461,7 +455,7 @@ function QuestionBlock({ q, value, onPick }) {
         return null;
     }, [priceQuestions, priceAnswers]);
 
-    // Mirror lines (for PriceTop)
+    
     const mirrorLines = useMemo(() => {
         if (!priceQuestions?.length) return [];
         const lines = [];
@@ -494,7 +488,7 @@ function QuestionBlock({ q, value, onPick }) {
         return lines;
     }, [priceQuestions, priceAnswers]);
 
-    // Actions used in multiple panes
+    
     function handlePickOption(q, opt) {
         setPriceAnswers((prev) => {
             if (q.type === "multi") {
@@ -507,9 +501,9 @@ function QuestionBlock({ q, value, onPick }) {
         });
     }
 
-    // [SECTION 4 END]
+    
 
-   // [SECTION 5 BEGIN]
+   
 
     async function sendMessage() {
         if (!input.trim() || !botId) return;
@@ -611,14 +605,14 @@ function QuestionBlock({ q, value, onPick }) {
             >
                 {brandingMode ? (
                     <>
-                        {/* Left control rail — anchored relative to the 720px app container */}
+                        
                         <div
                             className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-3 max-h-[75vh] overflow-auto text-black"
-                            style={{ left: "calc(50% - 360px - 18rem - 8px)" }} /* 18rem = w-72 */
+                            style={{ left: "calc(50% - 360px - 18rem - 8px)" }} 
                         >
                             <div className="font-semibold text-sm tracking-wide uppercase text-black">Controls</div>
 
-                            {/* Upload/Logo URL */}
+                            
                             <div className="space-y-1">
                                 <div className="text-[11px] font-medium">Logo URL</div>
                                 <input
@@ -629,7 +623,7 @@ function QuestionBlock({ q, value, onPick }) {
                                 />
                             </div>
 
-                            {/* Show toggles */}
+                            
                             <div className="space-y-1">
                                 <div className="text-[11px] font-medium">Show Sections</div>
                                 <label className="flex items-center gap-2 text-xs text-black">
@@ -666,7 +660,7 @@ function QuestionBlock({ q, value, onPick }) {
                                 </label>
                             </div>
 
-                            {/* Text editors toggles */}
+                            
                             <div className="space-y-1">
                                 <div className="text-[11px] font-medium">Text Editors</div>
                                 <button
@@ -698,7 +692,7 @@ function QuestionBlock({ q, value, onPick }) {
                             </div>
                         </div>
 
-                        {/* Right color picker rail — anchored relative to the 720px app container */}
+                        
                         <div
                             className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-2 max-h-[75vh] overflow-auto text-black"
                             style={{ left: "calc(50% + 360px + 8px)" }}
@@ -797,9 +791,9 @@ function QuestionBlock({ q, value, onPick }) {
         );
     }
 
-    // [SECTION 5 END]
+    
 
-// [SECTION 6 BEGIN]
+
 
   const showAskBottom = mode !== "price" || !!priceEstimate;
   const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
@@ -810,14 +804,14 @@ function QuestionBlock({ q, value, onPick }) {
     brandAssets.logo_dark_url ||
     "";
 
-  // Anchor the Text Editor directly below the Controls rail
+  
   const controlsRef = useRef(null);
   const [editorTop, setEditorTop] = useState(0);
   useEffect(() => {
     const measure = () => {
       if (!controlsRef.current) return;
       const r = controlsRef.current.getBoundingClientRect();
-      setEditorTop(r.top + r.height + 12); // 12px gap
+      setEditorTop(r.top + r.height + 12); 
     };
     measure();
     window.addEventListener("resize", measure);
@@ -832,18 +826,18 @@ function QuestionBlock({ q, value, onPick }) {
       )}
       style={themeVars}
     >
-      {/* BRANDING RAILS (anchored to the 720px app container) */}
+      
       {brandingMode ? (
         <>
-          {/* Left control rail — left of the 720px card, 8px gap */}
+          
           <div
             ref={controlsRef}
             className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-3 max-h-[75vh] overflow-auto text-black"
-            style={{ left: "calc(50% - 360px - 18rem - 8px)" }} /* 18rem = w-72 */
+            style={{ left: "calc(50% - 360px - 18rem - 8px)" }} 
           >
             <div className="font-semibold text-xs tracking-wide uppercase text-black">Controls</div>
 
-            {/* Show toggles */}
+            
             <div className="space-y-1">
               <div className="text-[11px] font-medium">Show Sections</div>
               <label className="flex items-center justify-between text-[12px]">
@@ -896,7 +890,7 @@ function QuestionBlock({ q, value, onPick }) {
               </label>
             </div>
 
-            {/* Text Editors */}
+            
             <div className="space-y-1">
               <div className="text-[11px] font-medium">Text Editors</div>
               <button
@@ -920,7 +914,7 @@ function QuestionBlock({ q, value, onPick }) {
             </div>
           </div>
 
-          {/* Text Editor window — anchored directly BELOW the Controls rail */}
+          
           {(editing.welcome || editing.priceIntro || editing.priceOutro) && (
             <div
               className="fixed z-[9998] bg-white/95 backdrop-blur-sm border rounded-xl shadow p-4 w-[30rem] max-w-[30rem] max-h-[75vh] overflow-auto text-black"
@@ -938,7 +932,7 @@ function QuestionBlock({ q, value, onPick }) {
                 </button>
               </div>
 
-              {/* WELCOME */}
+              
               {editing.welcome && (
                 <div className="space-y-2">
                   <label className="text-[12px] font-medium">Message</label>
@@ -950,7 +944,7 @@ function QuestionBlock({ q, value, onPick }) {
                 </div>
               )}
 
-              {/* PRICE INTRO */}
+              
               {editing.priceIntro && (
                 <div className="space-y-2">
                   <label className="text-[12px] font-medium">Intro Heading</label>
@@ -968,7 +962,7 @@ function QuestionBlock({ q, value, onPick }) {
                 </div>
               )}
 
-              {/* PRICE OUTRO (CTA) */}
+              
               {editing.priceOutro && (
                 <div className="space-y-2">
                   <label className="text-[12px] font-medium">CTA Heading</label>
@@ -988,7 +982,7 @@ function QuestionBlock({ q, value, onPick }) {
             </div>
           )}
 
-          {/* Right color rail — right of the 720px card, 8px gap */}
+          
           <div
             className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-2 max-h-[75vh] overflow-auto text-black"
             style={{ left: "calc(50% + 360px + 8px)" }}
@@ -1072,9 +1066,9 @@ function QuestionBlock({ q, value, onPick }) {
         </>
       ) : null}
 
-      {/* Main card */}
+      
       <div className="w-full max-w-[720px] h-[100dvh] md:h-[96dvh] bg-white border border-[var(--card-border)] md:rounded-[var(--radius-card)] [box-shadow:var(--shadow-card)] flex flex-col transition-all duration-300">
-        {/* Header */}
+        
         <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)]">
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
@@ -1096,9 +1090,9 @@ function QuestionBlock({ q, value, onPick }) {
           </div>
           <TabsNav mode={mode} tabs={tabs} />
         </div>
-// [SECTION 7 BEGIN]
 
-        {/* PRICE MODE */}
+
+        
         {mode === "price" ? (
           <>
             <div className="px-6 pt-3 pb-2" data-patch="price-intro">
@@ -1135,7 +1129,7 @@ function QuestionBlock({ q, value, onPick }) {
             </div>
           </>
         ) : (
-          /* OTHER MODES */
+          
           <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
             {mode === "meeting" ? (
               <div className="w-full flex-1 flex flex-col" data-patch="meeting-pane">
@@ -1146,7 +1140,7 @@ function QuestionBlock({ q, value, onPick }) {
                     </div>
                   ) : null}
 
-                  {/* calendar_link_type handling */}
+                  
                   {!agent ? (
                     <div className="text-sm text-gray-600">Loading scheduling…</div>
                   ) : agent.calendar_link_type &&
@@ -1310,7 +1304,7 @@ function QuestionBlock({ q, value, onPick }) {
           </div>
         )}
 
-        {/* Bottom Ask Bar */}
+        
         <div className="px-4 py-3 border-t border-gray-200" data-patch="ask-bottom-bar">
           {showAskBottom ? (
             <div className="relative w-full">
@@ -1346,5 +1340,5 @@ function QuestionBlock({ q, value, onPick }) {
     </div>
   );
 
-// [SECTION 7 END]
+
 
