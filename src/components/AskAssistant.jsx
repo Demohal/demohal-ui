@@ -1108,6 +1108,21 @@ export default function AskAssistant() {
     brandAssets.logo_dark_url ||
     "";
 
+  // --- Anchor the Text Editor directly below the Controls rail ---
+  const controlsRef = useRef(null);
+  const [editorTop, setEditorTop] = useState(0);
+  useEffect(() => {
+    const measure = () => {
+      if (!controlsRef.current) return;
+      const r = controlsRef.current.getBoundingClientRect();
+      // r.top is viewport-relative (controls are fixed). Place editor 12px below.
+      setEditorTop(r.top + r.height + 12);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [editing, tabsEnabled, showIntroVideo]);
+
   return (
     <div
       className={classNames(
@@ -1121,10 +1136,11 @@ export default function AskAssistant() {
         <>
           {/* Left control rail — left of the 720px card, 8px gap */}
           <div
+            ref={controlsRef}
             className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-3 max-h-[75vh] overflow-auto text-black"
             style={{ left: "calc(50% - 360px - 18rem - 8px)" }} /* 18rem = w-72 */
           >
-            <div className="font-semibold text-xs tracking-wide uppercase text-black">Controls</div>
+            <div className="font-bold text-sm md:text-base tracking-wide uppercase text-black">Controls</div>
 
             {/* Show toggles */}
             <div className="space-y-1">
@@ -1200,11 +1216,14 @@ export default function AskAssistant() {
             </div>
           </div>
 
-          {/* Left-side TEXT EDITOR WINDOW — far left of the Controls rail */}
+          {/* Text Editor Window — anchored directly BELOW the Controls rail */}
           {(editing.welcome || editing.priceIntro || editing.priceOutro) && (
             <div
-              className="fixed top-20 z-[9998] bg-white/95 backdrop-blur-sm border rounded-xl shadow p-4 w-[30rem] max-w-[30rem] max-h-[75vh] overflow-auto text-black"
-              style={{ left: "calc(50% - 360px - 18rem - 8px - 30rem - 12px)" }} /* controls (18rem) + gap (8px) + editor (30rem) + gap (12px) */
+              className="fixed z-[9998] bg-white/95 backdrop-blur-sm border rounded-xl shadow p-4 w-[30rem] max-w-[30rem] max-h-[75vh] overflow-auto text-black"
+              style={{
+                left: "calc(50% - 360px - 18rem - 8px)", // same left as Controls
+                top: editorTop ? `${editorTop}px` : undefined, // measured just under Controls
+              }}
             >
               <div className="flex items-center justify-between mb-2">
                 <div className="font-semibold text-xs tracking-wide uppercase">
@@ -1273,7 +1292,7 @@ export default function AskAssistant() {
             className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-2 max-h-[75vh] overflow-auto text-black"
             style={{ left: "calc(50% + 360px + 8px)" }}
           >
-            <div className="font-semibold text-xs tracking-wide uppercase text-black">Colors</div>
+            <div className="font-bold text-sm md:text-base tracking-wide uppercase text-black">Colors</div>
 
             <label className="flex items-center justify-between text-xs">
               Banner Title
@@ -1420,6 +1439,7 @@ export default function AskAssistant() {
                   ) : null}
 
                   {/* END OF SECTION 6 */}
+
 
 
                     {/* BEGIN SECTION 7 */}
