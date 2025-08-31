@@ -1108,6 +1108,20 @@ export default function AskAssistant() {
     brandAssets.logo_dark_url ||
     "";
 
+  // Anchor the Text Editor directly below the Controls rail
+  const controlsRef = useRef(null);
+  const [editorTop, setEditorTop] = useState(0);
+  useEffect(() => {
+    const measure = () => {
+      if (!controlsRef.current) return;
+      const r = controlsRef.current.getBoundingClientRect();
+      setEditorTop(r.top + r.height + 12); // 12px gap
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [editing, tabsEnabled, showIntroVideo]);
+
   return (
     <div
       className={classNames(
@@ -1121,6 +1135,7 @@ export default function AskAssistant() {
         <>
           {/* Left control rail — left of the 720px card, 8px gap */}
           <div
+            ref={controlsRef}
             className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-3 max-h-[75vh] overflow-auto text-black"
             style={{ left: "calc(50% - 360px - 18rem - 8px)" }} /* 18rem = w-72 */
           >
@@ -1129,43 +1144,46 @@ export default function AskAssistant() {
             {/* Show toggles */}
             <div className="space-y-1">
               <div className="text-[11px] font-medium">Show Sections</div>
-
               <label className="flex items-center justify-between text-[12px]">
                 <span>Browse Demos</span>
                 <input
                   type="checkbox"
                   checked={!!tabsEnabled.demos}
-                  onChange={(e) => setTabsEnabled((t) => ({ ...t, demos: e.target.checked }))}
+                  onChange={(e) =>
+                    setTabsEnabled((t) => ({ ...t, demos: e.target.checked }))
+                  }
                 />
               </label>
-
               <label className="flex items-center justify-between text-[12px]">
                 <span>Browse Documents</span>
                 <input
                   type="checkbox"
                   checked={!!tabsEnabled.docs}
-                  onChange={(e) => setTabsEnabled((t) => ({ ...t, docs: e.target.checked }))}
+                  onChange={(e) =>
+                    setTabsEnabled((t) => ({ ...t, docs: e.target.checked }))
+                  }
                 />
               </label>
-
               <label className="flex items-center justify-between text-[12px]">
                 <span>Price Estimate</span>
                 <input
                   type="checkbox"
                   checked={!!tabsEnabled.price}
-                  onChange={(e) => setTabsEnabled((t) => ({ ...t, price: e.target.checked }))}
+                  onChange={(e) =>
+                    setTabsEnabled((t) => ({ ...t, price: e.target.checked }))
+                  }
                 />
               </label>
-
               <label className="flex items-center justify-between text-[12px]">
                 <span>Schedule Meeting</span>
                 <input
                   type="checkbox"
                   checked={!!tabsEnabled.meeting}
-                  onChange={(e) => setTabsEnabled((t) => ({ ...t, meeting: e.target.checked }))}
+                  onChange={(e) =>
+                    setTabsEnabled((t) => ({ ...t, meeting: e.target.checked }))
+                  }
                 />
               </label>
-
               <label className="flex items-center justify-between text-[12px]">
                 <span>Intro Video</span>
                 <input
@@ -1200,11 +1218,11 @@ export default function AskAssistant() {
             </div>
           </div>
 
-          {/* Left-side TEXT EDITOR WINDOW — far left of the Controls rail */}
+          {/* Text Editor window — anchored directly BELOW the Controls rail */}
           {(editing.welcome || editing.priceIntro || editing.priceOutro) && (
             <div
-              className="fixed top-20 z-[9998] bg-white/95 backdrop-blur-sm border rounded-xl shadow p-4 w-[30rem] max-w-[30rem] max-h-[75vh] overflow-auto text-black"
-              style={{ left: "calc(50% - 360px - 18rem - 8px - 30rem - 12px)" }} /* controls (18rem) + gap (8px) + editor (30rem) + gap (12px) */
+              className="fixed z-[9998] bg-white/95 backdrop-blur-sm border rounded-xl shadow p-4 w-[30rem] max-w-[30rem] max-h-[75vh] overflow-auto text-black"
+              style={{ left: "calc(50% - 360px - 18rem - 8px)", top: editorTop ? `${editorTop}px` : undefined }}
             >
               <div className="flex items-center justify-between mb-2">
                 <div className="font-semibold text-xs tracking-wide uppercase">
@@ -1218,7 +1236,7 @@ export default function AskAssistant() {
                 </button>
               </div>
 
-              {/* WELCOME MESSAGE EDITOR */}
+              {/* WELCOME */}
               {editing.welcome && (
                 <div className="space-y-2">
                   <label className="text-[12px] font-medium">Message</label>
@@ -1230,7 +1248,7 @@ export default function AskAssistant() {
                 </div>
               )}
 
-              {/* PRICE INTRO EDITOR */}
+              {/* PRICE INTRO */}
               {editing.priceIntro && (
                 <div className="space-y-2">
                   <label className="text-[12px] font-medium">Intro Heading</label>
@@ -1248,7 +1266,7 @@ export default function AskAssistant() {
                 </div>
               )}
 
-              {/* PRICE OUTRO (CTA) EDITOR */}
+              {/* PRICE OUTRO (CTA) */}
               {editing.priceOutro && (
                 <div className="space-y-2">
                   <label className="text-[12px] font-medium">CTA Heading</label>
@@ -1340,8 +1358,14 @@ export default function AskAssistant() {
                 onChange={(e) => updateCssVar("--send-color", e.target.value)}
               />
             </label>
-
-            {/* NOTE: "Send Hover" control removed per spec. */}
+            <label className="flex items-center justify-between text-xs">
+              Send Hover
+              <input
+                type="color"
+                value={brandDraft.css_vars["--send-color-hover"] || themeVars["--send-color-hover"]}
+                onChange={(e) => updateCssVar("--send-color-hover", e.target.value)}
+              />
+            </label>
           </div>
         </>
       ) : null}
@@ -1419,12 +1443,7 @@ export default function AskAssistant() {
                     </div>
                   ) : null}
 
-                  {/* END OF SECTION 6 */}
-
-
-                    {/* BEGIN SECTION 7 */}
-                    
-                    {/* calendar_link_type handling */}
+                  {/* calendar_link_type handling */}
                   {!agent ? (
                     <div className="text-sm text-gray-600">Loading scheduling…</div>
                   ) : agent.calendar_link_type &&
@@ -1623,5 +1642,5 @@ export default function AskAssistant() {
       </div>
     </div>
   );
-}
+
 // [SECTION 7 END]
