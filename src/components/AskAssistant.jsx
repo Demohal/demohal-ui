@@ -102,47 +102,9 @@ function renderMirror(template, label) {
 }
 // [DH-SECTION-END] BRAND_CONSTANTS
 // [DH-SECTION-BEGIN] BRAND_STATE_AND_EFFECTS
-
-// Theme variables (DB-driven CSS variables merged into defaults)
-const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
-
-// Brand assets (logo, etc.)
-const [brandAssets, setBrandAssets] = useState({
-    logo_url: null,
-});
-
-// Branding mode toggle + working draft (edited via rails)
-const [brandingMode, setBrandingMode] = useState(false);
-const [brandDraft, setBrandDraft] = useState({ css_vars: {} });
-
-// Update a single CSS var in both the draft and the live theme
-function updateCssVar(key, value) {
-    setBrandDraft((prev) => ({ css_vars: { ...(prev.css_vars || {}), [key]: value } }));
-    setThemeVars((prev) => ({ ...prev, [key]: value }));
-}
-
-// One-time brand fetch (safe if botId/apiBase are not defined in this file)
-useEffect(() => {
-    let active = true;
-    (async () => {
-        try {
-            if (typeof botId === "undefined" || !botId) return;
-            const base = (typeof apiBase !== "undefined" && apiBase) || "";
-            const res = await fetch(`${base}/brand?bot_id=${encodeURIComponent(botId)}`);
-            const data = await res.json();
-            if (!active) return;
-            if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
-                setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
-            }
-            if (data?.ok && data?.assets) {
-                setBrandAssets({ logo_url: data.assets.logo_url || null });
-            }
-        } catch {/* keep defaults on failure */ }
-    })();
-    return () => { active = false; };
-}, []);
-
+/* folded into COMPONENT_OPEN; no hooks at module scope */
 // [DH-SECTION-END] BRAND_STATE_AND_EFFECTS
+
 // [DH-SECTION-BEGIN] THEME_SCOPE_WRAPPER
 function ThemeScope({ vars, children }) {
     const cssVars = useMemo(() => {
