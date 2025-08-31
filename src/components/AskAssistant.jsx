@@ -1097,8 +1097,7 @@ export default function AskAssistant() {
 
     // [SECTION 5 END]
 
-
-   // [SECTION 6 BEGIN]
+// [SECTION 6 BEGIN]
 
   const showAskBottom = mode !== "price" || !!priceEstimate;
   const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
@@ -1126,17 +1125,6 @@ export default function AskAssistant() {
             style={{ left: "calc(50% - 360px - 18rem - 8px)" }}
           >
             <div className="font-semibold text-xs tracking-wide uppercase text-black">Controls</div>
-
-            {/* Logo URL */}
-            <div className="space-y-1">
-              <div className="text-[11px] font-medium">Logo URL</div>
-              <input
-                className="w-full border rounded-md px-2 py-1 text-[12px] text-black"
-                placeholder="https://…"
-                value={brandAssets.logo_url || ""}
-                onChange={(e) => setBrandAssets((a) => ({ ...a, logo_url: e.target.value }))}
-              />
-            </div>
 
             {/* Show toggles */}
             <div className="space-y-1">
@@ -1173,6 +1161,14 @@ export default function AskAssistant() {
                   onChange={(e) => setTabsEnabled((t) => ({ ...t, meeting: e.target.checked }))}
                 />
               </label>
+              <label className="flex items-center justify-between text-[12px]">
+                <span>Intro Video</span>
+                <input
+                  type="checkbox"
+                  checked={!!showIntroVideo}
+                  onChange={(e) => setShowIntroVideo(e.target.checked)}
+                />
+              </label>
             </div>
 
             {/* Text Editors */}
@@ -1196,17 +1192,6 @@ export default function AskAssistant() {
               >
                 Edit Price CTA
               </button>
-            </div>
-
-            {/* Intro video link */}
-            <div className="space-y-1">
-              <div className="text-[11px] font-medium">Intro Video Link</div>
-              <input
-                className="w-full border rounded-md px-2 py-1 text-[12px] text-black"
-                placeholder="https://www.youtube.com/embed/…"
-                value={introVideoUrl || ""}
-                onChange={(e) => setIntroVideoUrl(e.target.value)}
-              />
             </div>
           </div>
 
@@ -1366,7 +1351,6 @@ export default function AskAssistant() {
                       {agent.schedule_header}
                     </div>
                   ) : null}
-
                   {/* calendar_link_type handling */}
                   {!agent ? (
                     <div className="text-sm text-gray-600">Loading scheduling…</div>
@@ -1566,5 +1550,5 @@ export default function AskAssistant() {
       </div>
     </div>
   );
-}
+
 // [SECTION 6 END]
