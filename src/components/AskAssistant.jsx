@@ -86,7 +86,11 @@ const UI = {
 // The only removal is the inline `function Row(...) { … }` block,
 // which is now provided by `src/components/shared/Row.jsx` via the imports above.
 
+/** COMPONENT START */
+export default function AskAssistant() {
+
 // [SECTION 1 END]
+
 
 // [SECTION 2 BEGIN]
 
