@@ -594,11 +594,8 @@ export default function AskAssistant() {
     if (!botId) {
         return (
             <div
-                className={classNames(
-                    "w-screen min-h-[100dvh] flex items-center justify-center bg-[var(--page-bg)] p-4 transition-opacity duration-200",
-                    brandReady ? "opacity-100" : "opacity-0"
-                )}
-                style={themeVars}
+              className="w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center"
+              style={themeVars}
             >
                 {brandingMode ? (
                     <>
