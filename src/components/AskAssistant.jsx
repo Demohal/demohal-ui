@@ -1566,5 +1566,5 @@ export default function AskAssistant() {
       </div>
     </div>
   );
-
+}
 // [SECTION 6 END]
