@@ -1122,6 +1122,11 @@ export default function AskAssistant() {
     return () => window.removeEventListener("resize", measure);
   }, [editing, tabsEnabled, showIntroVideo]);
 
+  // IMPORTANT: don't keep the screen invisible while alias->botId is resolving
+  useEffect(() => {
+    if (alias && !botId && !brandReady) setBrandReady(true);
+  }, [alias, botId, brandReady]);
+
   return (
     <div
       className={classNames(
@@ -1390,6 +1395,8 @@ export default function AskAssistant() {
           </div>
           <TabsNav mode={mode} tabs={tabs} />
         </div>
+
+// [SECTION 6 END]
 
 // [SECTION 7 BEGIN]
 
