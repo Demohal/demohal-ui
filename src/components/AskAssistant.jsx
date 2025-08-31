@@ -1108,14 +1108,13 @@ export default function AskAssistant() {
     brandAssets.logo_dark_url ||
     "";
 
-  // --- Anchor the Text Editor directly below the Controls rail ---
+  // positioning for Text Editor below Controls
   const controlsRef = useRef(null);
   const [editorTop, setEditorTop] = useState(0);
   useEffect(() => {
     const measure = () => {
       if (!controlsRef.current) return;
       const r = controlsRef.current.getBoundingClientRect();
-      // r.top is viewport-relative (controls are fixed). Place editor 12px below.
       setEditorTop(r.top + r.height + 12);
     };
     measure();
@@ -1196,19 +1195,19 @@ export default function AskAssistant() {
             <div className="space-y-1">
               <div className="text-[11px] font-medium">Text Editors</div>
               <button
-                className="w-full text-left border rounded-md px-2 py-1 text-[12px]"
+                className="w-full text-left border rounded-md px-2 py-1 text-[12px] hover:brightness-110"
                 onClick={() => setEditing((e) => ({ ...e, welcome: true, priceIntro: false, priceOutro: false }))}
               >
                 Edit Welcome Message
               </button>
               <button
-                className="w-full text-left border rounded-md px-2 py-1 text-[12px]"
+                className="w-full text-left border rounded-md px-2 py-1 text-[12px] hover:brightness-110"
                 onClick={() => setEditing((e) => ({ ...e, welcome: false, priceIntro: true, priceOutro: false }))}
               >
                 Edit Price Introduction
               </button>
               <button
-                className="w-full text-left border rounded-md px-2 py-1 text-[12px]"
+                className="w-full text-left border rounded-md px-2 py-1 text-[12px] hover:brightness-110"
                 onClick={() => setEditing((e) => ({ ...e, welcome: false, priceIntro: false, priceOutro: true }))}
               >
                 Edit Price CTA
@@ -1438,13 +1437,7 @@ export default function AskAssistant() {
                     </div>
                   ) : null}
 
-                  {/* END OF SECTION 6 */}
-
-
-
-                    {/* BEGIN SECTION 7 */}
-                    
-                    {/* calendar_link_type handling */}
+                  {/* calendar_link_type handling */}
                   {!agent ? (
                     <div className="text-sm text-gray-600">Loading scheduling…</div>
                   ) : agent.calendar_link_type &&
@@ -1634,8 +1627,9 @@ export default function AskAssistant() {
                 aria-label="Send"
                 onClick={sendMessage}
                 className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
+                title="Send"
               >
-                <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:text-[var(--send-color-hover)]" />
+                <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:brightness-110" />
               </button>
             </div>
           ) : null}
