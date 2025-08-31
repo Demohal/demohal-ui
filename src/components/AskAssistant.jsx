@@ -160,254 +160,281 @@ function ThemeScope({ vars, children }) {
 }
 // [DH-SECTION-END] THEME_SCOPE_WRAPPER
 // [DH-SECTION-BEGIN] HEADER_BANNER
-<div
-    className="w-full"
-    style={{ background: "var(--banner-bg)", color: "var(--banner-fg)" }}
-    data-section="HEADER_BANNER"
->
-    <div className="mx-auto max-w-3xl px-4 py-3 flex items-center justify-between gap-3">
+function HeaderBanner({ brandAssets, brandingMode, setBrandingMode }) {
+  return (
+    <div
+      className="w-full"
+      style={{ background: "var(--banner-bg)", color: "var(--banner-fg)" }}
+      data-section="HEADER_BANNER"
+    >
+      <div className="mx-auto max-w-3xl px-4 py-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-            {brandAssets?.logo_url ? (
-                <img
-                    src={brandAssets.logo_url}
-                    alt="Logo"
-                    className="h-8 w-auto rounded-sm border border-white/20"
-                />
-            ) : null}
-            <div className="text-lg font-semibold tracking-wide">Your Brand</div>
+          {brandAssets?.logo_url ? (
+            <img
+              src={brandAssets.logo_url}
+              alt="Logo"
+              className="h-8 w-auto rounded-sm border border-white/20"
+            />
+          ) : null}
+          <div className="text-lg font-semibold tracking-wide">Your Brand</div>
         </div>
 
         <button
-            type="button"
-            onClick={() => setBrandingMode((v) => !v)}
-            className="rounded-lg px-3 py-1.5 border border-white/40 text-[var(--banner-fg)] transition-transform hover:translate-y-[1px] active:scale-95"
-            title={brandingMode ? "Exit Branding" : "Enter Branding"}
+          type="button"
+          onClick={() => setBrandingMode((v) => !v)}
+          className="rounded-lg px-3 py-1.5 border border-white/40 text-[var(--banner-fg)] transition-transform hover:translate-y-[1px] active:scale-95"
+          title={brandingMode ? "Exit Branding" : "Enter Branding"}
         >
-            {brandingMode ? "Exit Branding" : "Enter Branding"}
+          {brandingMode ? "Exit Branding" : "Enter Branding"}
         </button>
+      </div>
     </div>
-</div>
+  );
+}
 // [DH-SECTION-END] HEADER_BANNER
+
 // [DH-SECTION-BEGIN] BRAND_CONTROL_RAIL
-{
-    brandingMode ? (
-        <div
-            className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-3 max-h-[75vh] overflow-auto"
-            style={{ left: "calc(50% - 360px - 18rem - 8px)" }}
-            data-section="BRAND_CONTROL_RAIL"
-        >
-            <div className="font-semibold text-sm tracking-wide uppercase text-black">Controls</div>
-            <div className="border-t border-black/20" />
+function BrandControlRail({ brandingMode, setBrandingMode }) {
+  if (!brandingMode) return null;
+  return (
+    <div
+      className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-3 max-h-[75vh] overflow-auto"
+      style={{ left: "calc(50% - 360px - 18rem - 8px)" }}
+      data-section="BRAND_CONTROL_RAIL"
+    >
+      <div className="font-semibold text-sm tracking-wide uppercase text-black">Controls</div>
+      <div className="border-t border-black/20" />
 
-            <div className="space-y-3 text-sm text-black">
-                {/* Branding mode note (no card-area editing) */}
-                <div>
-                    <div className="font-bold">Branding Mode</div>
-                    <p className="mt-1">
-                        Make all changes from these rails. Direct edits on the card are disabled while branding is on.
-                    </p>
-                    <button
-                        type="button"
-                        onClick={() => setBrandingMode(false)}
-                        className="mt-2 w-full rounded-lg border border-black px-3 py-2 text-center transition-transform hover:translate-y-[1px] active:scale-95"
-                    >
-                        Exit Branding
-                    </button>
-                </div>
-
-                {/* Policy reminders */}
-                <div className="border-t border-black/20 pt-3">
-                    <div className="font-bold">Notes</div>
-                    <ul className="list-disc pl-5 mt-1 space-y-1">
-                        <li>Controls text and separator lines are black.</li>
-                        <li>Button hovers use a subtle movement (no color change).</li>
-                        <li>Borders, lines, and button shapes are not changeable.</li>
-                    </ul>
-                </div>
-            </div>
+      <div className="space-y-3 text-sm text-black">
+        <div>
+          <div className="font-bold">Branding Mode</div>
+          <p className="mt-1">
+            Make all changes from these rails. Direct edits on the card are disabled while branding is on.
+          </p>
+          <button
+            type="button"
+            onClick={() => setBrandingMode(false)}
+            className="mt-2 w-full rounded-lg border border-black px-3 py-2 text-center transition-transform hover:translate-y-[1px] active:scale-95"
+          >
+            Exit Branding
+          </button>
         </div>
-    ) : null
+
+        <div className="border-t border-black/20 pt-3">
+          <div className="font-bold">Notes</div>
+          <ul className="list-disc pl-5 mt-1 space-y-1">
+            <li>Controls text and separator lines are black.</li>
+            <li>Button hovers use a subtle movement (no color change).</li>
+            <li>Borders, lines, and button shapes are not changeable.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
 }
 // [DH-SECTION-END] BRAND_CONTROL_RAIL
+
 // [DH-SECTION-BEGIN] BRAND_COLOR_RAIL
-{
-    brandingMode ? (
-        <div
-            className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-2 max-h-[75vh] overflow-auto"
-            style={{ left: "calc(50% + 360px + 8px)" }}
-            data-section="BRAND_COLOR_RAIL"
-        >
-            <div className="font-semibold text-sm tracking-wide uppercase text-black">Colors</div>
-            <div className="border-t border-black/20" />
+function BrandColorRail({ brandingMode, themeVars, brandDraft, updateCssVar }) {
+  if (!brandingMode) return null;
+  return (
+    <div
+      className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-2 max-h-[75vh] overflow-auto"
+      style={{ left: "calc(50% + 360px + 8px)" }}
+      data-section="BRAND_COLOR_RAIL"
+    >
+      <div className="font-semibold text-sm tracking-wide uppercase text-black">Colors</div>
+      <div className="border-t border-black/20" />
 
-            <div className="space-y-2 text-sm text-black">
-                {/* Banner */}
-                <label className="flex items-center justify-between text-sm text-black">
-                    Banner Title
-                    <input
-                        type="color"
-                        value={brandDraft.css_vars["--banner-fg"] || themeVars["--banner-fg"]}
-                        onChange={(e) => updateCssVar("--banner-fg", e.target.value)}
-                    />
-                </label>
-                <label className="flex items-center justify-between text-sm text-black">
-                    Banner Background
-                    <input
-                        type="color"
-                        value={brandDraft.css_vars["--banner-bg"] || themeVars["--banner-bg"]}
-                        onChange={(e) => updateCssVar("--banner-bg", e.target.value)}
-                    />
-                </label>
+      <div className="space-y-2 text-sm text-black">
+        <label className="flex items-center justify-between text-sm text-black">
+          Banner Title
+          <input
+            type="color"
+            value={brandDraft.css_vars["--banner-fg"] || themeVars["--banner-fg"]}
+            onChange={(e) => updateCssVar("--banner-fg", e.target.value)}
+          />
+        </label>
+        <label className="flex items-center justify-between text-sm text-black">
+          Banner Background
+          <input
+            type="color"
+            value={brandDraft.css_vars["--banner-bg"] || themeVars["--banner-bg"]}
+            onChange={(e) => updateCssVar("--banner-bg", e.target.value)}
+          />
+        </label>
 
-                <div className="border-t border-black/20 my-2" />
+        <div className="border-t border-black/20 my-2" />
 
-                {/* Tabs (active state) */}
-                <label className="flex items-center justify-between text-sm text-black">
-                    Tab Titles
-                    <input
-                        type="color"
-                        value={brandDraft.css_vars["--tab-active-fg"] || themeVars["--tab-active-fg"]}
-                        onChange={(e) => updateCssVar("--tab-active-fg", e.target.value)}
-                    />
-                </label>
-                <label className="flex items-center justify-between text-sm text-black">
-                    Tab Background
-                    <input
-                        type="color"
-                        value={brandDraft.css_vars["--tab-active-bg"] || themeVars["--tab-active-bg"]}
-                        onChange={(e) => updateCssVar("--tab-active-bg", e.target.value)}
-                    />
-                </label>
+        <label className="flex items-center justify-between text-sm text-black">
+          Tab Titles
+          <input
+            type="color"
+            value={brandDraft.css_vars["--tab-active-fg"] || themeVars["--tab-active-fg"]}
+            onChange={(e) => updateCssVar("--tab-active-fg", e.target.value)}
+          />
+        </label>
+        <label className="flex items-center justify-between text-sm text-black">
+          Tab Background
+          <input
+            type="color"
+            value={brandDraft.css_vars["--tab-active-bg"] || themeVars["--tab-active-bg"]}
+            onChange={(e) => updateCssVar("--tab-active-bg", e.target.value)}
+          />
+        </label>
 
-                <div className="border-t border-black/20 my-2" />
+        <div className="border-t border-black/20 my-2" />
 
-                {/* Card + Fields */}
-                <label className="flex items-center justify-between text-sm text-black">
-                    Card Background
-                    <input
-                        type="color"
-                        value={brandDraft.css_vars["--card-bg"] || themeVars["--card-bg"]}
-                        onChange={(e) => updateCssVar("--card-bg", e.target.value)}
-                    />
-                </label>
-                <label className="flex items-center justify-between text-sm text-black">
-                    Message Field BG
-                    <input
-                        type="color"
-                        value={brandDraft.css_vars["--field-bg"] || themeVars["--field-bg"]}
-                        onChange={(e) => updateCssVar("--field-bg", e.target.value)}
-                    />
-                </label>
+        <label className="flex items-center justify-between text-sm text-black">
+          Card Background
+          <input
+            type="color"
+            value={brandDraft.css_vars["--card-bg"] || themeVars["--card-bg"]}
+            onChange={(e) => updateCssVar("--card-bg", e.target.value)}
+          />
+        </label>
+        <label className="flex items-center justify-between text-sm text-black">
+          Message Field BG
+          <input
+            type="color"
+            value={brandDraft.css_vars["--field-bg"] || themeVars["--field-bg"]}
+            onChange={(e) => updateCssVar("--field-bg", e.target.value)}
+          />
+        </label>
 
-                <div className="border-t border-black/20 my-2" />
+        <div className="border-t border-black/20 my-2" />
 
-                {/* Send icon (no hover color control) */}
-                <label className="flex items-center justify-between text-sm text-black">
-                    Send Button
-                    <input
-                        type="color"
-                        value={brandDraft.css_vars["--send-color"] || themeVars["--send-color"]}
-                        onChange={(e) => updateCssVar("--send-color", e.target.value)}
-                    />
-                </label>
-            </div>
-        </div>
-    ) : null
+        <label className="flex items-center justify-between text-sm text-black">
+          Send Button
+          <input
+            type="color"
+            value={brandDraft.css_vars["--send-color"] || themeVars["--send-color"]}
+            onChange={(e) => updateCssVar("--send-color", e.target.value)}
+          />
+        </label>
+      </div>
+    </div>
+  );
 }
 // [DH-SECTION-END] BRAND_COLOR_RAIL
+
 // [DH-SECTION-BEGIN] BRAND_NAV
-{
-    brandingMode ? (
-        <div className="px-0 py-2 flex flex-wrap gap-2" data-section="BRAND_NAV">
-            <button
-                type="button"
-                className={UI.BTN}
-                onClick={() => {
-                    setSelected?.(null);
-                    setMode?.("ask");
-                    requestAnimationFrame(() => contentRef?.current?.scrollTo?.({ top: 0, behavior: "auto" }));
-                }}
-            >
-                <div className="font-extrabold text-base">Ask</div>
-            </button>
+function BrandNav({
+  brandingMode,
+  setSelected,
+  setMode,
+  openBrowse,
+  openBrowseDocs,
+  openMeeting,
+  contentRef,
+  tabsEnabled,
+}) {
+  if (!brandingMode) return null;
+  return (
+    <div className="px-0 py-2 flex flex-wrap gap-2" data-section="BRAND_NAV">
+      <button
+        type="button"
+        className={UI.BTN}
+        onClick={() => {
+          setSelected?.(null);
+          setMode?.("ask");
+          requestAnimationFrame(() =>
+            contentRef?.current?.scrollTo?.({ top: 0, behavior: "auto" })
+          );
+        }}
+      >
+        <div className="font-extrabold text-base">Ask</div>
+      </button>
 
-            <button
-                type="button"
-                className={UI.BTN}
-                onClick={() => {
-                    setSelected?.(null);
-                    setMode?.("browse");
-                    openBrowse?.();
-                }}
-            >
-                <div className="font-extrabold text-base">Browse Demos</div>
-            </button>
+      {tabsEnabled?.demos ? (
+        <button
+          type="button"
+          className={UI.BTN}
+          onClick={() => {
+            setSelected?.(null);
+            setMode?.("browse");
+            openBrowse?.();
+          }}
+        >
+          <div className="font-extrabold text-base">Browse Demos</div>
+        </button>
+      ) : null}
 
-            <button
-                type="button"
-                className={UI.BTN_DOCS}
-                onClick={() => {
-                    setSelected?.(null);
-                    setMode?.("docs");
-                    openBrowseDocs?.();
-                }}
-            >
-                <div className="font-extrabold text-base">Browse Documents</div>
-            </button>
+      {tabsEnabled?.docs ? (
+        <button
+          type="button"
+          className={UI.BTN_DOCS}
+          onClick={() => {
+            setSelected?.(null);
+            setMode?.("docs");
+            openBrowseDocs?.();
+          }}
+        >
+          <div className="font-extrabold text-base">Browse Documents</div>
+        </button>
+      ) : null}
 
-            <button
-                type="button"
-                className={UI.BTN}
-                onClick={() => {
-                    setSelected?.(null);
-                    setMode?.("price");
-                }}
-            >
-                <div className="font-extrabold text-base">Price Estimate</div>
-            </button>
+      {tabsEnabled?.price ? (
+        <button
+          type="button"
+          className={UI.BTN}
+          onClick={() => {
+            setSelected?.(null);
+            setMode?.("price");
+          }}
+        >
+          <div className="font-extrabold text-base">Price Estimate</div>
+        </button>
+      ) : null}
 
-            <button
-                type="button"
-                className={UI.BTN}
-                onClick={() => {
-                    setSelected?.(null);
-                    setMode?.("meeting");
-                    openMeeting?.();
-                }}
-            >
-                <div className="font-extrabold text-base">Schedule Meeting</div>
-            </button>
-        </div>
-    ) : null
+      {tabsEnabled?.meeting ? (
+        <button
+          type="button"
+          className={UI.BTN}
+          onClick={() => {
+            setSelected?.(null);
+            setMode?.("meeting");
+            openMeeting?.();
+          }}
+        >
+          <div className="font-extrabold text-base">Schedule Meeting</div>
+        </button>
+      ) : null}
+    </div>
+  );
 }
 // [DH-SECTION-END] BRAND_NAV
+
 // [DH-SECTION-BEGIN] BOTTOM_ASK_BAR
-{/* Bottom Ask Bar */}
-<div className="w-full border-t border-gray-200 bg-white">
-  <div className="mx-auto max-w-3xl px-4 py-3 flex items-center gap-2">
-    <input
-      type="text"
-      value={askText}
-      onChange={(e) => setAskText?.(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          onSend?.(askText);
-        }
-      }}
-      placeholder="Ask a question…"
-      className={UI.FIELD}
-    />
-    <button
-      type="button"
-      aria-label="Send"
-      onClick={() => onSend?.(askText)}
-      className="shrink-0 rounded-full p-1 transition-transform hover:translate-y-[1px] active:scale-95"
-    >
-      <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] active:scale-95" />
-    </button>
-  </div>
-</div>
+function BottomAskBar({ askText, setAskText, onSend }) {
+  return (
+    <div className="w-full border-t border-gray-200 bg-white">
+      <div className="mx-auto max-w-3xl px-4 py-3 flex items-center gap-2">
+        <input
+          type="text"
+          value={askText}
+          onChange={(e) => setAskText?.(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              onSend?.(askText);
+            }
+          }}
+          placeholder="Ask a question…"
+          className={UI.FIELD}
+        />
+        <button
+          type="button"
+          aria-label="Send"
+          onClick={() => onSend?.(askText)}
+          className="shrink-0 rounded-full p-1 transition-transform hover:translate-y-[1px] active:scale-95"
+        >
+          <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] active:scale-95" />
+        </button>
+      </div>
+    </div>
+  );
+}
 // [DH-SECTION-END] BOTTOM_ASK_BAR
 
 // [DH-SECTION-BEGIN] PRICE_MODE
@@ -753,7 +780,8 @@ export default function AskAssistant() {
   const [sending, setSending] = useState(false);
 
   async function onSend(text) {
-    const t = (text ?? askText || "").trim();
+    // FIX: explicit grouping for ?? with || (no syntax error)
+    const t = (((text ?? askText)) || "").trim();
     if (!t) return;
     setMessages((m) => [...m, { role: "user", text: t }]);
     setAskText("");
@@ -921,19 +949,38 @@ export default function AskAssistant() {
   // ===== Layout open =====
   return (
     <ThemeScope vars={themeVars}>
-      {/* You can render Section 12 — HEADER_BANNER above, if desired */}
+      {/* Banner */}
+      <HeaderBanner brandAssets={brandAssets} brandingMode={brandingMode} setBrandingMode={setBrandingMode} />
+
+      {/* Tabs + branding nav */}
       <div className="w-full">
         <TabsNav mode={mode} tabs={tabs} />
-        {/* Section 5 — BRAND_NAV can render right below */}
+        <BrandNav
+          brandingMode={brandingMode}
+          setSelected={setSelected}
+          setMode={setMode}
+          openBrowse={openBrowse}
+          openBrowseDocs={openBrowseDocs}
+          openMeeting={openMeeting}
+          contentRef={contentRef}
+          tabsEnabled={tabsEnabled}
+        />
       </div>
 
       {/* Main content container (centered card layout) */}
       <div className="relative mx-auto max-w-3xl">
-        {/* Side rails and content panes paste below (Sections 3, 4, 9–11, 7, 8) */}
+        {/* Side rails */}
+        <BrandControlRail brandingMode={brandingMode} setBrandingMode={setBrandingMode} />
+        <BrandColorRail
+          brandingMode={brandingMode}
+          themeVars={themeVars}
+          brandDraft={brandDraft}
+          updateCssVar={updateCssVar}
+        />
 
         {/* Scrollable content area */}
         <div ref={contentRef} className="min-h-[50vh]">
-// [DH-SECTION-END] COMPONENT_OPEN
+
 // [DH-SECTION-BEGIN] SMALL_COMPONENTS
 function Row({ item, onClick, active }) {
     return (
