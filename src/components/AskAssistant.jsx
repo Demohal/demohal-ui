@@ -1107,7 +1107,7 @@ export default function AskAssistant() {
     brandAssets.logo_url ||
     brandAssets.logo_light_url ||
     brandAssets.logo_dark_url ||
-    fallbackLogo;
+    "";
 
   return (
     <div
@@ -1123,7 +1123,7 @@ export default function AskAssistant() {
           {/* Left control rail — left of the 720px card, 8px gap */}
           <div
             className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-3 max-h-[75vh] overflow-auto text-black"
-            style={{ left: "calc(50% - 360px - 18rem - 8px)" }} /* 18rem = w-72 */
+            style={{ left: "calc(50% - 360px - 18rem - 8px)" }}
           >
             <div className="font-semibold text-xs tracking-wide uppercase text-black">Controls</div>
 
@@ -1146,9 +1146,7 @@ export default function AskAssistant() {
                 <input
                   type="checkbox"
                   checked={!!tabsEnabled.demos}
-                  onChange={(e) =>
-                    setTabsEnabled((t) => ({ ...t, demos: e.target.checked }))
-                  }
+                  onChange={(e) => setTabsEnabled((t) => ({ ...t, demos: e.target.checked }))}
                 />
               </label>
               <label className="flex items-center justify-between text-[12px]">
@@ -1156,9 +1154,7 @@ export default function AskAssistant() {
                 <input
                   type="checkbox"
                   checked={!!tabsEnabled.docs}
-                  onChange={(e) =>
-                    setTabsEnabled((t) => ({ ...t, docs: e.target.checked }))
-                  }
+                  onChange={(e) => setTabsEnabled((t) => ({ ...t, docs: e.target.checked }))}
                 />
               </label>
               <label className="flex items-center justify-between text-[12px]">
@@ -1166,9 +1162,7 @@ export default function AskAssistant() {
                 <input
                   type="checkbox"
                   checked={!!tabsEnabled.price}
-                  onChange={(e) =>
-                    setTabsEnabled((t) => ({ ...t, price: e.target.checked }))
-                  }
+                  onChange={(e) => setTabsEnabled((t) => ({ ...t, price: e.target.checked }))}
                 />
               </label>
               <label className="flex items-center justify-between text-[12px]">
@@ -1176,9 +1170,7 @@ export default function AskAssistant() {
                 <input
                   type="checkbox"
                   checked={!!tabsEnabled.meeting}
-                  onChange={(e) =>
-                    setTabsEnabled((t) => ({ ...t, meeting: e.target.checked }))
-                  }
+                  onChange={(e) => setTabsEnabled((t) => ({ ...t, meeting: e.target.checked }))}
                 />
               </label>
             </div>
