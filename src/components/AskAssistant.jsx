@@ -117,6 +117,25 @@ export default function AskAssistant() {
         
         if (!botId && !alias && !brandReady) setBrandReady(true);
     }, [botId, alias, brandReady]);
+    export default function AskAssistant() {
+
+  // boot params (from URL; harmless defaults)
+  const apiBase = import.meta.env.VITE_API_BASE || "";
+  const urlObj  = typeof window !== "undefined" ? new URL(window.location.href) : null;
+  const alias   = urlObj ? urlObj.searchParams.get("alias") : null;
+  const botId   = urlObj ? (urlObj.searchParams.get("bot_id") || urlObj.searchParams.get("botId")) : null;
+
+  useEffect(() => {
+    if (!botId && !alias && !brandReady) setBrandReady(true);
+  }, [botId, alias, brandReady]);
+
+  useEffect(() => {
+    if (!botId) return;
+    let cancel = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`);
+        // ...
 
 
     
