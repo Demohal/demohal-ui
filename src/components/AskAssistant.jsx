@@ -420,197 +420,200 @@ export default function AskAssistant() {
 
     // [SECTION 3 BEGIN]
 
-    useEffect(() => {
-        // If there’s nothing to resolve (no alias, no botId) and we somehow stayed gated, un-gate.
-        if (!botId && !alias && !brandReady) setBrandReady(true);
-    }, [botId, alias, brandReady]);
+useEffect(() => {
+    // If botId is not known yet, don't keep the screen invisible.
+    if (!botId && !brandReady) setBrandReady(true);
+}, [botId, brandReady]);
 
 
-    // Fetch brand once we know botId (DB-driven CSS + logo)
-    useEffect(() => {
-        if (!botId) return;
-        let cancel = false;
-        (async () => {
-            try {
-                const res = await fetch(`${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`);
-                const data = await res.json();
-                if (cancel) return;
+// Fetch brand once we know botId (DB-driven CSS + logo)
+useEffect(() => {
+    if (!botId) return;
+    let cancel = false;
+    (async () => {
+        try {
+            const res = await fetch(`${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`);
+            const data = await res.json();
+            if (cancel) return;
 
-                if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
-                    setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
-                }
-                if (data?.ok && data?.assets) {
-                    const logos = {
-                        url: data.assets.logo_url || null
-                    };
-                    setBrandAssets({
-                        logo_url: logos.url
-                    });
-                    if (!logos.url) {
-                        setFatal("Brand logo missing for this bot.");
-                    }
-                }
-            } catch {
-                setFatal("Failed to load brand assets.");
-            } finally {
-                if (!cancel) setBrandReady(true);
+            if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
+                setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
             }
-        })();
-        return () => {
-            cancel = true;
-        };
-    }, [botId, apiBase]);
-    // Initialize BRANDING DRAFT once brand + bot copy are available (branding mode only)
-    useEffect(() => {
-        if (!brandingMode || !botId) return;
-        let cancel = false;
-        (async () => {
-            try {
-                const [botRes, priceRes, agentRes] = await Promise.all([
-                    fetch(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botId)}`),
-                    fetch(`${apiBase}/pricing/questions?bot_id=${encodeURIComponent(botId)}`),
-                    fetch(`${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`),
-                ]);
-                const botJ = await botRes.json().catch(() => ({}));
-                const priceJ = await priceRes.json().catch(() => ({}));
-                const agentJ = await agentRes.json().catch(() => ({}));
-                if (cancel) return;
-                const welcome_message = botJ?.ok ? (botJ.bot?.welcome_message || "") : "";
-                const ui_copy = (priceJ?.ok ? (priceJ.ui_copy || {}) : {});
-                const schedule_header = agentJ?.ok ? (agentJ.agent?.schedule_header || "") : "";
-                const editable = [
-                    "--banner-bg", "--banner-fg",
-                    "--page-bg", "--card-bg", "--card-border",
-                    "--tab-active-bg", "--tab-active-fg",
-                    "--field-bg", "--field-border",
-                    "--send-color", "--send-color-hover"
-                ];
-                const css_vars = {};
-                for (const k of editable) css_vars[k] = themeVars[k];
-                setBrandDraft({
-                    css_vars,
-                    text: {
-                        welcome_message,
-                        ui_copy: {
-                            intro: { heading: ui_copy?.intro?.heading || "", body: ui_copy?.intro?.body || "" },
-                            outro: { heading: ui_copy?.outro?.heading || "", body: ui_copy?.outro?.body || "" }
-                        },
-                        schedule_header
-                    },
-                    dirty: false
+            if (data?.ok && data?.assets) {
+                const logos = {
+                    url: data.assets.logo_url || null
+                };
+                setBrandAssets({
+                    logo_url: logos.url
                 });
-            } catch { }
-        })();
-        return () => { cancel = true; };
-    }, [brandingMode, botId, apiBase, themeVars]);
-    // Helpers to update draft + live preview
-    const updateCssVar = (name, value) => {
-        setThemeVars((prev) => ({ ...prev, [name]: value }));
-        setBrandDraft((prev) => ({ ...prev, css_vars: { ...prev.css_vars, [name]: value }, dirty: true }));
-    };
-    const updateDraftText = (path, value) => {
-        setBrandDraft((prev) => {
-            const next = JSON.parse(JSON.stringify(prev.text));
-            const parts = path.split(".");
-            let p = next;
-            while (parts.length > 1) p = p[parts.shift()];
-            p[parts[0]] = value;
-            return { ...prev, text: next, dirty: true };
-        });
-    };
-    const discardDraft = () => {
-        setBrandDraft((prev) => ({ ...prev, dirty: false }));
-    };
-    const publishDraft = async () => {
-        try {
-            const payload = {
-                bot_id: botId,
-                css_vars: brandDraft.css_vars,
-                welcome_message: brandDraft.text.welcome_message,
-                ui_copy: brandDraft.text.ui_copy,
-                schedule_header: brandDraft.text.schedule_header,
-            };
-            const res = await fetch(`${apiBase}/brand/save`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-            });
-            const j = await res.json().catch(() => ({}));
-            if (!j?.ok) throw new Error(j?.error || "save_failed");
-            setBrandDraft((prev) => ({ ...prev, dirty: false }));
-        } catch (e) {
-            alert("Failed to publish branding changes.");
-        }
-    };
-
-
-    // NEW: when botId is known (e.g., bot_id in URL), fetch bot-settings to get show_* flags
-    useEffect(() => {
-        if (!botId) return;
-        let cancel = false;
-        (async () => {
-            try {
-                const res = await fetch(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botId)}`);
-                const data = await res.json();
-                if (cancel) return;
-                const b = data?.ok ? data?.bot : null;
-                if (b) {
-                    setTabsEnabled({
-                        demos: !!b.show_browse_demos,
-                        docs: !!b.show_browse_docs,
-                        meeting: !!b.show_schedule_meeting,
-                        price: !!b.show_price_estimate,
-                    });
-                    setResponseText(b.welcome_message || "");
-                    setIntroVideoUrl(b.intro_video_url || "");
-                    setShowIntroVideo(!!b.show_intro_video);
+                if (!logos.url) {
+                    setFatal("Brand logo missing for this bot.");
                 }
-            } catch {
-                // silent; tabs remain default false if call fails
             }
-        })();
-        return () => { cancel = true; };
-    }, [botId, apiBase]);
-
-    // Autosize ask box
-    useEffect(() => {
-        const el = inputRef.current;
-        if (!el) return;
-        el.style.height = "auto";
-        el.style.height = `${el.scrollHeight}px`;
-    }, [input]);
-
-    // Release video/doc sticky when scrolling
-    useEffect(() => {
-        const el = contentRef.current;
-        if (!el || !selected) return;
-        const onScroll = () => {
-            if (el.scrollTop > 8 && isAnchored) setIsAnchored(false);
-        };
-        el.addEventListener("scroll", onScroll, { passive: true });
-        return () => el.removeEventListener("scroll", onScroll);
-    }, [selected, isAnchored]);
-
-    // Helpers
-    async function normalizeAndSelectDemo(item) {
-        // Normalize demo URL to an embeddable form via backend
-        try {
-            const r = await fetch(`${apiBase}/render-video-iframe`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ video_url: item.url }),
-            });
-            const j = await r.json();
-            const embed = j?.video_url || item.url;
-            setSelected({ ...item, url: embed });
-            requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
         } catch {
-            setSelected(item);
-            requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+            setFatal("Failed to load brand assets.");
+        } finally {
+            if (!cancel) setBrandReady(true);
         }
-    }
+    })();
+    return () => {
+        cancel = true;
+    };
+}, [botId, apiBase]);
 
-    // [SECTION 3 END]
+// Initialize BRANDING DRAFT once brand + bot copy are available (branding mode only)
+useEffect(() => {
+    if (!brandingMode || !botId) return;
+    let cancel = false;
+    (async () => {
+        try {
+            const [botRes, priceRes, agentRes] = await Promise.all([
+                fetch(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botId)}`),
+                fetch(`${apiBase}/pricing/questions?bot_id=${encodeURIComponent(botId)}`),
+                fetch(`${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`),
+            ]);
+            const botJ = await botRes.json().catch(() => ({}));
+            const priceJ = await priceRes.json().catch(() => ({}));
+            const agentJ = await agentRes.json().catch(() => ({}));
+            if (cancel) return;
+            const welcome_message = botJ?.ok ? (botJ.bot?.welcome_message || "") : "";
+            const ui_copy = (priceJ?.ok ? (priceJ.ui_copy || {}) : {});
+            const schedule_header = agentJ?.ok ? (agentJ.agent?.schedule_header || "") : "";
+            const editable = [
+                "--banner-bg", "--banner-fg",
+                "--page-bg", "--card-bg", "--card-border",
+                "--tab-active-bg", "--tab-active-fg",
+                "--field-bg", "--field-border",
+                "--send-color", "--send-color-hover"
+            ];
+            const css_vars = {};
+            for (const k of editable) css_vars[k] = themeVars[k];
+            setBrandDraft({
+                css_vars,
+                text: {
+                    welcome_message,
+                    ui_copy: {
+                        intro: { heading: ui_copy?.intro?.heading || "", body: ui_copy?.intro?.body || "" },
+                        outro: { heading: ui_copy?.outro?.heading || "", body: ui_copy?.outro?.body || "" }
+                    },
+                    schedule_header
+                },
+                dirty: false
+            });
+        } catch { }
+    })();
+    return () => { cancel = true; };
+}, [brandingMode, botId, apiBase, themeVars]);
+
+// Helpers to update draft + live preview
+const updateCssVar = (name, value) => {
+    setThemeVars((prev) => ({ ...prev, [name]: value }));
+    setBrandDraft((prev) => ({ ...prev, css_vars: { ...prev.css_vars, [name]: value }, dirty: true }));
+};
+const updateDraftText = (path, value) => {
+    setBrandDraft((prev) => {
+        const next = JSON.parse(JSON.stringify(prev.text));
+        const parts = path.split(".");
+        let p = next;
+        while (parts.length > 1) p = p[parts.shift()];
+        p[parts[0]] = value;
+        return { ...prev, text: next, dirty: true };
+    });
+};
+const discardDraft = () => {
+    setBrandDraft((prev) => ({ ...prev, dirty: false }));
+};
+const publishDraft = async () => {
+    try {
+        const payload = {
+            bot_id: botId,
+            css_vars: brandDraft.css_vars,
+            welcome_message: brandDraft.text.welcome_message,
+            ui_copy: brandDraft.text.ui_copy,
+            schedule_header: brandDraft.text.schedule_header,
+        };
+        const res = await fetch(`${apiBase}/brand/save`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+        const j = await res.json().catch(() => ({}));
+        if (!j?.ok) throw new Error(j?.error || "save_failed");
+        setBrandDraft((prev) => ({ ...prev, dirty: false }));
+    } catch (e) {
+        alert("Failed to publish branding changes.");
+    }
+};
+
+
+// NEW: when botId is known (e.g., bot_id in URL), fetch bot-settings to get show_* flags
+useEffect(() => {
+    if (!botId) return;
+    let cancel = false;
+    (async () => {
+        try {
+            const res = await fetch(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botId)}`);
+            const data = await res.json();
+            if (cancel) return;
+            const b = data?.ok ? data?.bot : null;
+            if (b) {
+                setTabsEnabled({
+                    demos: !!b.show_browse_demos,
+                    docs: !!b.show_browse_docs,
+                    meeting: !!b.show_schedule_meeting,
+                    price: !!b.show_price_estimate,
+                });
+                setResponseText(b.welcome_message || "");
+                setIntroVideoUrl(b.intro_video_url || "");
+                setShowIntroVideo(!!b.show_intro_video);
+            }
+        } catch {
+            // silent; tabs remain default false if call fails
+        }
+    })();
+    return () => { cancel = true; };
+}, [botId, apiBase]);
+
+// Autosize ask box
+useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+}, [input]);
+
+// Release video/doc sticky when scrolling
+useEffect(() => {
+    const el = contentRef.current;
+    if (!el || !selected) return;
+    const onScroll = () => {
+        if (el.scrollTop > 8 && isAnchored) setIsAnchored(false);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+}, [selected, isAnchored]);
+
+// Helpers
+async function normalizeAndSelectDemo(item) {
+    // Normalize demo URL to an embeddable form via backend
+    try {
+        const r = await fetch(`${apiBase}/render-video-iframe`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ video_url: item.url }),
+        });
+        const j = await r.json();
+        const embed = j?.video_url || item.url;
+        setSelected({ ...item, url: embed });
+        requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+    } catch {
+        setSelected(item);
+        requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+    }
+}
+
+// [SECTION 3 END]
+
 
     // [SECTION 4 BEGIN]
 
