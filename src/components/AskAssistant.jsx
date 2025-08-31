@@ -1108,14 +1108,14 @@ export default function AskAssistant() {
     brandAssets.logo_dark_url ||
     "";
 
-  // positioning for Text Editor below Controls
+  // Anchor the text editor directly under the Controls rail
   const controlsRef = useRef(null);
   const [editorTop, setEditorTop] = useState(0);
   useEffect(() => {
     const measure = () => {
       if (!controlsRef.current) return;
       const r = controlsRef.current.getBoundingClientRect();
-      setEditorTop(r.top + r.height + 12);
+      setEditorTop(r.top + r.height + 12); // 12px gap beneath Controls
     };
     measure();
     window.addEventListener("resize", measure);
@@ -1133,13 +1133,13 @@ export default function AskAssistant() {
       {/* BRANDING RAILS (anchored to the 720px app container) */}
       {brandingMode ? (
         <>
-          {/* Left control rail — left of the 720px card, 8px gap */}
+          {/* Left: Controls rail (hugging card’s left edge, w-72, 8px gap) */}
           <div
             ref={controlsRef}
             className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-3 max-h-[75vh] overflow-auto text-black"
             style={{ left: "calc(50% - 360px - 18rem - 8px)" }} /* 18rem = w-72 */
           >
-            <div className="font-bold text-sm md:text-base tracking-wide uppercase text-black">Controls</div>
+            <div className="font-bold text-sm md:text-base tracking-wide uppercase">Controls</div>
 
             {/* Show toggles */}
             <div className="space-y-1">
@@ -1191,7 +1191,7 @@ export default function AskAssistant() {
               </label>
             </div>
 
-            {/* Text Editors */}
+            {/* Text Editors (use the anchored editor window below) */}
             <div className="space-y-1">
               <div className="text-[11px] font-medium">Text Editors</div>
               <button
@@ -1215,13 +1215,13 @@ export default function AskAssistant() {
             </div>
           </div>
 
-          {/* Text Editor Window — anchored directly BELOW the Controls rail */}
+          {/* Text Editor window — anchored directly BELOW the Controls rail */}
           {(editing.welcome || editing.priceIntro || editing.priceOutro) && (
             <div
               className="fixed z-[9998] bg-white/95 backdrop-blur-sm border rounded-xl shadow p-4 w-[30rem] max-w-[30rem] max-h-[75vh] overflow-auto text-black"
               style={{
                 left: "calc(50% - 360px - 18rem - 8px)", // same left as Controls
-                top: editorTop ? `${editorTop}px` : undefined, // measured just under Controls
+                top: editorTop ? `${editorTop}px` : undefined,
               }}
             >
               <div className="flex items-center justify-between mb-2">
@@ -1230,54 +1230,56 @@ export default function AskAssistant() {
                 </div>
                 <button
                   className="text-[11px] border rounded px-2 py-0.5 hover:brightness-110"
-                  onClick={() => setEditing({ welcome: false, priceIntro: false, priceOutro: false, scheduleHeader: false })}
+                  onClick={() =>
+                    setEditing({ welcome: false, priceIntro: false, priceOutro: false, scheduleHeader: false })
+                  }
                 >
                   Close
                 </button>
               </div>
 
-              {/* WELCOME MESSAGE EDITOR */}
+              {/* WELCOME */}
               {editing.welcome && (
                 <div className="space-y-2">
                   <label className="text-[12px] font-medium">Message</label>
                   <textarea
-                    className="w-full border rounded-md p-2 text-sm text-black min-h-[220px]"
+                    className="w-full border rounded-md p-2 text-sm min-h-[220px]"
                     value={brandDraft.text?.welcome_message || ""}
                     onChange={(e) => updateDraftText("welcome_message", e.target.value)}
                   />
                 </div>
               )}
 
-              {/* PRICE INTRO EDITOR */}
+              {/* PRICE INTRO */}
               {editing.priceIntro && (
                 <div className="space-y-2">
                   <label className="text-[12px] font-medium">Intro Heading</label>
                   <input
-                    className="w-full border rounded-md p-2 text-sm text-black"
+                    className="w-full border rounded-md p-2 text-sm"
                     value={brandDraft.text?.ui_copy?.intro?.heading || ""}
                     onChange={(e) => updateDraftText("ui_copy.intro.heading", e.target.value)}
                   />
                   <label className="text-[12px] font-medium mt-2">Intro Body</label>
                   <textarea
-                    className="w-full border rounded-md p-2 text-sm text-black min-h-[180px]"
+                    className="w-full border rounded-md p-2 text-sm min-h-[180px]"
                     value={brandDraft.text?.ui_copy?.intro?.body || ""}
                     onChange={(e) => updateDraftText("ui_copy.intro.body", e.target.value)}
                   />
                 </div>
               )}
 
-              {/* PRICE OUTRO (CTA) EDITOR */}
+              {/* PRICE OUTRO (CTA) */}
               {editing.priceOutro && (
                 <div className="space-y-2">
                   <label className="text-[12px] font-medium">CTA Heading</label>
                   <input
-                    className="w-full border rounded-md p-2 text-sm text-black"
+                    className="w-full border rounded-md p-2 text-sm"
                     value={brandDraft.text?.ui_copy?.outro?.heading || ""}
                     onChange={(e) => updateDraftText("ui_copy.outro.heading", e.target.value)}
                   />
                   <label className="text-[12px] font-medium mt-2">CTA Body</label>
                   <textarea
-                    className="w-full border rounded-md p-2 text-sm text-black min-h-[180px]"
+                    className="w-full border rounded-md p-2 text-sm min-h-[180px]"
                     value={brandDraft.text?.ui_copy?.outro?.body || ""}
                     onChange={(e) => updateDraftText("ui_copy.outro.body", e.target.value)}
                   />
@@ -1286,12 +1288,12 @@ export default function AskAssistant() {
             </div>
           )}
 
-          {/* Right color rail — right of the 720px card, 8px gap */}
+          {/* Right: Colors rail (hugging card’s right edge, 8px gap) */}
           <div
             className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-2 max-h-[75vh] overflow-auto text-black"
             style={{ left: "calc(50% + 360px + 8px)" }}
           >
-            <div className="font-bold text-sm md:text-base tracking-wide uppercase text-black">Colors</div>
+            <div className="font-bold text-sm md:text-base tracking-wide uppercase">Colors</div>
 
             <label className="flex items-center justify-between text-xs">
               Banner Title
@@ -1359,7 +1361,7 @@ export default function AskAssistant() {
               />
             </label>
 
-            {/* NOTE: "Send Hover" control removed per spec. */}
+            {/* “Send Hover” control removed; use hover:brightness-110 everywhere */}
           </div>
         </>
       ) : null}
@@ -1388,6 +1390,10 @@ export default function AskAssistant() {
           </div>
           <TabsNav mode={mode} tabs={tabs} />
         </div>
+
+// [SECTION 6 END]
+
+// [SECTION 7 BEGIN]
 
         {/* PRICE MODE */}
         {mode === "price" ? (
@@ -1629,6 +1635,7 @@ export default function AskAssistant() {
                 className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
                 title="Send"
               >
+                {/* Hover lightens via brightness instead of a separate color token */}
                 <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:brightness-110" />
               </button>
             </div>
@@ -1639,3 +1646,4 @@ export default function AskAssistant() {
   );
 }
 // [SECTION 7 END]
+          
