@@ -420,200 +420,197 @@ export default function AskAssistant() {
 
     // [SECTION 3 BEGIN]
 
-useEffect(() => {
-    // If botId is not known yet, don't keep the screen invisible.
-    if (!botId && !brandReady) setBrandReady(true);
-}, [botId, brandReady]);
+    useEffect(() => {
+        // If there’s nothing to resolve (no alias, no botId) and we somehow stayed gated, un-gate.
+        if (!botId && !alias && !brandReady) setBrandReady(true);
+    }, [botId, alias, brandReady]);
 
 
-// Fetch brand once we know botId (DB-driven CSS + logo)
-useEffect(() => {
-    if (!botId) return;
-    let cancel = false;
-    (async () => {
-        try {
-            const res = await fetch(`${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`);
-            const data = await res.json();
-            if (cancel) return;
+    // Fetch brand once we know botId (DB-driven CSS + logo)
+    useEffect(() => {
+        if (!botId) return;
+        let cancel = false;
+        (async () => {
+            try {
+                const res = await fetch(`${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`);
+                const data = await res.json();
+                if (cancel) return;
 
-            if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
-                setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
-            }
-            if (data?.ok && data?.assets) {
-                const logos = {
-                    url: data.assets.logo_url || null
-                };
-                setBrandAssets({
-                    logo_url: logos.url
-                });
-                if (!logos.url) {
-                    setFatal("Brand logo missing for this bot.");
+                if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
+                    setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
                 }
+                if (data?.ok && data?.assets) {
+                    const logos = {
+                        url: data.assets.logo_url || null
+                    };
+                    setBrandAssets({
+                        logo_url: logos.url
+                    });
+                    if (!logos.url) {
+                        setFatal("Brand logo missing for this bot.");
+                    }
+                }
+            } catch {
+                setFatal("Failed to load brand assets.");
+            } finally {
+                if (!cancel) setBrandReady(true);
             }
-        } catch {
-            setFatal("Failed to load brand assets.");
-        } finally {
-            if (!cancel) setBrandReady(true);
-        }
-    })();
-    return () => {
-        cancel = true;
-    };
-}, [botId, apiBase]);
-
-// Initialize BRANDING DRAFT once brand + bot copy are available (branding mode only)
-useEffect(() => {
-    if (!brandingMode || !botId) return;
-    let cancel = false;
-    (async () => {
-        try {
-            const [botRes, priceRes, agentRes] = await Promise.all([
-                fetch(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botId)}`),
-                fetch(`${apiBase}/pricing/questions?bot_id=${encodeURIComponent(botId)}`),
-                fetch(`${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`),
-            ]);
-            const botJ = await botRes.json().catch(() => ({}));
-            const priceJ = await priceRes.json().catch(() => ({}));
-            const agentJ = await agentRes.json().catch(() => ({}));
-            if (cancel) return;
-            const welcome_message = botJ?.ok ? (botJ.bot?.welcome_message || "") : "";
-            const ui_copy = (priceJ?.ok ? (priceJ.ui_copy || {}) : {});
-            const schedule_header = agentJ?.ok ? (agentJ.agent?.schedule_header || "") : "";
-            const editable = [
-                "--banner-bg", "--banner-fg",
-                "--page-bg", "--card-bg", "--card-border",
-                "--tab-active-bg", "--tab-active-fg",
-                "--field-bg", "--field-border",
-                "--send-color", "--send-color-hover"
-            ];
-            const css_vars = {};
-            for (const k of editable) css_vars[k] = themeVars[k];
-            setBrandDraft({
-                css_vars,
-                text: {
-                    welcome_message,
-                    ui_copy: {
-                        intro: { heading: ui_copy?.intro?.heading || "", body: ui_copy?.intro?.body || "" },
-                        outro: { heading: ui_copy?.outro?.heading || "", body: ui_copy?.outro?.body || "" }
-                    },
-                    schedule_header
-                },
-                dirty: false
-            });
-        } catch { }
-    })();
-    return () => { cancel = true; };
-}, [brandingMode, botId, apiBase, themeVars]);
-
-// Helpers to update draft + live preview
-const updateCssVar = (name, value) => {
-    setThemeVars((prev) => ({ ...prev, [name]: value }));
-    setBrandDraft((prev) => ({ ...prev, css_vars: { ...prev.css_vars, [name]: value }, dirty: true }));
-};
-const updateDraftText = (path, value) => {
-    setBrandDraft((prev) => {
-        const next = JSON.parse(JSON.stringify(prev.text));
-        const parts = path.split(".");
-        let p = next;
-        while (parts.length > 1) p = p[parts.shift()];
-        p[parts[0]] = value;
-        return { ...prev, text: next, dirty: true };
-    });
-};
-const discardDraft = () => {
-    setBrandDraft((prev) => ({ ...prev, dirty: false }));
-};
-const publishDraft = async () => {
-    try {
-        const payload = {
-            bot_id: botId,
-            css_vars: brandDraft.css_vars,
-            welcome_message: brandDraft.text.welcome_message,
-            ui_copy: brandDraft.text.ui_copy,
-            schedule_header: brandDraft.text.schedule_header,
+        })();
+        return () => {
+            cancel = true;
         };
-        const res = await fetch(`${apiBase}/brand/save`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-        });
-        const j = await res.json().catch(() => ({}));
-        if (!j?.ok) throw new Error(j?.error || "save_failed");
-        setBrandDraft((prev) => ({ ...prev, dirty: false }));
-    } catch (e) {
-        alert("Failed to publish branding changes.");
-    }
-};
-
-
-// NEW: when botId is known (e.g., bot_id in URL), fetch bot-settings to get show_* flags
-useEffect(() => {
-    if (!botId) return;
-    let cancel = false;
-    (async () => {
-        try {
-            const res = await fetch(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botId)}`);
-            const data = await res.json();
-            if (cancel) return;
-            const b = data?.ok ? data?.bot : null;
-            if (b) {
-                setTabsEnabled({
-                    demos: !!b.show_browse_demos,
-                    docs: !!b.show_browse_docs,
-                    meeting: !!b.show_schedule_meeting,
-                    price: !!b.show_price_estimate,
+    }, [botId, apiBase]);
+    // Initialize BRANDING DRAFT once brand + bot copy are available (branding mode only)
+    useEffect(() => {
+        if (!brandingMode || !botId) return;
+        let cancel = false;
+        (async () => {
+            try {
+                const [botRes, priceRes, agentRes] = await Promise.all([
+                    fetch(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botId)}`),
+                    fetch(`${apiBase}/pricing/questions?bot_id=${encodeURIComponent(botId)}`),
+                    fetch(`${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`),
+                ]);
+                const botJ = await botRes.json().catch(() => ({}));
+                const priceJ = await priceRes.json().catch(() => ({}));
+                const agentJ = await agentRes.json().catch(() => ({}));
+                if (cancel) return;
+                const welcome_message = botJ?.ok ? (botJ.bot?.welcome_message || "") : "";
+                const ui_copy = (priceJ?.ok ? (priceJ.ui_copy || {}) : {});
+                const schedule_header = agentJ?.ok ? (agentJ.agent?.schedule_header || "") : "";
+                const editable = [
+                    "--banner-bg", "--banner-fg",
+                    "--page-bg", "--card-bg", "--card-border",
+                    "--tab-active-bg", "--tab-active-fg",
+                    "--field-bg", "--field-border",
+                    "--send-color", "--send-color-hover"
+                ];
+                const css_vars = {};
+                for (const k of editable) css_vars[k] = themeVars[k];
+                setBrandDraft({
+                    css_vars,
+                    text: {
+                        welcome_message,
+                        ui_copy: {
+                            intro: { heading: ui_copy?.intro?.heading || "", body: ui_copy?.intro?.body || "" },
+                            outro: { heading: ui_copy?.outro?.heading || "", body: ui_copy?.outro?.body || "" }
+                        },
+                        schedule_header
+                    },
+                    dirty: false
                 });
-                setResponseText(b.welcome_message || "");
-                setIntroVideoUrl(b.intro_video_url || "");
-                setShowIntroVideo(!!b.show_intro_video);
-            }
-        } catch {
-            // silent; tabs remain default false if call fails
-        }
-    })();
-    return () => { cancel = true; };
-}, [botId, apiBase]);
-
-// Autosize ask box
-useEffect(() => {
-    const el = inputRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-}, [input]);
-
-// Release video/doc sticky when scrolling
-useEffect(() => {
-    const el = contentRef.current;
-    if (!el || !selected) return;
-    const onScroll = () => {
-        if (el.scrollTop > 8 && isAnchored) setIsAnchored(false);
+            } catch { }
+        })();
+        return () => { cancel = true; };
+    }, [brandingMode, botId, apiBase, themeVars]);
+    // Helpers to update draft + live preview
+    const updateCssVar = (name, value) => {
+        setThemeVars((prev) => ({ ...prev, [name]: value }));
+        setBrandDraft((prev) => ({ ...prev, css_vars: { ...prev.css_vars, [name]: value }, dirty: true }));
     };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-}, [selected, isAnchored]);
-
-// Helpers
-async function normalizeAndSelectDemo(item) {
-    // Normalize demo URL to an embeddable form via backend
-    try {
-        const r = await fetch(`${apiBase}/render-video-iframe`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ video_url: item.url }),
+    const updateDraftText = (path, value) => {
+        setBrandDraft((prev) => {
+            const next = JSON.parse(JSON.stringify(prev.text));
+            const parts = path.split(".");
+            let p = next;
+            while (parts.length > 1) p = p[parts.shift()];
+            p[parts[0]] = value;
+            return { ...prev, text: next, dirty: true };
         });
-        const j = await r.json();
-        const embed = j?.video_url || item.url;
-        setSelected({ ...item, url: embed });
-        requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-    } catch {
-        setSelected(item);
-        requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+    };
+    const discardDraft = () => {
+        setBrandDraft((prev) => ({ ...prev, dirty: false }));
+    };
+    const publishDraft = async () => {
+        try {
+            const payload = {
+                bot_id: botId,
+                css_vars: brandDraft.css_vars,
+                welcome_message: brandDraft.text.welcome_message,
+                ui_copy: brandDraft.text.ui_copy,
+                schedule_header: brandDraft.text.schedule_header,
+            };
+            const res = await fetch(`${apiBase}/brand/save`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            const j = await res.json().catch(() => ({}));
+            if (!j?.ok) throw new Error(j?.error || "save_failed");
+            setBrandDraft((prev) => ({ ...prev, dirty: false }));
+        } catch (e) {
+            alert("Failed to publish branding changes.");
+        }
+    };
+
+
+    // NEW: when botId is known (e.g., bot_id in URL), fetch bot-settings to get show_* flags
+    useEffect(() => {
+        if (!botId) return;
+        let cancel = false;
+        (async () => {
+            try {
+                const res = await fetch(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botId)}`);
+                const data = await res.json();
+                if (cancel) return;
+                const b = data?.ok ? data?.bot : null;
+                if (b) {
+                    setTabsEnabled({
+                        demos: !!b.show_browse_demos,
+                        docs: !!b.show_browse_docs,
+                        meeting: !!b.show_schedule_meeting,
+                        price: !!b.show_price_estimate,
+                    });
+                    setResponseText(b.welcome_message || "");
+                    setIntroVideoUrl(b.intro_video_url || "");
+                    setShowIntroVideo(!!b.show_intro_video);
+                }
+            } catch {
+                // silent; tabs remain default false if call fails
+            }
+        })();
+        return () => { cancel = true; };
+    }, [botId, apiBase]);
+
+    // Autosize ask box
+    useEffect(() => {
+        const el = inputRef.current;
+        if (!el) return;
+        el.style.height = "auto";
+        el.style.height = `${el.scrollHeight}px`;
+    }, [input]);
+
+    // Release video/doc sticky when scrolling
+    useEffect(() => {
+        const el = contentRef.current;
+        if (!el || !selected) return;
+        const onScroll = () => {
+            if (el.scrollTop > 8 && isAnchored) setIsAnchored(false);
+        };
+        el.addEventListener("scroll", onScroll, { passive: true });
+        return () => el.removeEventListener("scroll", onScroll);
+    }, [selected, isAnchored]);
+
+    // Helpers
+    async function normalizeAndSelectDemo(item) {
+        // Normalize demo URL to an embeddable form via backend
+        try {
+            const r = await fetch(`${apiBase}/render-video-iframe`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ video_url: item.url }),
+            });
+            const j = await r.json();
+            const embed = j?.video_url || item.url;
+            setSelected({ ...item, url: embed });
+            requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+        } catch {
+            setSelected(item);
+            requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+        }
     }
-}
 
-// [SECTION 3 END]
-
+    // [SECTION 3 END]
 
     // [SECTION 4 BEGIN]
 
@@ -1111,25 +1108,6 @@ async function normalizeAndSelectDemo(item) {
     brandAssets.logo_dark_url ||
     "";
 
-  // Anchor the text editor directly under the Controls rail
-  const controlsRef = useRef(null);
-  const [editorTop, setEditorTop] = useState(0);
-  useEffect(() => {
-    const measure = () => {
-      if (!controlsRef.current) return;
-      const r = controlsRef.current.getBoundingClientRect();
-      setEditorTop(r.top + r.height + 12); // 12px gap beneath Controls
-    };
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, [editing, tabsEnabled, showIntroVideo]);
-
-  // IMPORTANT: don't keep the screen invisible while alias->botId is resolving
-  useEffect(() => {
-    if (alias && !botId && !brandReady) setBrandReady(true);
-  }, [alias, botId, brandReady]);
-
   return (
     <div
       className={classNames(
@@ -1141,13 +1119,12 @@ async function normalizeAndSelectDemo(item) {
       {/* BRANDING RAILS (anchored to the 720px app container) */}
       {brandingMode ? (
         <>
-          {/* Left: Controls rail (hugging card’s left edge, w-72, 8px gap) */}
+          {/* Left control rail — left of the 720px card, 8px gap */}
           <div
-            ref={controlsRef}
             className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-3 max-h-[75vh] overflow-auto text-black"
-            style={{ left: "calc(50% - 360px - 18rem - 8px)" }}
+            style={{ left: "calc(50% - 360px - 18rem - 8px)" }} /* 18rem = w-72 */
           >
-            <div className="font-bold text-sm md:text-base tracking-wide uppercase">Controls</div>
+            <div className="font-semibold text-xs tracking-wide uppercase text-black">Controls</div>
 
             {/* Show toggles */}
             <div className="space-y-1">
@@ -1199,23 +1176,23 @@ async function normalizeAndSelectDemo(item) {
               </label>
             </div>
 
-            {/* Text Editors (use the anchored editor window below) */}
+            {/* Text Editors */}
             <div className="space-y-1">
               <div className="text-[11px] font-medium">Text Editors</div>
               <button
-                className="w-full text-left border rounded-md px-2 py-1 text-[12px] hover:brightness-110"
+                className="w-full text-left border rounded-md px-2 py-1 text-[12px]"
                 onClick={() => setEditing((e) => ({ ...e, welcome: true, priceIntro: false, priceOutro: false }))}
               >
                 Edit Welcome Message
               </button>
               <button
-                className="w-full text-left border rounded-md px-2 py-1 text-[12px] hover:brightness-110"
+                className="w-full text-left border rounded-md px-2 py-1 text-[12px]"
                 onClick={() => setEditing((e) => ({ ...e, welcome: false, priceIntro: true, priceOutro: false }))}
               >
                 Edit Price Introduction
               </button>
               <button
-                className="w-full text-left border rounded-md px-2 py-1 text-[12px] hover:brightness-110"
+                className="w-full text-left border rounded-md px-2 py-1 text-[12px]"
                 onClick={() => setEditing((e) => ({ ...e, welcome: false, priceIntro: false, priceOutro: true }))}
               >
                 Edit Price CTA
@@ -1223,14 +1200,11 @@ async function normalizeAndSelectDemo(item) {
             </div>
           </div>
 
-          {/* Text Editor window — anchored directly BELOW the Controls rail */}
+          {/* Left-side TEXT EDITOR WINDOW — far left of the Controls rail */}
           {(editing.welcome || editing.priceIntro || editing.priceOutro) && (
             <div
-              className="fixed z-[9998] bg-white/95 backdrop-blur-sm border rounded-xl shadow p-4 w-[30rem] max-w-[30rem] max-h-[75vh] overflow-auto text-black"
-              style={{
-                left: "calc(50% - 360px - 18rem - 8px)", // same left as Controls
-                top: editorTop ? `${editorTop}px` : undefined,
-              }}
+              className="fixed top-20 z-[9998] bg-white/95 backdrop-blur-sm border rounded-xl shadow p-4 w-[30rem] max-w-[30rem] max-h-[75vh] overflow-auto text-black"
+              style={{ left: "calc(50% - 360px - 18rem - 8px - 30rem - 12px)" }} /* controls (18rem) + gap (8px) + editor (30rem) + gap (12px) */
             >
               <div className="flex items-center justify-between mb-2">
                 <div className="font-semibold text-xs tracking-wide uppercase">
@@ -1238,56 +1212,54 @@ async function normalizeAndSelectDemo(item) {
                 </div>
                 <button
                   className="text-[11px] border rounded px-2 py-0.5 hover:brightness-110"
-                  onClick={() =>
-                    setEditing({ welcome: false, priceIntro: false, priceOutro: false, scheduleHeader: false })
-                  }
+                  onClick={() => setEditing({ welcome: false, priceIntro: false, priceOutro: false, scheduleHeader: false })}
                 >
                   Close
                 </button>
               </div>
 
-              {/* WELCOME */}
+              {/* WELCOME MESSAGE EDITOR */}
               {editing.welcome && (
                 <div className="space-y-2">
                   <label className="text-[12px] font-medium">Message</label>
                   <textarea
-                    className="w-full border rounded-md p-2 text-sm min-h-[220px]"
+                    className="w-full border rounded-md p-2 text-sm text-black min-h-[220px]"
                     value={brandDraft.text?.welcome_message || ""}
                     onChange={(e) => updateDraftText("welcome_message", e.target.value)}
                   />
                 </div>
               )}
 
-              {/* PRICE INTRO */}
+              {/* PRICE INTRO EDITOR */}
               {editing.priceIntro && (
                 <div className="space-y-2">
                   <label className="text-[12px] font-medium">Intro Heading</label>
                   <input
-                    className="w-full border rounded-md p-2 text-sm"
+                    className="w-full border rounded-md p-2 text-sm text-black"
                     value={brandDraft.text?.ui_copy?.intro?.heading || ""}
                     onChange={(e) => updateDraftText("ui_copy.intro.heading", e.target.value)}
                   />
                   <label className="text-[12px] font-medium mt-2">Intro Body</label>
                   <textarea
-                    className="w-full border rounded-md p-2 text-sm min-h-[180px]"
+                    className="w-full border rounded-md p-2 text-sm text-black min-h-[180px]"
                     value={brandDraft.text?.ui_copy?.intro?.body || ""}
                     onChange={(e) => updateDraftText("ui_copy.intro.body", e.target.value)}
                   />
                 </div>
               )}
 
-              {/* PRICE OUTRO (CTA) */}
+              {/* PRICE OUTRO (CTA) EDITOR */}
               {editing.priceOutro && (
                 <div className="space-y-2">
                   <label className="text-[12px] font-medium">CTA Heading</label>
                   <input
-                    className="w-full border rounded-md p-2 text-sm"
+                    className="w-full border rounded-md p-2 text-sm text-black"
                     value={brandDraft.text?.ui_copy?.outro?.heading || ""}
                     onChange={(e) => updateDraftText("ui_copy.outro.heading", e.target.value)}
                   />
                   <label className="text-[12px] font-medium mt-2">CTA Body</label>
                   <textarea
-                    className="w-full border rounded-md p-2 text-sm min-h-[180px]"
+                    className="w-full border rounded-md p-2 text-sm text-black min-h-[180px]"
                     value={brandDraft.text?.ui_copy?.outro?.body || ""}
                     onChange={(e) => updateDraftText("ui_copy.outro.body", e.target.value)}
                   />
@@ -1296,12 +1268,12 @@ async function normalizeAndSelectDemo(item) {
             </div>
           )}
 
-          {/* Right: Colors rail (hugging card’s right edge, 8px gap) */}
+          {/* Right color rail — right of the 720px card, 8px gap */}
           <div
             className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-2 max-h-[75vh] overflow-auto text-black"
             style={{ left: "calc(50% + 360px + 8px)" }}
           >
-            <div className="font-bold text-sm md:text-base tracking-wide uppercase">Colors</div>
+            <div className="font-semibold text-xs tracking-wide uppercase text-black">Colors</div>
 
             <label className="flex items-center justify-between text-xs">
               Banner Title
@@ -1369,7 +1341,7 @@ async function normalizeAndSelectDemo(item) {
               />
             </label>
 
-            {/* “Send Hover” control removed; hover uses brightness-110 */}
+            {/* NOTE: "Send Hover" control removed per spec. */}
           </div>
         </>
       ) : null}
@@ -1398,10 +1370,6 @@ async function normalizeAndSelectDemo(item) {
           </div>
           <TabsNav mode={mode} tabs={tabs} />
         </div>
-
-// [SECTION 6 END]
-
-// [SECTION 7 BEGIN]
 
         {/* PRICE MODE */}
         {mode === "price" ? (
@@ -1451,7 +1419,12 @@ async function normalizeAndSelectDemo(item) {
                     </div>
                   ) : null}
 
-                  {/* calendar_link_type handling */}
+                  {/* END OF SECTION 6 */}
+
+
+                    {/* BEGIN SECTION 7 */}
+                    
+                    {/* calendar_link_type handling */}
                   {!agent ? (
                     <div className="text-sm text-gray-600">Loading scheduling…</div>
                   ) : agent.calendar_link_type &&
@@ -1641,10 +1614,8 @@ async function normalizeAndSelectDemo(item) {
                 aria-label="Send"
                 onClick={sendMessage}
                 className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
-                title="Send"
               >
-                {/* Hover lightens via brightness instead of a separate color token */}
-                <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:brightness-110" />
+                <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:text-[var(--send-color-hover)]" />
               </button>
             </div>
           ) : null}
@@ -1654,4 +1625,3 @@ async function normalizeAndSelectDemo(item) {
   );
 }
 // [SECTION 7 END]
-          
