@@ -1643,7 +1643,7 @@ export default function AskAssistant() {
       </div> {/* close main card */}
     </div>  {/* close page wrapper */}
   );        {/* close return from component */}
-// [SECTION 7 END]
+// [SECTION 7 BEGIN]
 
         {/* PRICE MODE */}
         {mode === "price" ? (
@@ -1892,5 +1892,4 @@ export default function AskAssistant() {
       </div>
     </div>
   );
-}
 // [SECTION 7 END]
