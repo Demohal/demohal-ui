@@ -107,20 +107,26 @@ function renderMirror(template, label) {
 
 // [DH-SECTION-BEGIN] THEME_SCOPE_WRAPPER
 function ThemeScope({ vars, children }) {
-    const cssVars = useMemo(() => {
-        const out = {};
-        const v = vars || {};
-        for (const k in v) {
-            if (Object.prototype.hasOwnProperty.call(v, k) && k.startsWith("--")) {
-                out[k] = v[k];
-            }
-        }
-        return out;
-    }, [vars]);
+  const cssVars = useMemo(() => {
+    const out = {};
+    const v = vars || {};
+    for (const k in v) {
+      if (Object.prototype.hasOwnProperty.call(v, k) && k.startsWith("--")) {
+        out[k] = v[k];
+      }
+    }
+    return out;
+  }, [vars]);
 
-    return <div style={cssVars}>{children}</div>;
+  // Ensure the whole app uses the themed page background + readable base text
+  return (
+    <div style={cssVars} className="min-h-screen bg-[var(--page-bg)] text-black">
+      {children}
+    </div>
+  );
 }
 // [DH-SECTION-END] THEME_SCOPE_WRAPPER
+
 // [DH-SECTION-BEGIN] HEADER_BANNER
 function HeaderBanner({ brandAssets, brandingMode, setBrandingMode }) {
   return (
