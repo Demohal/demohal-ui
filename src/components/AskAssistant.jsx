@@ -1137,7 +1137,7 @@ export default function AskAssistant() {
           <div
             ref={controlsRef}
             className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-3 max-h-[75vh] overflow-auto text-black"
-            style={{ left: "calc(50% - 360px - 18rem - 8px)" }} /* 18rem = w-72 */
+            style={{ left: "calc(50% - 360px - 18rem - 8px)" }}
           >
             <div className="font-bold text-sm md:text-base tracking-wide uppercase">Controls</div>
 
@@ -1361,7 +1361,7 @@ export default function AskAssistant() {
               />
             </label>
 
-            {/* “Send Hover” control removed; use hover:brightness-110 everywhere */}
+            {/* “Send Hover” control removed; hover uses brightness-110 */}
           </div>
         </>
       ) : null}
@@ -1390,8 +1390,6 @@ export default function AskAssistant() {
           </div>
           <TabsNav mode={mode} tabs={tabs} />
         </div>
-
-// [SECTION 6 END]
 
 // [SECTION 7 BEGIN]
 
