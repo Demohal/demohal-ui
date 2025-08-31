@@ -382,418 +382,261 @@ function ThemeScope({ vars, children }) {
 }
 // [DH-SECTION-END] BRAND_NAV
 // [DH-SECTION-BEGIN] BOTTOM_ASK_BAR
-{/* Bottom Ask Bar */ }
+{/* Bottom Ask Bar */}
 <div className="w-full border-t border-gray-200 bg-white">
-    <div className="mx-auto max-w-3xl px-4 py-3 flex items-center gap-2">
-        <input
-            type="text"
-            value={askText}
-            onChange={(e) => setAskText?.(e.target.value)}
-            onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    onSend?.(askText);
-                }
-            }}
-            placeholder="Ask a question…"
-            className={UI.FIELD}
-        />
-        <button
-            type="button"
-            aria-label="Send"
-            onClick={() => onSend?.(askText)}
-            className="shrink-0 rounded-full p-1 transition-transform hover:translate-y-[1px] active:scale-95"
-        >
-            <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] active:scale-95" />
-        </button>
-    </div>
+  <div className="mx-auto max-w-3xl px-4 py-3 flex items-center gap-2">
+    <input
+      type="text"
+      value={askText}
+      onChange={(e) => setAskText?.(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          onSend?.(askText);
+        }
+      }}
+      placeholder="Ask a question…"
+      className={UI.FIELD}
+    />
+    <button
+      type="button"
+      aria-label="Send"
+      onClick={() => onSend?.(askText)}
+      className="shrink-0 rounded-full p-1 transition-transform hover:translate-y-[1px] active:scale-95"
+    >
+      <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] active:scale-95" />
+    </button>
+  </div>
 </div>
 // [DH-SECTION-END] BOTTOM_ASK_BAR
+
 // [DH-SECTION-BEGIN] PRICE_MODE
-// Pricing state
-const [priceQs, setPriceQs] = useState([]);
-const [priceLoading, setPriceLoading] = useState(false);
-const [priceAnswers, setPriceAnswers] = useState({});
-const [estimate, setEstimate] = useState(null);
-const [estimating, setEstimating] = useState(false);
+{mode === "price" ? (
+  <div className="px-4 sm:px-6 py-4" data-section="PRICE_MODE">
+    <div className="text-xl font-bold mb-2">Price Estimate</div>
 
-// Load pricing questions (bot_id/alias/apiBase are optional; safe-guarded)
-useEffect(() => {
-    let on = true;
-    (async () => {
-        try {
-            if (typeof apiBase === "undefined") return;
-            const qs = [];
-            const params = new URLSearchParams();
-            if (typeof botId !== "undefined" && botId) params.set("bot_id", botId);
-            if (!params.toString()) return; // need at least bot_id to resolve
-            setPriceLoading(true);
-            const res = await fetch(`${apiBase}/pricing/questions?${params.toString()}`);
-            const data = await res.json();
-            if (!on) return;
-            if (data?.ok && Array.isArray(data.questions)) {
-                setPriceQs(data.questions);
-            }
-        } catch {/* silent */ }
-        finally { if (on) setPriceLoading(false); }
-    })();
-    return () => { on = false; };
-}, []);
+    {priceLoading ? (
+      <div className="text-sm text-gray-600">Loading questions…</div>
+    ) : (
+      <div className="space-y-4">
+        {priceQs.map((q) => (
+          <div key={q.id || q.q_key} className="border rounded-lg p-3 bg-white">
+            <div className="font-extrabold text-base">{q.prompt || q.q_key}</div>
+            {q.help_text ? (
+              <div className="mt-1 text-sm opacity-90">{q.help_text}</div>
+            ) : null}
 
-// Answer helpers
-function setAnswer(qKey, val) {
-    setPriceAnswers((prev) => ({ ...prev, [qKey]: val }));
-    setEstimate(null);
-}
+            {Array.isArray(q.options) && q.options.length > 0 ? (
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {q.options.map((opt) => {
+                  const key = opt.key || opt.id || opt.label;
+                  const active = priceAnswers[q.q_key] === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setAnswer(q.q_key, key)}
+                      className={classNames(
+                        "w-full text-left rounded-xl px-4 py-3 border bg-white transition-transform hover:translate-y-[1px] active:scale-95",
+                        active ? "border-black" : "border-gray-300"
+                      )}
+                    >
+                      <div className="font-extrabold text-base">{opt.label}</div>
+                      {opt.tooltip ? (
+                        <div className="mt-1 text-sm opacity-90">{opt.tooltip}</div>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        ))}
 
-async function runEstimate() {
-    try {
-        if (typeof apiBase === "undefined") return;
-        const payload = {
-            bot_id: (typeof botId !== "undefined" && botId) || undefined,
-            answers: priceAnswers,
-        };
-        setEstimating(true);
-        const res = await fetch(`${apiBase}/pricing/estimate`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-        });
-        const data = await res.json();
-        setEstimate(data?.ok ? data : null);
-    } catch {
-        setEstimate(null);
-    } finally {
-        setEstimating(false);
-    }
-}
+        <div className="pt-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={runEstimate}
+            disabled={estimating || priceQs.length === 0}
+            className={UI.BTN}
+          >
+            <div className="font-extrabold text-base">
+              {estimating ? "Estimating…" : "Get Estimate"}
+            </div>
+          </button>
 
-{
-    mode === "price" ? (
-        <div className="px-4 sm:px-6 py-4" data-section="PRICE_MODE">
-            <div className="text-xl font-bold mb-2">Price Estimate</div>
-            {priceLoading ? (
-                <div className="text-sm text-gray-600">Loading questions…</div>
-            ) : (
-                <div className="space-y-4">
-                    {priceQs.map((q) => (
-                        <div key={q.id} className="border rounded-lg p-3 bg-white">
-                            <div className="font-extrabold text-base">{q.prompt || q.q_key}</div>
-                            {q.help_text ? (
-                                <div className="mt-1 text-sm opacity-90">{q.help_text}</div>
-                            ) : null}
-                            {Array.isArray(q.options) && q.options.length > 0 ? (
-                                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                    {q.options.map((opt) => {
-                                        const active =
-                                            priceAnswers[q.q_key] === (opt.key || opt.id || opt.label);
-                                        return (
-                                            <button
-                                                key={opt.id || opt.key || opt.label}
-                                                type="button"
-                                                onClick={() => setAnswer(q.q_key, opt.key || opt.id || opt.label)}
-                                                className={classNames(
-                                                    "w-full text-left rounded-xl px-4 py-3 border transition-transform hover:translate-y-[1px] active:scale-95",
-                                                    active ? "border-black" : "border-gray-300"
-                                                )}
-                                            >
-                                                <div className="font-extrabold text-base">{opt.label}</div>
-                                                {opt.tooltip ? (
-                                                    <div className="mt-1 text-sm opacity-90">{opt.tooltip}</div>
-                                                ) : null}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            ) : null}
-                        </div>
-                    ))}
-
-                    <div className="pt-2 flex items-center gap-2">
-                        <button
-                            type="button"
-                            onClick={runEstimate}
-                            disabled={estimating || priceQs.length === 0}
-                            className={UI.BTN}
-                        >
-                            <div className="font-extrabold text-base">
-                                {estimating ? "Estimating…" : "Get Estimate"}
-                            </div>
-                        </button>
-                        {estimate && (
-                            <div className="ml-2 text-sm">
-                                <div className="font-semibold">
-                                    Total: {estimate.currency_code || "USD"} {estimate.total_min} – {estimate.total_max}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
+          {estimate ? (
+            <div className="ml-2 text-sm">
+              <div className="font-semibold">
+                Total: {estimate.currency_code || "USD"} {estimate.total_min} – {estimate.total_max}
+              </div>
+            </div>
+          ) : null}
         </div>
-    ) : null
-}
+      </div>
+    )}
+  </div>
+) : null}
 // [DH-SECTION-END] PRICE_MODE
+
 // [DH-SECTION-BEGIN] MEETING_PANE
-// Meeting state
-const [meetingAgent, setMeetingAgent] = useState(null);
-const [meetingLoading, setMeetingLoading] = useState(false);
+{mode === "meeting" ? (
+  <div className="px-4 sm:px-6 py-4" data-section="MEETING_PANE">
+    <div className="text-xl font-bold mb-2">Schedule a Meeting</div>
 
-// Load agent (safe if apiBase/botId are not wired in this file)
-useEffect(() => {
-    let on = true;
-    (async () => {
-        try {
-            if (typeof apiBase === "undefined") return;
-            if (typeof botId === "undefined" || !botId) return;
-            setMeetingLoading(true);
-            const res = await fetch(`${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`);
-            const data = await res.json();
-            if (!on) return;
-            if (data?.ok && data.agent) setMeetingAgent(data.agent);
-        } catch {/* silent */ }
-        finally { if (on) setMeetingLoading(false); }
-    })();
-    return () => { on = false; };
-}, []);
+    {meetingLoading ? (
+      <div className="text-sm text-gray-600">Loading…</div>
+    ) : (
+      <div className="space-y-3">
+        {meetingAgent?.schedule_header ? (
+          <div className="text-sm">{meetingAgent.schedule_header}</div>
+        ) : (
+          <div className="text-sm">Pick a time that works for you.</div>
+        )}
 
-{
-    mode === "meeting" ? (
-        <div className="px-4 sm:px-6 py-4" data-section="MEETING_PANE">
-            <div className="text-xl font-bold mb-2">Schedule a Meeting</div>
+        <div className="border rounded-lg p-3 bg-white">
+          <div className="font-extrabold text-base">
+            {meetingAgent?.name || "Sales Team"}
+          </div>
+          {meetingAgent?.email ? (
+            <div className="mt-1 text-sm opacity-90">{meetingAgent.email}</div>
+          ) : null}
 
-            {meetingLoading ? (
-                <div className="text-sm text-gray-600">Loading…</div>
-            ) : (
-                <div className="space-y-3">
-                    {meetingAgent?.schedule_header ? (
-                        <div className="text-sm">{meetingAgent.schedule_header}</div>
-                    ) : (
-                        <div className="text-sm">Pick a time that works for you.</div>
-                    )}
-
-                    <div className="border rounded-lg p-3 bg-white">
-                        <div className="font-extrabold text-base">
-                            {meetingAgent?.name || "Sales Team"}
-                        </div>
-                        {meetingAgent?.email ? (
-                            <div className="mt-1 text-sm opacity-90">{meetingAgent.email}</div>
-                        ) : null}
-
-                        <div className="mt-3 flex flex-wrap gap-2">
-                            {meetingAgent?.calendar_link ? (
-                                <a
-                                    href={meetingAgent.calendar_link}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className={UI.BTN}
-                                >
-                                    <div className="font-extrabold text-base">
-                                        {meetingAgent?.calendar_link_type === "cal" ? "Open Calendar" : "Book a Meeting"}
-                                    </div>
-                                </a>
-                            ) : (
-                                <button type="button" className={UI.BTN} disabled>
-                                    <div className="font-extrabold text-base">Calendar Unavailable</div>
-                                </button>
-                            )}
-                        </div>
-                    </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {meetingAgent?.calendar_link ? (
+              <a
+                href={meetingAgent.calendar_link}
+                target="_blank"
+                rel="noreferrer"
+                className={UI.BTN}
+              >
+                <div className="font-extrabold text-base">
+                  {meetingAgent?.calendar_link_type === "cal"
+                    ? "Open Calendar"
+                    : "Book a Meeting"}
                 </div>
+              </a>
+            ) : (
+              <button type="button" className={UI.BTN} disabled>
+                <div className="font-extrabold text-base">Calendar Unavailable</div>
+              </button>
             )}
+          </div>
         </div>
-    ) : null
-}
+      </div>
+    )}
+  </div>
+) : null}
 // [DH-SECTION-END] MEETING_PANE
 // [DH-SECTION-BEGIN] ASK_PANE
-// Ask/chat state
-const [askText, setAskText] = useState("");
-const [messages, setMessages] = useState([]);
-const [responseText, setResponseText] = useState("");
-const [sending, setSending] = useState(false);
+{mode === "ask" ? (
+  <div className="px-4 sm:px-6 py-4" data-section="ASK_PANE">
+    <div className="text-xl font-bold mb-2">Ask the Assistant</div>
 
-// Send handler (stubbed: replace with your API call if needed)
-async function onSend(text) {
-    const t = ((text ?? askText) || "").trim();
-    if (!t) return;
-    setMessages((m) => [...m, { role: "user", text: t }]);
-    setAskText("");
-    setSending(true);
-    try {
-        // TODO: wire to your assistant endpoint; placeholder response for now
-        const fakeReply = "Thanks — branding mode is active. Use the rails on the sides to adjust your theme.";
-        setResponseText(fakeReply);
-        setMessages((m) => [...m, { role: "assistant", text: fakeReply }]);
-    } finally {
-        setSending(false);
-    }
-}
+    <div className="space-y-3">
+      {/* Conversation */}
+      <div className="border rounded-lg p-3 bg-white">
+        {messages?.length === 0 ? (
+          <div className="text-sm text-gray-600">
+            Ask a question to get started.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {messages.map((m, i) => (
+              <div key={i} className={m.role === "user" ? "text-black" : "text-gray-800"}>
+                <div className="text-xs uppercase opacity-60">{m.role}</div>
+                <div className="text-sm whitespace-pre-wrap">{m.text}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
-{
-    mode === "ask" ? (
-        <div className="px-4 sm:px-6 py-4" data-section="ASK_PANE">
-            <div className="text-xl font-bold mb-2">Ask the Assistant</div>
-
-            <div className="space-y-3">
-                {/* Conversation */}
-                <div className="border rounded-lg p-3 bg-white">
-                    {messages.length === 0 ? (
-                        <div className="text-sm text-gray-600">
-                            Ask a question to get started.
-                        </div>
-                    ) : (
-                        <div className="space-y-2">
-                            {messages.map((m, i) => (
-                                <div key={i} className={m.role === "user" ? "text-black" : "text-gray-800"}>
-                                    <div className="text-xs uppercase opacity-60">{m.role}</div>
-                                    <div className="text-sm whitespace-pre-wrap">{m.text}</div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* Latest answer preview (optional) */}
-                {responseText ? (
-                    <div className="border rounded-lg p-3 bg-white">
-                        <div className="font-extrabold text-base">Answer</div>
-                        <div className="mt-1 text-sm opacity-90 whitespace-pre-wrap">{responseText}</div>
-                    </div>
-                ) : null}
-
-                {/* Quick actions (optional) */}
-                <div className="flex flex-wrap gap-2">
-                    <button
-                        type="button"
-                        className={UI.BTN}
-                        onClick={() => onSend("Show me how to adjust the banner colors.")}
-                        disabled={sending}
-                    >
-                        <div className="font-extrabold text-base">Banner Colors</div>
-                    </button>
-                    <button
-                        type="button"
-                        className={UI.BTN}
-                        onClick={() => onSend("How do I change tab styles?")}
-                        disabled={sending}
-                    >
-                        <div className="font-extrabold text-base">Tab Styles</div>
-                    </button>
-                </div>
-            </div>
+      {/* Latest answer preview (optional) */}
+      {responseText ? (
+        <div className="border rounded-lg p-3 bg-white">
+          <div className="font-extrabold text-base">Answer</div>
+          <div className="mt-1 text-sm opacity-90 whitespace-pre-wrap">{responseText}</div>
         </div>
-    ) : null
-}
+      ) : null}
+
+      {/* Quick actions (examples) */}
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          className={UI.BTN}
+          onClick={() => onSend?.("Show me how to adjust the banner colors.")}
+          disabled={sending}
+        >
+          <div className="font-extrabold text-base">Banner Colors</div>
+        </button>
+        <button
+          type="button"
+          className={UI.BTN}
+          onClick={() => onSend?.("How do I change tab styles?")}
+          disabled={sending}
+        >
+          <div className="font-extrabold text-base">Tab Styles</div>
+        </button>
+      </div>
+    </div>
+  </div>
+) : null}
 // [DH-SECTION-END] ASK_PANE
 // [DH-SECTION-BEGIN] BROWSE_PANE
-// Demos browse state
-const [browseItems, setBrowseItems] = useState([]);
-const [browseLoading, setBrowseLoading] = useState(false);
+{mode === "browse" ? (
+  <div className="px-4 sm:px-6 py-4" data-section="BROWSE_PANE">
+    <div className="text-xl font-bold mb-2">Browse Demos</div>
 
-// Open demos browser and load items
-function openBrowse() {
-    setMode?.("browse");
-    setSelected?.(null);
-    (async () => {
-        try {
-            if (typeof apiBase === "undefined") return;
-            const params = new URLSearchParams();
-            if (typeof alias !== "undefined" && alias) params.set("alias", alias);
-            if (typeof botId !== "undefined" && botId) params.set("bot_id", botId);
-            setBrowseLoading(true);
-            const res = await fetch(`${apiBase}/browse-demos?${params.toString()}`);
-            const data = await res.json();
-            setBrowseItems(Array.isArray(data?.items) ? data.items : []);
-        } catch {
-            setBrowseItems([]);
-        } finally {
-            setBrowseLoading(false);
-        }
-    })();
-}
-
-{
-    mode === "browse" ? (
-        <div className="px-4 sm:px-6 py-4" data-section="BROWSE_PANE">
-            <div className="text-xl font-bold mb-2">Browse Demos</div>
-
-            {browseLoading ? (
-                <div className="text-sm text-gray-600">Loading…</div>
-            ) : browseItems.length === 0 ? (
-                <div className="text-sm text-gray-600">No demos found.</div>
-            ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {browseItems.map((it) => (
-                        <a
-                            key={it.id}
-                            href={it.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className={UI.BTN}
-                        >
-                            <div className="font-extrabold text-base">Watch “{it.title}”</div>
-                        </a>
-                    ))}
-                </div>
-            )}
-        </div>
-    ) : null
-}
+    {browseLoading ? (
+      <div className="text-sm text-gray-600">Loading…</div>
+    ) : browseItems?.length === 0 ? (
+      <div className="text-sm text-gray-600">No demos found.</div>
+    ) : (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {browseItems.map((it) => (
+          <a
+            key={it.id}
+            href={it.url}
+            target="_blank"
+            rel="noreferrer"
+            className={UI.BTN}
+          >
+            <div className="font-extrabold text-base">Watch “{it.title}”</div>
+          </a>
+        ))}
+      </div>
+    )}
+  </div>
+) : null}
 // [DH-SECTION-END] BROWSE_PANE
+
 // [DH-SECTION-BEGIN] DOCS_PANE
-// Documents browse state
-const [docsItems, setDocsItems] = useState([]);
-const [docsLoading, setDocsLoading] = useState(false);
+{mode === "docs" ? (
+  <div className="px-4 sm:px-6 py-4" data-section="DOCS_PANE">
+    <div className="text-xl font-bold mb-2">Browse Documents</div>
 
-// Open documents browser and load items
-function openBrowseDocs() {
-    setMode?.("docs");
-    setSelected?.(null);
-    (async () => {
-        try {
-            if (typeof apiBase === "undefined") return;
-            const params = new URLSearchParams();
-            if (typeof alias !== "undefined" && alias) params.set("alias", alias);
-            if (typeof botId !== "undefined" && botId) params.set("bot_id", botId);
-            setDocsLoading(true);
-            const res = await fetch(`${apiBase}/browse-docs?${params.toString()}`);
-            const data = await res.json();
-            setDocsItems(Array.isArray(data?.items) ? data.items : []);
-        } catch {
-            setDocsItems([]);
-        } finally {
-            setDocsLoading(false);
-        }
-    })();
-}
-
-{
-    mode === "docs" ? (
-        <div className="px-4 sm:px-6 py-4" data-section="DOCS_PANE">
-            <div className="text-xl font-bold mb-2">Browse Documents</div>
-
-            {docsLoading ? (
-                <div className="text-sm text-gray-600">Loading…</div>
-            ) : docsItems.length === 0 ? (
-                <div className="text-sm text-gray-600">No documents found.</div>
-            ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {docsItems.map((it) => (
-                        <a
-                            key={it.id}
-                            href={it.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className={UI.BTN_DOCS}
-                        >
-                            <div className="font-extrabold text-base">Read “{it.title}”</div>
-                        </a>
-                    ))}
-                </div>
-            )}
-        </div>
-    ) : null
-}
+    {docsLoading ? (
+      <div className="text-sm text-gray-600">Loading…</div>
+    ) : docsItems?.length === 0 ? (
+      <div className="text-sm text-gray-600">No documents found.</div>
+    ) : (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {docsItems.map((it) => (
+          <a
+            key={it.id}
+            href={it.url}
+            target="_blank"
+            rel="noreferrer"
+            className={UI.BTN_DOCS}
+          >
+            <div className="font-extrabold text-base">Read “{it.title}”</div>
+          </a>
+        ))}
+      </div>
+    )}
+  </div>
+) : null}
 // [DH-SECTION-END] DOCS_PANE
 // [DH-SECTION-BEGIN] TABS_NAV
 function TabsNav({ mode, tabs }) {
@@ -831,114 +674,266 @@ function TabsNav({ mode, tabs }) {
 }
 // [DH-SECTION-END] TABS_NAV
 // [DH-SECTION-BEGIN] TABS_CONFIG
-// Tabs enabled flags (override if your app gates tabs)
-const tabsEnabled = { ask: true, demos: true, docs: true, price: true, meeting: true };
+// Build tabs array (pure helper — no hooks here)
+function buildTabs({ brandingMode, tabsEnabled, setSelected, setMode, openBrowse, openBrowseDocs, openMeeting, contentRef }) {
+  const inert = brandingMode;
 
-// Build tabs array; tabs are inert while brandingMode is on.
-const tabs = useMemo(() => {
-    const inert = brandingMode;
+  const toTop = () =>
+    requestAnimationFrame(() =>
+      contentRef?.current?.scrollTo?.({ top: 0, behavior: "auto" })
+    );
 
-    const toTop = () =>
-        requestAnimationFrame(() =>
-            contentRef?.current?.scrollTo?.({ top: 0, behavior: "auto" })
-        );
+  const make = (key, label, handler) => ({
+    key,
+    label,
+    onClick: inert ? () => {} : handler,
+  });
 
-    const make = (key, label, handler) => ({
-        key,
-        label,
-        onClick: inert
-            ? () => { } // tabs disabled during branding
-            : handler,
-    });
+  const list = [
+    make("ask", "Ask", () => {
+      setSelected?.(null);
+      setMode?.("ask");
+      toTop();
+    }),
+  ];
 
-    const list = [
-        make("ask", "Ask", () => {
-            setSelected?.(null);
-            setMode?.("ask");
-            toTop();
-        }),
-    ];
+  if (tabsEnabled?.demos) {
+    list.push(
+      make("demos", "Browse Demos", () => {
+        setSelected?.(null);
+        setMode?.("browse");
+        openBrowse?.();
+      })
+    );
+  }
 
-    if (tabsEnabled.demos) {
-        list.push(
-            make("demos", "Browse Demos", () => {
-                setSelected?.(null);
-                setMode?.("browse");
-                openBrowse?.();
-            })
-        );
-    }
+  if (tabsEnabled?.docs) {
+    list.push(
+      make("docs", "Browse Documents", () => {
+        setSelected?.(null);
+        setMode?.("docs");
+        openBrowseDocs?.();
+      })
+    );
+  }
 
-    if (tabsEnabled.docs) {
-        list.push(
-            make("docs", "Browse Documents", () => {
-                setSelected?.(null);
-                setMode?.("docs");
-                openBrowseDocs?.();
-            })
-        );
-    }
+  if (tabsEnabled?.price) {
+    list.push(
+      make("price", "Price Estimate", () => {
+        setSelected?.(null);
+        setMode?.("price");
+      })
+    );
+  }
 
-    if (tabsEnabled.price) {
-        list.push(
-            make("price", "Price Estimate", () => {
-                setSelected?.(null);
-                setMode?.("price");
-            })
-        );
-    }
+  if (tabsEnabled?.meeting) {
+    list.push(
+      make("meeting", "Schedule Meeting", () => {
+        setSelected?.(null);
+        setMode?.("meeting");
+        openMeeting?.();
+      })
+    );
+  }
 
-    if (tabsEnabled.meeting) {
-        list.push(
-            make("meeting", "Schedule Meeting", () => {
-                setSelected?.(null);
-                setMode?.("meeting");
-                openMeeting?.();
-            })
-        );
-    }
-
-    return list;
-}, [brandingMode, setSelected, setMode, openBrowse, openBrowseDocs, openMeeting, contentRef]);
+  return list;
+}
 // [DH-SECTION-END] TABS_CONFIG
 // [DH-SECTION-BEGIN] COMPONENT_OPEN
 export default function AskAssistant() {
-    // Core UI state
-    const [mode, setMode] = useState("ask");     // "ask" | "browse" | "docs" | "price" | "meeting"
-    const [selected, setSelected] = useState(null);
-    const contentRef = useRef(null);
+  // ===== Core UI =====
+  const [mode, setMode] = useState("ask");            // "ask" | "browse" | "docs" | "price" | "meeting"
+  const [selected, setSelected] = useState(null);
+  const contentRef = useRef(null);
 
-    // === THEME SCOPE + PAGE SHELL ===
-    return (
-        <ThemeScope vars={themeVars}>
-            {/* Header / Banner */}
-            {/* (Section 12 — HEADER_BANNER should appear just above or here) */}
+  // ===== Ask pane =====
+  const [askText, setAskText] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [responseText, setResponseText] = useState("");
+  const [sending, setSending] = useState(false);
 
-            {/* Tabs + Branding Nav */}
-            {/* (Section 14 — TABS_NAV and Section 15 — TABS_CONFIG build + render tabs) */}
-            <div className="w-full">
-                <TabsNav mode={mode} tabs={tabs} />
-                {/* (Section 5 — BRAND_NAV can be placed right below to render branding buttons) */}
-            </div>
+  async function onSend(text) {
+    const t = (text ?? askText || "").trim();
+    if (!t) return;
+    setMessages((m) => [...m, { role: "user", text: t }]);
+    setAskText("");
+    setSending(true);
+    try {
+      // TODO: wire to backend; placeholder response
+      const reply = "Branding mode is available. Use the side rails to adjust theme.";
+      setResponseText(reply);
+      setMessages((m) => [...m, { role: "assistant", text: reply }]);
+    } finally {
+      setSending(false);
+    }
+  }
 
-            {/* Main content container (centered card layout) */}
-            <div className="relative mx-auto max-w-3xl">
-                {/* Side rails and content panes paste below (Sections 3, 4, 9–11, 7, 8, etc.) */}
+  // ===== Browse demos =====
+  const [browseItems, setBrowseItems] = useState([]);
+  const [browseLoading, setBrowseLoading] = useState(false);
 
-                {/* Scrollable content area */}
-                <div ref={contentRef} className="min-h-[50vh]">
-                    {/* [DH-SECTION-BEGIN] COMPONENT_CLOSE */}
-                </div> {/* close scrollable content area */}
-            </div>   {/* close main content container */}
+  function openBrowse() {
+    setMode("browse");
+    setSelected(null);
+    (async () => {
+      try {
+        if (typeof apiBase === "undefined") return;
+        const params = new URLSearchParams();
+        if (typeof alias !== "undefined" && alias) params.set("alias", alias);
+        if (typeof botId !== "undefined" && botId) params.set("bot_id", botId);
+        setBrowseLoading(true);
+        const res = await fetch(`${apiBase}/browse-demos?${params.toString()}`);
+        const data = await res.json();
+        setBrowseItems(Array.isArray(data?.items) ? data.items : []);
+      } catch {
+        setBrowseItems([]);
+      } finally {
+        setBrowseLoading(false);
+      }
+    })();
+  }
 
-            {/* === Bottom Ask Bar === */}
-            {/* Paste Section 6 — BOTTOM_ASK_BAR right here */}
-            {/* [Section 6 goes here] */}
+  // ===== Browse docs =====
+  const [docsItems, setDocsItems] = useState([]);
+  const [docsLoading, setDocsLoading] = useState(false);
 
-        </ThemeScope>
-    );
-}
-{/* [DH-SECTION-END] COMPONENT_CLOSE */ }
+  function openBrowseDocs() {
+    setMode("docs");
+    setSelected(null);
+    (async () => {
+      try {
+        if (typeof apiBase === "undefined") return;
+        const params = new URLSearchParams();
+        if (typeof alias !== "undefined" && alias) params.set("alias", alias);
+        if (typeof botId !== "undefined" && botId) params.set("bot_id", botId);
+        setDocsLoading(true);
+        const res = await fetch(`${apiBase}/browse-docs?${params.toString()}`);
+        const data = await res.json();
+        setDocsItems(Array.isArray(data?.items) ? data.items : []);
+      } catch {
+        setDocsItems([]);
+      } finally {
+        setDocsLoading(false);
+      }
+    })();
+  }
+
+  // ===== Price mode =====
+  const [priceQs, setPriceQs] = useState([]);
+  const [priceLoading, setPriceLoading] = useState(false);
+  const [priceAnswers, setPriceAnswers] = useState({});
+  const [estimate, setEstimate] = useState(null);
+  const [estimating, setEstimating] = useState(false);
+
+  useEffect(() => {
+    let on = true;
+    (async () => {
+      try {
+        if (typeof apiBase === "undefined") return;
+        const params = new URLSearchParams();
+        if (typeof botId !== "undefined" && botId) params.set("bot_id", botId);
+        if (!params.toString()) return;
+        setPriceLoading(true);
+        const res = await fetch(`${apiBase}/pricing/questions?${params.toString()}`);
+        const data = await res.json();
+        if (!on) return;
+        if (data?.ok && Array.isArray(data.questions)) setPriceQs(data.questions);
+      } catch {
+        /* silent */
+      } finally {
+        if (on) setPriceLoading(false);
+      }
+    })();
+    return () => { on = false; };
+  }, []);
+
+  function setAnswer(qKey, val) {
+    setPriceAnswers((prev) => ({ ...prev, [qKey]: val }));
+    setEstimate(null);
+  }
+
+  async function runEstimate() {
+    try {
+      if (typeof apiBase === "undefined") return;
+      const payload = {
+        bot_id: (typeof botId !== "undefined" && botId) || undefined,
+        answers: priceAnswers,
+      };
+      setEstimating(true);
+      const res = await fetch(`${apiBase}/pricing/estimate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      setEstimate(data?.ok ? data : null);
+    } catch {
+      setEstimate(null);
+    } finally {
+      setEstimating(false);
+    }
+  }
+
+  // ===== Meeting pane =====
+  const [meetingAgent, setMeetingAgent] = useState(null);
+  const [meetingLoading, setMeetingLoading] = useState(false);
+
+  useEffect(() => {
+    let on = true;
+    (async () => {
+      try {
+        if (typeof apiBase === "undefined") return;
+        if (typeof botId === "undefined" || !botId) return;
+        setMeetingLoading(true);
+        const res = await fetch(`${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`);
+        const data = await res.json();
+        if (!on) return;
+        if (data?.ok && data.agent) setMeetingAgent(data.agent);
+      } catch { /* silent */ }
+      finally { if (on) setMeetingLoading(false); }
+    })();
+    return () => { on = false; };
+  }, []);
+
+  function openMeeting() {
+    setMode("meeting");
+    setSelected(null);
+  }
+
+  // ===== Tabs =====
+  const tabsEnabled = { ask: true, demos: true, docs: true, price: true, meeting: true };
+
+  const tabs = useMemo(
+    () =>
+      buildTabs({
+        brandingMode,
+        tabsEnabled,
+        setSelected,
+        setMode,
+        openBrowse,
+        openBrowseDocs,
+        openMeeting,
+        contentRef,
+      }),
+    [brandingMode, setSelected, setMode]
+  );
+
+  // ===== Layout open =====
+  return (
+    <ThemeScope vars={themeVars}>
+      {/* You can render Section 12 — HEADER_BANNER above, if desired */}
+      <div className="w-full">
+        <TabsNav mode={mode} tabs={tabs} />
+        {/* Section 5 — BRAND_NAV can render right below */}
+      </div>
+
+      {/* Main content container (centered card layout) */}
+      <div className="relative mx-auto max-w-3xl">
+        {/* Side rails and content panes paste below (Sections 3, 4, 9–11, 7, 8) */}
+
+        {/* Scrollable content area */}
+        <div ref={contentRef} className="min-h-[50vh]">
+// [DH-SECTION-END] COMPONENT_OPEN
 // [DH-SECTION-BEGIN] SMALL_COMPONENTS
 function Row({ item, onClick, active }) {
     return (
@@ -978,9 +973,11 @@ function OptionButton({ opt, onClick, active }) {
         </button>
     );
 }
-// [DH-SECTION-END] SMALL_COMPONENTS
+// [DH-SECTION-END] SMALL_COMPONENTS           
 // [DH-SECTION-BEGIN] REVISION_FOOTER
 // REVISION: AskAssistant.jsx | Sectioned branding refactor + rails placement + hover effects
 // NOTES: Controls/Colors rails flush to card edges; black labels/separators; no hover color; tabs inert in branding.
 // DATE: 2025-08-30
 // [DH-SECTION-END] REVISION_FOOTER
+
+
