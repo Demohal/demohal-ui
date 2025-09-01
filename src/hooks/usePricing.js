@@ -54,7 +54,7 @@ export default function usePricing({
 
   const setAnswer = useCallback((qKey, value) => {
     setAnswers((prev) => ({ ...prev, [qKey]: value }));
-    setEstimate(null); // invalidate previous estimate when answers change
+    setEstimate(null);
     setErrorEstimate("");
   }, []);
 
@@ -139,7 +139,7 @@ export default function usePricing({
 
   // ------------ mirror lines (human text recap) ------------
 
-  // Gather options from many possible shapes (options/choices/tiers/price_tiers_v2/etc.)
+  // Pull options from multiple possible shapes (options/choices/tiers/price_tiers_v2/etc.)
   const getOptionsArray = (q) => {
     const tries = [
       q?.options,
@@ -163,40 +163,81 @@ export default function usePricing({
     return [];
   };
 
-  // Normalize option identity/labels across shapes (supports price_tiers_v2)
+  const norm = (s) => String(s ?? "").trim();
+  const lower = (s) => norm(s).toLowerCase();
+
   const resolveOptKey = (opt) =>
     opt?.key ?? opt?.value ?? opt?.tier_key ?? opt?.id ?? opt?.code ?? opt?.slug;
 
-  const resolveOptLabel = (opt, fallback) =>
+  const resolveOptLabel = (opt) =>
     opt?.label ??
-    opt?.tier_label ??       // price_tiers_v2
-    opt?.display_name ??     // common alias
+    opt?.tier_label ??     // price_tiers_v2
+    opt?.display_name ??   // common alias
     opt?.name ??
     opt?.title ??
     opt?.display ??
     opt?.text ??
-    fallback;
+    "";
 
-  const equals = (a, b) => String(a) === String(b);
-
-  const findOptionForAnswer = (opts, ans) => {
-    const normalizedAns =
-      typeof ans === "object" && ans !== null
-        ? ans.key ?? ans.value ?? ans.tier_key ?? ans.id ?? ans.code ?? ans.slug
-        : ans;
-    return (opts || []).find((o) => equals(resolveOptKey(o), normalizedAns));
+  // Build a case-insensitive index for fast matching by key OR label
+  const buildIndex = (opts) => {
+    const byKey = new Map();
+    const byKeyL = new Map();
+    const byLabel = new Map();
+    const byLabelL = new Map();
+    for (const o of opts || []) {
+      const k = norm(resolveOptKey(o));
+      const l = norm(resolveOptLabel(o));
+      if (k) {
+        byKey.set(k, o);
+        byKeyL.set(lower(k), o);
+      }
+      if (l) {
+        byLabel.set(l, o);
+        byLabelL.set(lower(l), o);
+      }
+    }
+    return { byKey, byKeyL, byLabel, byLabelL };
   };
 
-  // If the backend ships a value→label map, honor it first.
+  // Find the option that corresponds to a user answer (string/object) using key or label, case-insensitive
+  const findOptionForAnswer = (idx, ans) => {
+    if (ans && typeof ans === "object") {
+      const tryVals = [
+        ans.key, ans.value, ans.tier_key, ans.id, ans.code, ans.slug,
+        ans.label, ans.tier_label, ans.name, ans.title, ans.display, ans.text,
+      ];
+      for (const v of tryVals) {
+        if (!v) continue;
+        const n = norm(v);
+        const L = lower(v);
+        if (idx.byKey.has(n)) return idx.byKey.get(n);
+        if (idx.byKeyL.has(L)) return idx.byKeyL.get(L);
+        if (idx.byLabel.has(n)) return idx.byLabel.get(n);
+        if (idx.byLabelL.has(L)) return idx.byLabelL.get(L);
+      }
+      return null;
+    }
+    const s = norm(ans);
+    const sl = lower(ans);
+    return idx.byKey.get(s) || idx.byKeyL.get(sl) || idx.byLabel.get(s) || idx.byLabelL.get(sl) || null;
+  };
+
+  // Prefer map labels if present; otherwise resolve via options
   const labelFromMaps = (q, ans) => {
-    const s = String(
-      typeof ans === "object" && ans !== null
-        ? ans.key ?? ans.value ?? ans.tier_key ?? ans.id ?? ans.code ?? ans.slug
+    const s = norm(
+      ans && typeof ans === "object"
+        ? ans.key ?? ans.value ?? ans.tier_key ?? ans.id ?? ans.code ?? ans.slug ?? ans.label ?? ans.tier_label
         : ans
     );
     const candidates = [q?.value_label_map, q?.label_map, q?.price_tiers_map, q?.price_tiers_v2_map, q?.tiers_map];
     for (const m of candidates) {
-      if (m && typeof m === "object" && m[s]) return m[s];
+      if (m && typeof m === "object") {
+        const exact = m[s];
+        if (exact) return exact;
+        const ci = Object.entries(m).find(([k]) => lower(k) === lower(s));
+        if (ci) return ci[1];
+      }
     }
     return null;
   };
@@ -209,14 +250,16 @@ export default function usePricing({
       if (ans === undefined || ans === null || ans === "" || (Array.isArray(ans) && ans.length === 0)) continue;
 
       const opts = getOptionsArray(q);
+      const idx = buildIndex(opts);
+
       let label = "";
 
       if (q.type === "choice") {
         // Prefer explicit map label if provided
         label = labelFromMaps(q, ans) ?? "";
         if (!label) {
-          const o = findOptionForAnswer(opts, ans);
-          label = resolveOptLabel(o, String(ans));
+          const o = findOptionForAnswer(idx, ans);
+          label = o ? resolveOptLabel(o) : norm(ans);
         }
       } else if (q.type === "multi_choice") {
         const picked = Array.isArray(ans) ? ans : [];
@@ -224,32 +267,33 @@ export default function usePricing({
           .map((key) => {
             const mapped = labelFromMaps(q, key);
             if (mapped) return mapped;
-            const o = findOptionForAnswer(opts, key);
-            return resolveOptLabel(o, String(key));
+            const o = findOptionForAnswer(idx, key);
+            return o ? resolveOptLabel(o) : norm(key);
           })
           .filter(Boolean);
         label = labels.join(", ");
       } else {
-        label = String(ans);
+        label = norm(ans);
       }
 
       if (!label) continue;
 
       // Default templating behavior if q.mirror_template not supplied
-      const norm = (s) => (s || "").toLowerCase().replace(/[\s-]+/g, "_");
-      const key = norm(q.q_key);
+      const keyNorm = lower(q.q_key);
       let line = null;
 
       if (q.mirror_template) {
         line = q.mirror_template
           .split("{{answer_label_lower}}").join(label.toLowerCase())
           .split("{{answer_label}}").join(label);
-      } else if (["edition", "editions", "product", "products", "industry_edition", "industry"].includes(key)) {
+      } else if (["edition", "editions", "product", "products", "industry_edition", "industry"].includes(keyNorm)) {
         line = `You have selected ${label}.`;
       } else if (
-        ["transactions", "transaction_volume", "volume", "tier", "tiers", "price_tier", "transaction_tier"].includes(key)
+        ["transactions", "transaction_volume", "volume", "tier", "tiers", "price_tier", "transaction_tier"].includes(
+          keyNorm
+        )
       ) {
-        // Use the human label (e.g., "up to 20,000")
+        // Keep label as-is (no forced lowercasing) for human text like "up to 20,000"
         line = `You stated that you execute ${label} commercial transactions per month.`;
       }
 
