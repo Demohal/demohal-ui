@@ -1,39 +1,35 @@
 import React from "react";
-import classNames from "classnames";
 
-/**
- * Visual tabs (no routing yet).
- * Styled like real tabs and visually attached to the banner’s bottom.
- */
-export default function TabsNav({ tabs = [], activeId }) {
+const TAB_ACTIVE =
+  "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors rounded-t-md border border-b-0 \
+   bg-[var(--tab-active-bg)] text-[var(--tab-active-fg)] border-[var(--tab-active-border)] -mb-px \
+   shadow-[var(--tab-active-shadow)]";
+
+const TAB_INACTIVE =
+  "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors rounded-t-md border border-b-0 \
+   text-[var(--tab-inactive-fg)] border-[var(--tab-inactive-border)] \
+   bg-gradient-to-b from-[var(--tab-inactive-grad-from)] to-[var(--tab-inactive-grad-to)] \
+   hover:from-[var(--tab-inactive-hover-from)] hover:to-[var(--tab-inactive-hover-to)] \
+   shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]";
+
+export default function TabsNav({ tabs = [] }) {
   return (
-    <div
-      role="tablist"
-      className="inline-flex items-end gap-1 bg-transparent"
-      aria-label="Sections"
-    >
-      {tabs.map((t) => {
-        const active = t.id === activeId;
-        return (
-          <button
-            key={t.id}
-            role="tab"
-            aria-selected={active}
-            className={classNames(
-              "px-3.5 py-2 text-sm font-medium rounded-t-md border",
-              "transition-all",
-              active
-                ? "bg-white text-gray-900 border-gray-300 shadow-sm"
-                : "bg-gray-100 text-gray-700 border-gray-300 hover:brightness-105"
-            )}
-            onClick={() => {
-              // wire later
-            }}
-          >
-            {t.label}
-          </button>
-        );
-      })}
+    <div className="pb-0">
+      <nav
+        className="w-full flex justify-center gap-2 md:gap-3 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        role="tablist"
+      >
+        {tabs.map((t) => {
+          const active = !!t.active;
+          const cls = active ? TAB_ACTIVE : TAB_INACTIVE;
+          const onClick = t.onClick || (() => {});
+          return (
+            <button key={t.key || t.label} onClick={onClick} role="tab" aria-selected={active} className={cls}>
+              {t.label}
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }
