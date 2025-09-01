@@ -1,22 +1,50 @@
 import React from "react";
 
-export default function ContentArea({ mode }) {
+export default function ContentArea({ tabs = [], activeId }) {
+  const id = typeof activeId === "string" ? activeId : (tabs[0]?.id || "ask");
+
   return (
-    <div className="px-6 pt-3 pb-6 flex-1 overflow-y-auto">
-      {mode === "ask" && (
-        <div className="space-y-3">
-          <div className="text-black text-base font-bold">Ask the Assistant</div>
-          <div className="rounded-lg border border-gray-200 p-3 bg-white">
-            <div className="text-sm text-gray-600">
-              Placeholder for the assistant’s reply and recommended demos.
-            </div>
-          </div>
+    <div className="mx-auto max-w-6xl px-4 py-6">
+      {id === "ask" && (
+        <div className="bg-white rounded-md border p-4 shadow-sm">
+          <h2 className="font-semibold mb-2">Ask the Assistant</h2>
+          <p className="text-sm text-gray-600">
+            Type a question below and press send. (Placeholder UI)
+          </p>
         </div>
       )}
-      {mode === "browse" && <div className="text-sm text-gray-700">Browse Demos (placeholder)</div>}
-      {mode === "docs" && <div className="text-sm text-gray-700">Browse Documents (placeholder)</div>}
-      {mode === "price" && <div className="text-sm text-gray-700">Price Estimator (placeholder)</div>}
-      {mode === "meeting" && <div className="text-sm text-gray-700">Schedule Meeting (placeholder)</div>}
+
+      {id === "demos" && (
+        <div className="bg-white rounded-md border p-4 shadow-sm">
+          <h2 className="font-semibold mb-2">Browse Demos</h2>
+          <p className="text-sm text-gray-600">Demo list goes here…</p>
+        </div>
+      )}
+
+      {id === "docs" && (
+        <div className="bg-white rounded-md border p-4 shadow-sm">
+          <h2 className="font-semibold mb-2">Browse Documents</h2>
+          <p className="text-sm text-gray-600">Document list goes here…</p>
+        </div>
+      )}
+
+      {id === "price" && (
+        <div className="bg-white rounded-md border p-4 shadow-sm">
+          <h2 className="font-semibold mb-2">Price Estimate</h2>
+          <p className="text-sm text-gray-600">
+            Pricing flow placeholder (question blocks / estimate card)…
+          </p>
+        </div>
+      )}
+
+      {id === "meeting" && (
+        <div className="bg-white rounded-md border p-4 shadow-sm">
+          <h2 className="font-semibold mb-2">Schedule Meeting</h2>
+          <p className="text-sm text-gray-600">
+            Embed / external calendar placeholder…
+          </p>
+        </div>
+      )}
     </div>
   );
 }
