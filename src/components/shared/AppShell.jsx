@@ -1,55 +1,43 @@
+// src/components/shared/AppShell.jsx
 import React from "react";
 import Banner from "./Banner";
 import TabsNav from "./TabsNav";
 import AskBar from "./AskBar";
 
-/**
- * Card shell: dark banner (with tabs anchored to its bottom),
- * scrollable middle content constrained to 720px,
- * ask bar docked at the bottom with a border-top.
- */
 export default function AppShell({
   title = "Ask the Assistant",
-  logoUrl = "/logo.svg",      // replace with your brand logo when wired
-  activeTab = "ask",          // UI-only for now
-  onSend = () => {},
+  logoUrl,                 // <-- pass brand logo URL if available; undefined/empty hides the logo
+  tabs = [],               // [{ id, label }]
+  activeId,
+  onTab,
   children,
 }) {
-  // No "Ask" tab per spec
-  const tabs = [
-    { id: "browse",  label: "Browse Demos" },
-    { id: "docs",    label: "Browse Documents" },
-    { id: "price",   label: "Price Estimate" },
-    { id: "meeting", label: "Schedule Meeting" },
-  ];
+  const active = typeof activeId === "string" ? activeId : (tabs[0]?.id || "ask");
 
   return (
-    <div className="w-screen min-h-[100dvh] bg-[var(--page-bg,#f5f7fa)] p-4 md:p-6 flex items-start justify-center">
-      <div className="w-full max-w-[1000px] bg-white rounded-2xl shadow border border-gray-200 flex flex-col overflow-hidden">
-        {/* Banner */}
-        <div className="relative bg-[var(--banner-bg,#0f141a)] text-[var(--banner-fg,#fff)] rounded-t-2xl">
-          <Banner title={title} logoUrl={logoUrl} />
-
-          {/* Tabs bar - anchored to bottom of banner */}
-          <div className="absolute -bottom-5 inset-x-0 px-4">
-            <div className="mx-auto w-full max-w-[720px]">
-              <TabsNav tabs={tabs} activeId={activeTab} />
-            </div>
+    <div className="w-screen min-h-[100dvh] bg-[var(--page-bg)] p-3 md:p-6 flex items-center justify-center">
+      {/* Card */}
+      <div className="w-full max-w-[720px] md:h-[96dvh] bg-white border border-[var(--card-border)] rounded-[var(--radius-card)] shadow-[var(--shadow-card)] flex flex-col overflow-hidden">
+        {/* Banner (fixed height) */}
+        <div className="bg-[var(--banner-bg)] text-[var(--banner-fg)]">
+          <Banner logoUrl={logoUrl} title={title} />
+          <div className="px-2 md:px-5 pb-2">
+            <TabsNav
+              tabs={tabs}
+              activeId={active}
+              onTab={onTab}
+            />
           </div>
         </div>
 
-        {/* Middle content (scrolls), constrained like the old app */}
-        <div className="pt-8 px-4 md:px-6 pb-6 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-[720px]">
-            {children}
-          </div>
+        {/* Main content */}
+        <div className="flex-1 overflow-y-auto">
+          {children}
         </div>
 
-        {/* Ask bar docked at bottom */}
-        <div className="border-t bg-white px-3 md:px-4 py-3">
-          <div className="mx-auto w-full max-w-[720px]">
-            <AskBar onSend={onSend} />
-          </div>
+        {/* Ask input bar */}
+        <div className="border-t border-[var(--card-border)] bg-white">
+          <AskBar />
         </div>
       </div>
     </div>
