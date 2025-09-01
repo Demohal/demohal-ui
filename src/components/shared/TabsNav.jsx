@@ -1,34 +1,39 @@
 import React from "react";
+import classNames from "classnames";
 
-export default function TabsNav({ tabs = [], activeId, onChange }) {
-  const list = Array.isArray(tabs) ? tabs : [];
-
+/**
+ * Visual tabs (no routing yet).
+ * Styled like real tabs and visually attached to the banner’s bottom.
+ */
+export default function TabsNav({ tabs = [], activeId }) {
   return (
-    <div className="w-full border-b bg-white">
-      <div className="mx-auto max-w-6xl flex gap-2 px-4 py-2">
-        {list.length === 0 ? (
-          <div className="text-sm text-gray-500">Loading…</div>
-        ) : (
-          list.map((t) => {
-            const isActive = t.id === activeId;
-            return (
-              <button
-                key={t.id || t.label}
-                type="button"
-                onClick={() => onChange?.(t.id)}
-                className={
-                  "px-3 py-1 rounded-md text-sm " +
-                  (isActive
-                    ? "bg-gray-900 text-white"
-                    : "bg-gray-100 text-gray-800 hover:bg-gray-200")
-                }
-              >
-                {t.label ?? t.id}
-              </button>
-            );
-          })
-        )}
-      </div>
+    <div
+      role="tablist"
+      className="inline-flex items-end gap-1 bg-transparent"
+      aria-label="Sections"
+    >
+      {tabs.map((t) => {
+        const active = t.id === activeId;
+        return (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={active}
+            className={classNames(
+              "px-3.5 py-2 text-sm font-medium rounded-t-md border",
+              "transition-all",
+              active
+                ? "bg-white text-gray-900 border-gray-300 shadow-sm"
+                : "bg-gray-100 text-gray-700 border-gray-300 hover:brightness-105"
+            )}
+            onClick={() => {
+              // wire later
+            }}
+          >
+            {t.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
