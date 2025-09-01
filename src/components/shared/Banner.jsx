@@ -12,9 +12,7 @@ export default function Banner({ logoUrl, title }) {
             className="h-9 w-auto object-contain select-none"
             draggable={false}
           />
-        ) : (
-          <div className="h-9 w-9 rounded-full bg-white/20" />
-        )}
+        ) : null}
       </div>
       <div className="text-base md:text-lg font-semibold">{title}</div>
     </div>
