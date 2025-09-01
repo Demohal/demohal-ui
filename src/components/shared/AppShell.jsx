@@ -1,49 +1,37 @@
 import React from "react";
-import Banner from "../shared/Banner";
-import AskBar from "../shared/AskBar";
+import Banner from "./Banner";
 
 /**
- * Fixed legacy shell
- * - Card max width 720px
- * - Height: 100dvh on mobile, 96dvh on md+
- * - Banner extends down to the tabs
- * - Centered in the viewport
- * - Content paddings match baseline (px-6 pt-3 pb-6)
+ * AppShell
+ * - Fixed 720px max width card centered on page
+ * - Fixed card height (full height on mobile, 96dvh on md+)
+ * - Accepts: title, logoUrl, tabs (array), children (main content), bottomSlot (ask bar)
+ * - NO fallbacks for logo: pass undefined to hide logo
  */
-export default function AppShell({
-  title = "Ask the Assistant",
-  logoUrl = null,          // pass ONLY the bot's logo URL; null/'' hides logo
-  tabs = [],               // [{ key, label, onClick, active? }]
-  children,
-  askValue = "",
-  askPlaceholder = "Ask your question here",
-  onAskChange,
-  onAskSend,
-  askDisabled = false,
-  themeVars = undefined,   // CSS variables map applied to outer wrapper
-}) {
+export default function AppShell({ title = "Ask the Assistant", logoUrl, tabs = [], children, bottomSlot, theme = {} }) {
+  const vars = {
+    // safe defaults; can be overridden by `theme` prop
+    "--page-bg": theme["--page-bg"] || "#f3f4f6",
+    "--banner-bg": theme["--banner-bg"] || "#0b0f14",
+    "--banner-fg": theme["--banner-fg"] || "#e8edf4",
+    "--card-bg": theme["--card-bg"] || "#ffffff",
+    "--card-border": theme["--card-border"] || "rgba(0,0,0,0.15)",
+    "--radius-card": theme["--radius-card"] || "14px",
+    "--shadow-card": theme["--shadow-card"] || "0 10px 30px rgba(0,0,0,0.25)",
+  };
+
   return (
     <div
-      className="w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center"
-      style={themeVars}
+      className="w-screen h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center"
+      style={vars}
     >
-      <div className="w-full max-w-[720px] h-[100dvh] md:h-[96dvh] bg-[var(--card-bg)] border border-[var(--card-border)] rounded-[var(--radius-card)] shadow-[var(--shadow-card)] flex flex-col overflow-hidden">
+      <div className="w-full max-w-[720px] h-[100dvh] md:h-[96dvh] bg-[var(--card-bg)] border border-[var(--card-border)] md:rounded-[var(--radius-card)] [box-shadow:var(--shadow-card)] flex flex-col overflow-hidden">
         <Banner title={title} logoUrl={logoUrl} tabs={tabs} />
-
-        {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 pt-3 pb-6">
           {children}
         </div>
-
-        {/* Ask box */}
-        <div className="border-t bg-[var(--card-bg)]">
-          <AskBar
-            value={askValue}
-            placeholder={askPlaceholder}
-            onChange={onAskChange}
-            onSend={onAskSend}
-            disabled={askDisabled}
-          />
+        <div className="border-t border-gray-200">
+          {bottomSlot}
         </div>
       </div>
     </div>
