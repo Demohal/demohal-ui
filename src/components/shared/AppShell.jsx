@@ -1,6 +1,6 @@
 import React from "react";
-import Banner from "./Banner";
-import AskBar from "./AskBar";
+import Banner from "../shared/Banner";
+import AskBar from "../shared/AskBar";
 
 /**
  * Fixed card-size shell matching the legacy container:
@@ -19,9 +19,13 @@ export default function AppShell({
   onAskChange,
   onAskSend,
   askDisabled = false,
+  themeVars = undefined,   // CSS variables map applied to outer wrapper
 }) {
   return (
-    <div className="w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center">
+    <div
+      className="w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center"
+      style={themeVars}
+    >
       <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] bg-[var(--card-bg)] border border-[var(--card-border)] rounded-[var(--radius-card)] shadow-[var(--shadow-card)] flex flex-col overflow-hidden">
         <Banner title={title} logoUrl={logoUrl} tabs={tabs} />
 
