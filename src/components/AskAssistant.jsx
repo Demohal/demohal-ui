@@ -251,7 +251,8 @@ function TabsNav({ mode, tabs }) {
  * =================== */
 
 export default function AskAssistant() {
-  const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
+  // Backend (dev)
+  const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app-dev.onrender.com";
 
   // Pull both alias and bot_id from URL; give precedence to bot_id.
   const { alias, botIdFromUrl } = useMemo(() => {
@@ -263,7 +264,7 @@ export default function AskAssistant() {
 
   // Optional: allow a default alias via env, e.g., VITE_DEFAULT_ALIAS=demo
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
-  
+
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [fatal, setFatal] = useState("");
 
@@ -299,12 +300,10 @@ export default function AskAssistant() {
   });
 
   // Prevent brand FOUC: gate UI until brand is loaded at least once
-  // If no alias and no bot_id in the URL, there’s no brand fetch to wait for.
-  // In that case, start visible; otherwise gate until /brand finishes.
   const initialBrandReady = useMemo(() => !(botIdFromUrl || alias), [botIdFromUrl, alias]);
   const [brandReady, setBrandReady] = useState(initialBrandReady);
 
-  // NEW: Tab visibility flags
+  // Tab visibility flags from bot record
   const [tabsEnabled, setTabsEnabled] = useState({
     demos: false,
     docs: false,
@@ -335,7 +334,6 @@ export default function AskAssistant() {
         if (cancel) return;
         const id = data?.ok ? data?.bot?.id : null;
 
-        // NEW: tab flags from bot row when resolving by alias
         const b = data?.ok ? data?.bot : null;
         if (b) {
           setTabsEnabled({
@@ -372,7 +370,6 @@ export default function AskAssistant() {
         if (cancel) return;
         const id = data?.ok ? data?.bot?.id : null;
 
-        // NEW: tab flags from bot row when using default alias
         const b = data?.ok ? data?.bot : null;
         if (b) {
           setTabsEnabled({
@@ -384,7 +381,7 @@ export default function AskAssistant() {
           setResponseText(b.welcome_message || "");
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
-        }       
+        }
         if (id) setBotId(id);
       } catch {
         // ignore; UI will show a friendly prompt instead of a spinner
@@ -392,12 +389,10 @@ export default function AskAssistant() {
     })();
     return () => { cancel = true; };
   }, [botId, alias, defaultAlias, apiBase]);
- 
+
   useEffect(() => {
-    // If there’s nothing to resolve (no alias, no botId) and we somehow stayed gated, un-gate.
     if (!botId && !alias && !brandReady) setBrandReady(true);
   }, [botId, alias, brandReady]);
-  
 
   // Fetch brand once we know botId (DB-driven CSS + logo)
   useEffect(() => {
@@ -430,7 +425,7 @@ export default function AskAssistant() {
     };
   }, [botId, apiBase]);
 
-  // NEW: when botId is known (e.g., bot_id in URL), fetch bot-settings to get show_* flags
+  // When botId is known (e.g., bot_id in URL), fetch bot-settings to get flags + intro video
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
@@ -450,9 +445,9 @@ export default function AskAssistant() {
           setResponseText(b.welcome_message || "");
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
-        }        
+        }
       } catch {
-        // silent; tabs remain default false if call fails
+        // silent
       }
     })();
     return () => { cancel = true; };
@@ -479,7 +474,6 @@ export default function AskAssistant() {
 
   // Helpers
   async function normalizeAndSelectDemo(item) {
-    // Normalize demo URL to an embeddable form via backend
     try {
       const r = await fetch(`${apiBase}/render-video-iframe`, {
         method: "POST",
@@ -506,7 +500,6 @@ export default function AskAssistant() {
       const ag = data?.ok ? data.agent : null;
       setAgent(ag);
 
-      // NEW: if external, open in a new tab immediately (with in-pane fallback link)
       if (ag && ag.calendar_link_type && String(ag.calendar_link_type).toLowerCase() === "external" && ag.calendar_link) {
         try { window.open(ag.calendar_link, "_blank", "noopener,noreferrer"); } catch (_) {}
       }
@@ -756,7 +749,7 @@ export default function AskAssistant() {
   }, [selected, items]);
   const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
 
-  // NEW: dynamically build tabs from bot flags
+  // Build tabs from bot flags
   const tabs = useMemo(() => {
     const out = [];
     if (tabsEnabled.demos) out.push({ key: "demos", label: "Browse Demos", onClick: openBrowse });
@@ -796,11 +789,8 @@ export default function AskAssistant() {
       </div>
     );
   }
-  
 
-  const showAskBottom = mode !== "price" || !!priceEstimate;
   const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
-
   const logoSrc =
     brandAssets.logo_url ||
     brandAssets.logo_light_url ||
@@ -881,7 +871,7 @@ export default function AskAssistant() {
                     <div className="mb-2 text-sm italic text-gray-600 whitespace-pre-line">{agent.schedule_header}</div>
                   ) : null}
 
-                  {/* NEW: calendar_link_type handling */}
+                  {/* calendar_link_type handling */}
                   {!agent ? (
                     <div className="text-sm text-gray-600">Loading scheduling…</div>
                   ) : agent.calendar_link_type && String(agent.calendar_link_type).toLowerCase() === "embed" && agent.calendar_link ? (
@@ -1038,35 +1028,41 @@ export default function AskAssistant() {
           </div>
         )}
 
-        {/* Bottom Ask Bar */}
+        {/* Bottom Ask Bar (ALWAYS VISIBLE) */}
         <div className="px-4 py-3 border-t border-gray-200 relative z-10 bg-[var(--card-bg)]" data-patch="ask-bottom-bar">
-          {showAskBottom ? (
-            <div className="relative w-full">
-              <textarea
-                ref={inputRef}
-                rows={1}
-                className="w-full border border-[var(--field-border)] rounded-lg px-4 py-2 pr-14 text-base text-black placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px] bg-[var(--field-bg)]"
-                placeholder="Ask your question here"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onInput={(e) => {
-                  e.currentTarget.style.height = "auto";
-                  e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    sendMessage();
-                  }
-                }}
-              />
-              <button aria-label="Send" onClick={sendMessage} className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95">
-                <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:text-[var(--send-color-hover)]" />
-              </button>
-            </div>
-          ) : null}
+          <div className="relative w-full">
+            <textarea
+              ref={inputRef}
+              rows={1}
+              className="w-full border border-[var(--field-border)] rounded-lg px-4 py-2 pr-14 text-base text-black placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px] bg-[var(--field-bg)]"
+              placeholder="Ask your question here"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onInput={(e) => {
+                e.currentTarget.style.height = "auto";
+                e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage();
+                }
+              }}
+            />
+            <button aria-label="Send" onClick={sendMessage} className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95">
+              <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:text-[var(--send-color-hover)]" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
+/* =========================
+   REVISION
+   Component: AskAssistant.jsx (shell-migration)
+   Backend base: https://demohal-app-dev.onrender.com
+   Changes: Ask Bar always visible; tabs anchored; logo from /brand; intro video from /bot-settings
+   Date: 2025-09-01
+   ========================= */
