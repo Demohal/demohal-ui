@@ -1,4 +1,3 @@
-// src/components/shared/ContentArea.jsx
 import React from "react";
 import AskScreen from "../ask/AskScreen";
 
@@ -20,17 +19,20 @@ function Placeholder({ title, lines = 4 }) {
 
 /**
  * ContentArea
- * - Renders the white “center card” like the old UI.
- * - Switches content by activeTab (shell-only).
+ * - Centers a 720px “card” like the old UI.
+ * - Switches content by activeTab (shell-only for now).
  */
 export default function ContentArea({ activeTab }) {
   return (
-    <div className="w-full flex-1 bg-white border border-gray-200 rounded-[12px] shadow-sm flex flex-col">
-      {activeTab === "ask" && <AskScreen />}
-      {activeTab === "demos" && <Placeholder title="Browse Demos (shell)" />}
-      {activeTab === "docs" && <Placeholder title="Browse Documents (shell)" />}
-      {activeTab === "price" && <Placeholder title="Price Estimate (shell)" lines={6} />}
-      {activeTab === "meeting" && <Placeholder title="Schedule Meeting (shell)" lines={6} />}
+    <div className="w-full flex justify-center">
+      <div className="w-full max-w-[720px] min-h-[70vh] bg-white border border-gray-200 rounded-[12px] shadow-sm flex flex-col">
+        {activeTab === "ask" && <AskScreen />}
+
+        {activeTab === "demos" && <Placeholder title="Browse Demos (shell)" />}
+        {activeTab === "docs" && <Placeholder title="Browse Documents (shell)" />}
+        {activeTab === "price" && <Placeholder title="Price Estimate (shell)" lines={6} />}
+        {activeTab === "meeting" && <Placeholder title="Schedule Meeting (shell)" lines={6} />}
+      </div>
     </div>
   );
 }
