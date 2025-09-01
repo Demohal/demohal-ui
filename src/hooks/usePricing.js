@@ -54,7 +54,7 @@ export default function usePricing({
 
   const setAnswer = useCallback((qKey, value) => {
     setAnswers((prev) => ({ ...prev, [qKey]: value }));
-    setEstimate(null);
+    setEstimate(null); // invalidate previous estimate when answers change
     setErrorEstimate("");
   }, []);
 
@@ -139,22 +139,31 @@ export default function usePricing({
 
   // ------------ mirror lines (human text recap) ------------
 
-  // Pull options from multiple possible shapes (options/choices/tiers/price_tiers_v2/etc.)
+  // Pull options from multiple possible shapes
   const getOptionsArray = (q) => {
     const tries = [
       q?.options,
       q?.choices,
+      q?.ui_options,
+      q?.estimation_options,
       q?.tiers,
       q?.price_tiers,
       q?.price_tiers_v2,
       q?.values,
       q?.items,
+      q?.ui?.options,
     ];
     for (const arr of tries) {
       if (Array.isArray(arr) && arr.length) return arr;
     }
     // Map-like fallbacks → synthesize array
-    const maps = [q?.value_label_map, q?.label_map, q?.price_tiers_map, q?.price_tiers_v2_map, q?.tiers_map];
+    const maps = [
+      q?.value_label_map,
+      q?.label_map,
+      q?.price_tiers_map,
+      q?.price_tiers_v2_map,
+      q?.tiers_map,
+    ];
     for (const m of maps) {
       if (m && typeof m === "object") {
         return Object.entries(m).map(([k, v]) => ({ key: k, label: v }));
@@ -163,23 +172,24 @@ export default function usePricing({
     return [];
   };
 
-  const norm = (s) => String(s ?? "").trim();
-  const lower = (s) => norm(s).toLowerCase();
-
+  // Normalize option identity/labels across shapes (supports price_tiers_v2)
   const resolveOptKey = (opt) =>
     opt?.key ?? opt?.value ?? opt?.tier_key ?? opt?.id ?? opt?.code ?? opt?.slug;
 
   const resolveOptLabel = (opt) =>
     opt?.label ??
-    opt?.tier_label ??     // price_tiers_v2
-    opt?.display_name ??   // common alias
+    opt?.tier_label ??       // price_tiers_v2
+    opt?.display_name ??     // common alias
     opt?.name ??
     opt?.title ??
     opt?.display ??
     opt?.text ??
     "";
 
-  // Build a case-insensitive index for fast matching by key OR label
+  const norm = (s) => String(s ?? "").trim();
+  const lower = (s) => norm(s).toLowerCase();
+
+  // Build index for case-insensitive matching by key OR label
   const buildIndex = (opts) => {
     const byKey = new Map();
     const byKeyL = new Map();
@@ -200,30 +210,7 @@ export default function usePricing({
     return { byKey, byKeyL, byLabel, byLabelL };
   };
 
-  // Find the option that corresponds to a user answer (string/object) using key or label, case-insensitive
-  const findOptionForAnswer = (idx, ans) => {
-    if (ans && typeof ans === "object") {
-      const tryVals = [
-        ans.key, ans.value, ans.tier_key, ans.id, ans.code, ans.slug,
-        ans.label, ans.tier_label, ans.name, ans.title, ans.display, ans.text,
-      ];
-      for (const v of tryVals) {
-        if (!v) continue;
-        const n = norm(v);
-        const L = lower(v);
-        if (idx.byKey.has(n)) return idx.byKey.get(n);
-        if (idx.byKeyL.has(L)) return idx.byKeyL.get(L);
-        if (idx.byLabel.has(n)) return idx.byLabel.get(n);
-        if (idx.byLabelL.has(L)) return idx.byLabelL.get(L);
-      }
-      return null;
-    }
-    const s = norm(ans);
-    const sl = lower(ans);
-    return idx.byKey.get(s) || idx.byKeyL.get(sl) || idx.byLabel.get(s) || idx.byLabelL.get(sl) || null;
-  };
-
-  // Prefer map labels if present; otherwise resolve via options
+  // Prefer map labels if present
   const labelFromMaps = (q, ans) => {
     const s = norm(
       ans && typeof ans === "object"
@@ -233,8 +220,7 @@ export default function usePricing({
     const candidates = [q?.value_label_map, q?.label_map, q?.price_tiers_map, q?.price_tiers_v2_map, q?.tiers_map];
     for (const m of candidates) {
       if (m && typeof m === "object") {
-        const exact = m[s];
-        if (exact) return exact;
+        if (m[s]) return m[s];
         const ci = Object.entries(m).find(([k]) => lower(k) === lower(s));
         if (ci) return ci[1];
       }
@@ -242,43 +228,61 @@ export default function usePricing({
     return null;
   };
 
+  // Always resolve to a human label, regardless of q.type
+  const humanLabelForAnswer = (q, ans) => {
+    // 1) Direct maps first
+    const mapped = labelFromMaps(q, ans);
+    if (mapped) return mapped;
+
+    // 2) Options/index lookup by key or label (case-insensitive)
+    const opts = getOptionsArray(q);
+    if (opts.length) {
+      const idx = buildIndex(opts);
+
+      // If the answer is an object, try all plausible fields
+      if (ans && typeof ans === "object") {
+        const tryVals = [
+          ans.key, ans.value, ans.tier_key, ans.id, ans.code, ans.slug,
+          ans.label, ans.tier_label, ans.name, ans.title, ans.display, ans.text,
+        ];
+        for (const v of tryVals) {
+          if (!v) continue;
+          const s = norm(v);
+          const sl = lower(v);
+          const found =
+            idx.byKey.get(s) || idx.byKeyL.get(sl) || idx.byLabel.get(s) || idx.byLabelL.get(sl);
+          if (found) return resolveOptLabel(found);
+        }
+      } else {
+        const s = norm(ans);
+        const sl = lower(ans);
+        const found =
+          idx.byKey.get(s) || idx.byKeyL.get(sl) || idx.byLabel.get(s) || idx.byLabelL.get(sl);
+        if (found) return resolveOptLabel(found);
+      }
+    }
+
+    // 3) Fallback to raw value
+    return norm(ans);
+  };
+
   const mirrorLines = useMemo(() => {
     if (!questions?.length) return [];
     const lines = [];
+
     for (const q of questions) {
       const ans = answers[q.q_key];
       if (ans === undefined || ans === null || ans === "" || (Array.isArray(ans) && ans.length === 0)) continue;
 
-      const opts = getOptionsArray(q);
-      const idx = buildIndex(opts);
-
       let label = "";
-
-      if (q.type === "choice") {
-        // Prefer explicit map label if provided
-        label = labelFromMaps(q, ans) ?? "";
-        if (!label) {
-          const o = findOptionForAnswer(idx, ans);
-          label = o ? resolveOptLabel(o) : norm(ans);
-        }
-      } else if (q.type === "multi_choice") {
-        const picked = Array.isArray(ans) ? ans : [];
-        const labels = picked
-          .map((key) => {
-            const mapped = labelFromMaps(q, key);
-            if (mapped) return mapped;
-            const o = findOptionForAnswer(idx, key);
-            return o ? resolveOptLabel(o) : norm(key);
-          })
-          .filter(Boolean);
-        label = labels.join(", ");
+      if (Array.isArray(ans)) {
+        const parts = ans.map((a) => humanLabelForAnswer(q, a)).filter(Boolean);
+        label = parts.join(", ");
       } else {
-        label = norm(ans);
+        label = humanLabelForAnswer(q, ans);
       }
-
       if (!label) continue;
 
-      // Default templating behavior if q.mirror_template not supplied
       const keyNorm = lower(q.q_key);
       let line = null;
 
@@ -289,16 +293,24 @@ export default function usePricing({
       } else if (["edition", "editions", "product", "products", "industry_edition", "industry"].includes(keyNorm)) {
         line = `You have selected ${label}.`;
       } else if (
-        ["transactions", "transaction_volume", "volume", "tier", "tiers", "price_tier", "transaction_tier"].includes(
-          keyNorm
-        )
+        [
+          "transactions",
+          "transaction_volume",
+          "monthly_transactions",
+          "commercial_transactions",
+          "volume",
+          "tier",
+          "tiers",
+          "price_tier",
+          "transaction_tier",
+          "transaction_tier_key",
+        ].includes(keyNorm)
       ) {
-        // Keep label as-is (no forced lowercasing) for human text like "up to 20,000"
         line = `You stated that you execute ${label} commercial transactions per month.`;
       }
-
       if (line) lines.push(line);
     }
+
     return lines;
   }, [questions, answers]);
 
