@@ -1,37 +1,108 @@
+// src/components/shared/AppShell.jsx
 import React from "react";
-import Banner from "./Banner";
 
 /**
- * AppShell
- * - Fixed 720px max width card centered on page
- * - Fixed card height (full height on mobile, 96dvh on md+)
- * - Accepts: title, logoUrl, tabs (array), children (main content), bottomSlot (ask bar)
- * - NO fallbacks for logo: pass undefined to hide logo
+ * AppShell: Banner + Tabs (pinned to banner bottom) + Content + Ask Bar
+ * Tabs use the same beveled, dark-gradient style as your baseline UI.
  */
-export default function AppShell({ title = "Ask the Assistant", logoUrl, tabs = [], children, bottomSlot, theme = {} }) {
-  const vars = {
-    // safe defaults; can be overridden by `theme` prop
-    "--page-bg": theme["--page-bg"] || "#f3f4f6",
-    "--banner-bg": theme["--banner-bg"] || "#0b0f14",
-    "--banner-fg": theme["--banner-fg"] || "#e8edf4",
-    "--card-bg": theme["--card-bg"] || "#ffffff",
-    "--card-border": theme["--card-border"] || "rgba(0,0,0,0.15)",
-    "--radius-card": theme["--radius-card"] || "14px",
-    "--shadow-card": theme["--shadow-card"] || "0 10px 30px rgba(0,0,0,0.25)",
-  };
+export default function AppShell({
+  title = "",
+  logoUrl = "",
+  tabs = [],
 
+  // Ask bar
+  askValue = "",
+  askPlaceholder = "Ask your question here",
+  onAskChange = () => {},
+  onAskSend = () => {},
+  askInputRef = null,
+  askSendIcon = null,
+
+  // Theming (CSS variables from /brand)
+  themeVars = {},
+  children,
+}) {
   return (
     <div
-      className="w-screen h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center"
-      style={vars}
+      className="w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center transition-opacity duration-200"
+      style={themeVars}
     >
-      <div className="w-full max-w-[720px] h-[100dvh] md:h-[96dvh] bg-[var(--card-bg)] border border-[var(--card-border)] md:rounded-[var(--radius-card)] [box-shadow:var(--shadow-card)] flex flex-col overflow-hidden">
-        <Banner title={title} logoUrl={logoUrl} tabs={tabs} />
-        <div className="flex-1 overflow-y-auto px-6 pt-3 pb-6">
+      <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] bg-[var(--card-bg)] border border-[var(--card-border)] md:rounded-[var(--radius-card)] [box-shadow:var(--shadow-card)] flex flex-col overflow-hidden">
+        {/* Banner */}
+        <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)] relative pb-10">
+          <div className="flex items-center justify-between w-full py-3">
+            <div className="flex items-center gap-3">
+              {logoUrl ? <img src={logoUrl} alt="Brand logo" className="h-10 object-contain" /> : null}
+            </div>
+            <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">{title}</div>
+          </div>
+
+          {/* Tabs pinned to banner bottom */}
+          {Array.isArray(tabs) && tabs.length > 0 ? (
+            <div className="absolute left-0 right-0 bottom-0">
+              <div className="w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <nav
+                  className="inline-flex min-w-max items-center gap-2 overflow-y-hidden px-3 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  role="tablist"
+                >
+                  {tabs.map((t) => {
+                    const base =
+                      "px-4 py-1.5 text-sm font-semibold whitespace-nowrap flex-none rounded-md border transition-colors " +
+                      // dark beveled gradient
+                      "text-white border-gray-700 bg-gradient-to-b from-gray-600 to-gray-700 " +
+                      "hover:from-gray-500 hover:to-gray-600 " +
+                      "shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]";
+                    const active =
+                      // slightly brighter bevel + subtle ring to indicate active
+                      "ring-1 ring-white/50 shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_2px_0_rgba(0,0,0,0.12)]";
+                    return (
+                      <button
+                        key={t.key || t.label}
+                        onClick={t.onClick}
+                        aria-selected={!!t.active}
+                        role="tab"
+                        className={t.active ? `${base} ${active}` : base}
+                      >
+                        {t.label}
+                      </button>
+                    );
+                  })}
+                </nav>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        {/* Content area */}
+        <div className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
           {children}
         </div>
-        <div className="border-t border-gray-200">
-          {bottomSlot}
+
+        {/* Ask bar (always visible) */}
+        <div className="px-4 py-3 border-t border-gray-200 relative z-10 bg-[var(--card-bg)]">
+          <div className="relative w-full">
+            <textarea
+              ref={askInputRef}
+              rows={1}
+              className="w-full border border-[var(--field-border)] rounded-lg px-4 py-2 pr-14 text-base text-black placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px] bg-[var(--field-bg)]"
+              placeholder={askPlaceholder}
+              value={askValue}
+              onChange={(e) => onAskChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  onAskSend(askValue);
+                }
+              }}
+            />
+            <button
+              aria-label="Send"
+              onClick={() => onAskSend(askValue)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
+            >
+              {askSendIcon || <span className="px-3 py-1 rounded-md border">Send</span>}
+            </button>
+          </div>
         </div>
       </div>
     </div>
