@@ -1,37 +1,54 @@
-// src/components/ask/AskScreen.jsx
-import React from "react";
+import React, { useState } from "react";
 
 /**
  * AskScreen (shell)
- * - Mirrors the old app's Ask landing view:
- *   heading/welcome copy + a responsive 16:9 YouTube embed
- * - No data fetching; pure presentational shell.
+ * - Upper scrollable area (placeholder for now)
+ * - Bottom Ask bar inside the card
  */
-
-const INTRO_EMBED = "https://www.youtube.com/embed/dQw4w9WgXcQ"; // TODO: replace with your real intro embed
-
 export default function AskScreen() {
-  return (
-    <div className="w-full h-full overflow-y-auto">
-      <div className="p-6 space-y-5">
-        {/* Welcome / heading copy */}
-        <div className="text-black text-[15px] leading-relaxed font-semibold">
-          Welcome to DemoHAL where you can Let Your Product Sell Itself. From here you can ask
-          technical or business related questions, watch short video demos based on your interest,
-          review the document library for technical specifications, case studies, and other
-          materials, book a meeting, or even get a price quote. You can get started by watching this
-          short video, or simply by asking your first question.
-        </div>
+  const [text, setText] = useState("");
 
-        {/* 16:9 responsive video container */}
-        <div className="relative w-full" style={{ paddingTop: "56.25%" }}>
-          <iframe
-            title="DemoHAL Intro Video"
-            src={INTRO_EMBED}
-            className="absolute top-0 left-0 w-full h-full rounded-xl border border-gray-200 shadow-[0_4px_12px_0_rgba(107,114,128,0.25)]"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
+  return (
+    <div className="flex flex-col h-full">
+      {/* Scrollable content area */}
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="text-sm text-gray-700">
+          <p className="font-semibold mb-2">Ask the Assistant</p>
+          <p>
+            This is a shell placeholder. We’ll wire in the real message list,
+            mirrors, and recommended demos here as we progress.
+          </p>
+        </div>
+      </div>
+
+      {/* Bottom ask bar (inside the card) */}
+      <div className="border-t border-gray-200 px-4 py-3">
+        <div className="relative">
+          <textarea
+            rows={1}
+            className="w-full border border-gray-300 rounded-lg px-4 py-2 pr-12 text-base text-black placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px] bg-white outline-none"
+            placeholder="Ask your question here"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onInput={(e) => {
+              e.currentTarget.style.height = "auto";
+              e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                // no-op send in shell
+              }
+            }}
           />
+          <button
+            aria-label="Send"
+            onClick={() => {/* no-op in shell */}}
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center bg-[var(--send-color,#dc2626)] text-white hover:opacity-90 active:scale-95"
+            title="Send"
+          >
+            ↑
+          </button>
         </div>
       </div>
     </div>
