@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from "react";
-import AppShell from "../shared/AppShell";
-import ContentArea from "../shared/ContentArea";
+import AppShell from "./shared/AppShell";
+import ContentArea from "./shared/ContentArea";
 
-// NOTE: Logo is controlled by the bot's record only. Pass null to hide if absent.
 export default function ShellEntry() {
   const [mode, setMode] = useState("ask");
 
@@ -19,13 +18,12 @@ export default function ShellEntry() {
   return (
     <AppShell
       title="Ask the Assistant"
-      logoUrl={null}     // do not fallback; null hides the logo
+      logoUrl={null}
       tabs={tabs}
       askValue=""
       askPlaceholder="Ask your question here"
       onAskChange={() => {}}
       onAskSend={() => {}}
-      // themeVars are applied by the app; nothing needed here for the shell
     >
       <ContentArea activeTab={mode} />
     </AppShell>
