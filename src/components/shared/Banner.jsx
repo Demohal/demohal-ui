@@ -1,20 +1,32 @@
-// src/components/shared/Banner.jsx
 import React from "react";
+import TabsNav from "./TabsNav";
 
-export default function Banner({ logoUrl, title }) {
+/**
+ * Banner
+ * - Fixed header row with logo + title
+ * - Tabs centered and anchored to banner bottom
+ * - Logo renders ONLY when a valid URL is provided (no fallbacks)
+ */
+export default function Banner({ title = "Ask the Assistant", logoUrl = null, tabs = [] }) {
   return (
-    <div className="px-4 md:px-5 py-4 flex items-center justify-between">
-      <div className="flex items-center gap-3">
-        {logoUrl ? (
-          <img
-            src={logoUrl}
-            alt="Brand logo"
-            className="h-9 w-auto object-contain select-none"
-            draggable={false}
-          />
-        ) : null}
+    <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)]">
+      {/* Header row */}
+      <div className="flex items-center justify-between h-[60px] select-none">
+        <div className="flex items-center gap-3">
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt="Logo"
+              className="h-9 w-auto object-contain drop-shadow"
+              draggable={false}
+            />
+          ) : null}
+        </div>
+        <div className="text-right text-lg sm:text-xl font-semibold opacity-90">{title}</div>
       </div>
-      <div className="text-base md:text-lg font-semibold">{title}</div>
+
+      {/* Tabs strip (bottom of banner) */}
+      <TabsNav tabs={tabs} />
     </div>
   );
 }
