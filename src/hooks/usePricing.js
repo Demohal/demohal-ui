@@ -31,6 +31,8 @@ export default function usePricing({
 
   const initializedRef = useRef(false);
 
+  // ------------ loading & answering ------------
+
   const loadQuestions = useCallback(async () => {
     if (!botId) return;
     setLoadingQuestions(true);
@@ -43,7 +45,7 @@ export default function usePricing({
       setUiCopy(data.ui_copy || {});
       setQuestions(Array.isArray(data.questions) ? data.questions : []);
       setAnswers({}); // reset when reloading
-    } catch (e) {
+    } catch {
       setErrorQuestions("Unable to load price estimator.");
     } finally {
       setLoadingQuestions(false);
@@ -72,6 +74,8 @@ export default function usePricing({
     setEstimate(null);
     setErrorEstimate("");
   }, []);
+
+  // ------------ progression & estimation ------------
 
   const requiredEstimationQs = useMemo(
     () => questions.filter((q) => q.group === "estimation" && q.required !== false),
@@ -112,7 +116,7 @@ export default function usePricing({
       const data = await res.json();
       if (!data?.ok) throw new Error(data?.error || "Failed to compute estimate");
       setEstimate(data);
-    } catch (e) {
+    } catch {
       setErrorEstimate("Unable to compute estimate.");
       setEstimate(null);
     } finally {
@@ -127,4 +131,111 @@ export default function usePricing({
     loadQuestions();
   }, [botId, loadQuestions]);
 
-  // auto compute when all required are presen
+  // auto compute when all required are present
+  useEffect(() => {
+    if (!autoCompute) return;
+    if (haveAllRequired) computeEstimate();
+  }, [autoCompute, haveAllRequired, computeEstimate]);
+
+  // ------------ mirror lines (human text recap) ------------
+
+  // Robust label resolution (handles tier_key vs label, etc.)
+  const resolveOptKey = (opt) =>
+    opt?.key ?? opt?.value ?? opt?.tier_key ?? opt?.id ?? opt?.code ?? opt?.slug;
+
+  const resolveOptLabel = (opt, fallback) =>
+    opt?.label ??
+    opt?.tier_label ??
+    opt?.name ??
+    opt?.title ??
+    opt?.display ??
+    opt?.text ??
+    fallback;
+
+  const equals = (a, b) => String(a) === String(b);
+
+  const findOptionForAnswer = (opts, ans) => {
+    const normalizedAns =
+      typeof ans === "object" && ans !== null
+        ? ans.key ?? ans.value ?? ans.tier_key ?? ans.id ?? ans.code ?? ans.slug
+        : ans;
+    return (opts || []).find((o) => equals(resolveOptKey(o), normalizedAns));
+  };
+
+  const mirrorLines = useMemo(() => {
+    if (!questions?.length) return [];
+    const lines = [];
+    for (const q of questions) {
+      const ans = answers[q.q_key];
+      if (ans === undefined || ans === null || ans === "" || (Array.isArray(ans) && ans.length === 0)) continue;
+
+      const opts = q.options || [];
+      let label = "";
+
+      if (q.type === "choice") {
+        const o = findOptionForAnswer(opts, ans);
+        label = resolveOptLabel(o, String(ans));
+      } else if (q.type === "multi_choice") {
+        const picked = Array.isArray(ans) ? ans : [];
+        const labels = picked
+          .map((key) => {
+            const o = findOptionForAnswer(opts, key);
+            return resolveOptLabel(o, String(key));
+          })
+          .filter(Boolean);
+        label = labels.join(", ");
+      } else {
+        label = String(ans);
+      }
+
+      if (!label) continue;
+
+      // Default templating behavior if q.mirror_template not supplied
+      const norm = (s) => (s || "").toLowerCase().replace(/[\s-]+/g, "_");
+      const key = norm(q.q_key);
+      let line = null;
+
+      if (q.mirror_template) {
+        line = q.mirror_template
+          .split("{{answer_label_lower}}")
+          .join(label.toLowerCase())
+          .split("{{answer_label}}")
+          .join(label);
+      } else if (["edition", "editions", "product", "products", "industry_edition", "industry"].includes(key)) {
+        line = `You have selected ${label}.`;
+      } else if (["transactions", "transaction_volume", "volume", "tier", "tiers"].includes(key)) {
+        // Use human label (e.g., "up to 20,000") instead of key (e.g., "Prime")
+        line = `You stated that you execute ${label.toLowerCase()} commercial transactions per month.`;
+      }
+
+      if (line) lines.push(line);
+    }
+    return lines;
+  }, [questions, answers]);
+
+  // ------------ return API ------------
+
+  return {
+    // data
+    questions,
+    uiCopy,
+    answers,
+    estimate,
+
+    // status
+    loadingQuestions,
+    estimating,
+    errorQuestions,
+    errorEstimate,
+
+    // helpers
+    loadQuestions,
+    setAnswer,
+    toggleMulti,
+    clearAnswers,
+    computeEstimate,
+    haveAllRequired,
+    nextQuestion,
+    mirrorLines,
+  };
+}
