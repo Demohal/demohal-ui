@@ -1,43 +1,44 @@
-// src/components/shared/AppShell.jsx
 import React from "react";
 import Banner from "./Banner";
-import TabsNav from "./TabsNav";
 import AskBar from "./AskBar";
 
+/**
+ * Fixed card-size shell matching the legacy container:
+ * - Card max width 720px
+ * - Height: 100dvh on mobile, 90vh on md+
+ * - Banner extends to bottom of tabs
+ * - Centered in viewport
+ */
 export default function AppShell({
   title = "Ask the Assistant",
-  logoUrl,                 // <-- pass brand logo URL if available; undefined/empty hides the logo
-  tabs = [],               // [{ id, label }]
-  activeId,
-  onTab,
+  logoUrl = null,          // pass ONLY the bot's logo URL; null/'' hides logo
+  tabs = [],               // [{ key, label, onClick, active? }]
   children,
+  askValue = "",
+  askPlaceholder = "Ask your question here",
+  onAskChange,
+  onAskSend,
+  askDisabled = false,
 }) {
-  const active = typeof activeId === "string" ? activeId : (tabs[0]?.id || "ask");
-
   return (
-    <div className="w-screen min-h-[100dvh] bg-[var(--page-bg)] p-3 md:p-6 flex items-center justify-center">
-      {/* Card */}
-      <div className="w-full max-w-[720px] md:h-[96dvh] bg-white border border-[var(--card-border)] rounded-[var(--radius-card)] shadow-[var(--shadow-card)] flex flex-col overflow-hidden">
-        {/* Banner (fixed height) */}
-        <div className="bg-[var(--banner-bg)] text-[var(--banner-fg)]">
-          <Banner logoUrl={logoUrl} title={title} />
-          <div className="px-2 md:px-5 pb-2">
-            <TabsNav
-              tabs={tabs}
-              activeId={active}
-              onTab={onTab}
-            />
-          </div>
-        </div>
+    <div className="w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center">
+      <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] bg-[var(--card-bg)] border border-[var(--card-border)] rounded-[var(--radius-card)] shadow-[var(--shadow-card)] flex flex-col overflow-hidden">
+        <Banner title={title} logoUrl={logoUrl} tabs={tabs} />
 
-        {/* Main content */}
-        <div className="flex-1 overflow-y-auto">
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto px-6 pt-3 pb-6">
           {children}
         </div>
 
-        {/* Ask input bar */}
-        <div className="border-t border-[var(--card-border)] bg-white">
-          <AskBar />
+        {/* Ask box */}
+        <div className="border-t bg-[var(--card-bg)]">
+          <AskBar
+            value={askValue}
+            placeholder={askPlaceholder}
+            onChange={onAskChange}
+            onSend={onAskSend}
+            disabled={askDisabled}
+          />
         </div>
       </div>
     </div>
