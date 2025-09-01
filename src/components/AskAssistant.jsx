@@ -2,7 +2,7 @@
    Shell-migration cleanup: legacy component removed.
    This shim keeps import paths stable while delegating to the new shell. */
 
-export { default } from "./shell/AppShell";
+export { default } from "./shared/AppShell";
 
 /* REVISION
    Date: 2025-09-01
