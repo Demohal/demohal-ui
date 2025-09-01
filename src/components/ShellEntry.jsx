@@ -1,12 +1,12 @@
+// src/components/ShellEntry.jsx
 import React from "react";
-import AppShell from "./shell/AppShell";
-import AskAssistant from "./AskAssistant"; // legacy screen
+import AppShell from "./shared/AppShell";
+import AskAssistant from "./AskAssistant";
 
 export default function ShellEntry() {
-  const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
-  const v = params ? params.get("version") : null;
+  const params =
+    typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const version = params ? params.get("version") : null;
 
-  // version=2 → new shell, else legacy
-  if (v === "2") return <AppShell />;
-  return <AskAssistant />;
+  return version === "2" ? <AppShell /> : <AskAssistant />;
 }
