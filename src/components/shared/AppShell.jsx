@@ -2,8 +2,10 @@
 import React from "react";
 
 /**
- * AppShell: Banner + Tabs (pinned to banner bottom) + Content + Ask Bar
- * Tabs use the same beveled, dark-gradient style as your baseline UI.
+ * AppShell: Banner + Folder-style Tabs + Content + Ask Bar
+ * - Active tab is white, merges with the content panel (folder-tab look).
+ * - Inactive tabs are dark beveled pills.
+ * - Tabs sit exactly on the bottom edge of the banner.
  */
 export default function AppShell({
   title = "",
@@ -42,26 +44,26 @@ export default function AppShell({
             <div className="absolute left-0 right-0 bottom-0">
               <div className="w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <nav
-                  className="inline-flex min-w-max items-center gap-2 overflow-y-hidden px-3 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  className="inline-flex min-w-max items-end gap-1 overflow-y-hidden px-3 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                   role="tablist"
                 >
                   {tabs.map((t) => {
                     const base =
-                      "px-4 py-1.5 text-sm font-semibold whitespace-nowrap flex-none rounded-md border transition-colors " +
-                      // dark beveled gradient
-                      "text-white border-gray-700 bg-gradient-to-b from-gray-600 to-gray-700 " +
-                      "hover:from-gray-500 hover:to-gray-600 " +
-                      "shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]";
+                      // Shared folder-tab frame
+                      "px-4 py-1.5 text-sm font-semibold whitespace-nowrap flex-none rounded-t-md border border-b-0 -mb-px transition-colors";
                     const active =
-                      // slightly brighter bevel + subtle ring to indicate active
-                      "ring-1 ring-white/50 shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_2px_0_rgba(0,0,0,0.12)]";
+                      // Looks attached to the white content area
+                      "bg-white text-black shadow-[0_2px_0_rgba(0,0,0,.15)]";
+                    const inactive =
+                      // Dark beveled, like closed tabs
+                      "text-white border-gray-600 bg-gradient-to-b from-gray-600 to-gray-700 hover:from-gray-500 hover:to-gray-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]";
                     return (
                       <button
                         key={t.key || t.label}
                         onClick={t.onClick}
                         aria-selected={!!t.active}
                         role="tab"
-                        className={t.active ? `${base} ${active}` : base}
+                        className={`${base} ${t.active ? active : inactive}`}
                       >
                         {t.label}
                       </button>
