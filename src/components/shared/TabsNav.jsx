@@ -1,45 +1,34 @@
-// src/components/shared/TabsNav.jsx
 import React from "react";
 
-// Pure-presentational Tabs strip:
-// - props: mode (string), tabs (array of {key,label,onClick})
-// - optional: className
-// - Accessibility: role=tablist / aria-selected on active
-export default function TabsNav({ mode, tabs, className = "" }) {
-  return (
-    <div
-      className={
-        "w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden " +
-        className
-      }
-      data-patch="tabs-nav"
-    >
-      <nav
-        className="inline-flex min-w-max items-center gap-0.5 overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        role="tablist"
-      >
-        {tabs.map((t) => {
-          const active =
-            (mode === "browse" && t.key === "demos") ||
-            (mode === "docs" && t.key === "docs") ||
-            (mode === "price" && t.key === "price") ||
-            (mode === "meeting" && t.key === "meeting") ||
-            (mode === "ask" && t.key === "ask");
+export default function TabsNav({ tabs = [], activeId, onChange }) {
+  const list = Array.isArray(tabs) ? tabs : [];
 
-          return (
-            <button
-              key={t.key}
-              onClick={t.onClick}
-              role="tab"
-              aria-selected={active}
-              className={active ? (globalThis?.UI?.TAB_ACTIVE ?? "") : (globalThis?.UI?.TAB_INACTIVE ?? "")}
-              type="button"
-            >
-              {t.label}
-            </button>
-          );
-        })}
-      </nav>
+  return (
+    <div className="w-full border-b bg-white">
+      <div className="mx-auto max-w-6xl flex gap-2 px-4 py-2">
+        {list.length === 0 ? (
+          <div className="text-sm text-gray-500">Loading…</div>
+        ) : (
+          list.map((t) => {
+            const isActive = t.id === activeId;
+            return (
+              <button
+                key={t.id || t.label}
+                type="button"
+                onClick={() => onChange?.(t.id)}
+                className={
+                  "px-3 py-1 rounded-md text-sm " +
+                  (isActive
+                    ? "bg-gray-900 text-white"
+                    : "bg-gray-100 text-gray-800 hover:bg-gray-200")
+                }
+              >
+                {t.label ?? t.id}
+              </button>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
