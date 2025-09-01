@@ -2,7 +2,7 @@
 // Orchestrator using Shared/AppShell + modular hooks/screens.
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import AppShell from "./Shared/AppShell";
+import AppShell from "./shared/AppShell";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 
 // Hooks
