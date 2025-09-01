@@ -3,9 +3,9 @@ import React from "react";
 
 /**
  * AppShell: Banner + Folder-style Tabs + Content + Ask Bar
- * - Active tab is white, merges with the content panel (folder-tab look).
- * - Inactive tabs are dark beveled pills.
- * - Tabs sit exactly on the bottom edge of the banner.
+ * Tweaks in this version:
+ *  - Tabs are nudged down by 1px so their lower edges intersect the banner bottom line.
+ *  - Active tab is white and visually attached to the content (folder-tab look).
  */
 export default function AppShell({
   title = "",
@@ -42,15 +42,16 @@ export default function AppShell({
           {/* Tabs pinned to banner bottom */}
           {Array.isArray(tabs) && tabs.length > 0 ? (
             <div className="absolute left-0 right-0 bottom-0">
-              <div className="w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {/* Nudge the whole tab bar down by 1px so it touches the banner bottom */}
+              <div className="w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden border-b border-gray-300 translate-y-[1px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <nav
-                  className="inline-flex min-w-max items-end gap-1 overflow-y-hidden px-3 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  className="inline-flex min-w-max items-end gap-1 overflow-y-hidden px-3 pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                   role="tablist"
                 >
                   {tabs.map((t) => {
                     const base =
                       // Shared folder-tab frame
-                      "px-4 py-1.5 text-sm font-semibold whitespace-nowrap flex-none rounded-t-md border border-b-0 -mb-px transition-colors";
+                      "px-4 py-1.5 text-sm font-semibold whitespace-nowrap flex-none rounded-t-md border border-b-0 transition-colors";
                     const active =
                       // Looks attached to the white content area
                       "bg-white text-black shadow-[0_2px_0_rgba(0,0,0,.15)]";
