@@ -817,7 +817,7 @@ export default function AskAssistant() {
     >
       <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] border border-[var(--card-border)] md:rounded-[var(--radius-card)] [box-shadow:var(--shadow-card)] flex flex-col overflow-hidden transition-all duration-300">
         {/* Header */}
-        <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)] relative pb-0">
+        <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)] relative pb-15">
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
               <img src={logoSrc} alt="Brand logo" className="h-10 object-contain" />
