@@ -96,35 +96,3 @@ const normKey = (s) => (s || "").toLowerCase().replace(/[\s-]+/g, "_");
 const classNames = (...xs) => xs.filter(Boolean).join(" ");
 
 function renderMirror(template, label) {
-  if (!template) return null;
-  return template
-    .split("{{answer_label_lower}}")
-    .join(label.toLowerCase())
-    .split("{{answer_label}}")
-    .join(label);
-}
-
-/* ========================== *
- *  SMALL PATCHABLE COMPONENTS *
- * ========================== */
-
-function Row({ item, onPick, variant }) {
-  const btnClass = variant === "docs" ? UI.BTN_DOCS : UI.BTN;
-  return (
-    <button data-patch="row-button" onClick={() => onPick(item)} className={btnClass} title={item.description || ""}>
-      <div className="font-extrabold text-xs sm:text-sm">{item.title}</div>
-      {item.description ? (
-        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">{item.description}</div>
-      ) : item.functions_text ? (
-        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">{item.functions_text}</div>
-      ) : null}
-    </button>
-  );
-}
-
-function OptionButton({ opt, selected, onClick }) {
-  return (
-    <button
-      data-patch="option-button"
-      onClick={() => onClick(opt)}
-      className={classNames
