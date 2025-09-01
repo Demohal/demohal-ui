@@ -3,9 +3,9 @@ import TabsNav from "./TabsNav";
 
 /**
  * Banner
- * - Fixed header row with logo + title
- * - Tabs centered and anchored to banner bottom
- * - Logo renders ONLY when a valid URL is provided (no fallbacks)
+ * - Header row (logo + title) with fixed height
+ * - Tabs centered and anchored to bottom of the banner
+ * - Logo renders ONLY when a valid URL is provided (no fallback)
  */
 export default function Banner({ title = "Ask the Assistant", logoUrl = null, tabs = [] }) {
   return (
