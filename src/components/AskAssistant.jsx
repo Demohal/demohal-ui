@@ -1,5 +1,6 @@
 // src/components/AskAssistant.jsx
 // Orchestrator using Shared/AppShell + modular hooks/screens.
+// Logo comes from the bot record; colors/tokens from /brand.
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import AppShell from "./shared/AppShell";
@@ -52,7 +53,7 @@ export default function AskAssistant() {
     };
   }, []);
 
-  // Bot settings (tabs + welcome + intro video)
+  // Bot settings (tabs + welcome + intro video) — includes bot for logo
   const {
     botId,
     fatal,
@@ -61,6 +62,7 @@ export default function AskAssistant() {
     introVideoUrl,
     showIntroVideo,
     titleFor,
+    bot,
   } = useBotState({
     apiBase,
     initialBotId: botIdFromUrl,
@@ -68,8 +70,8 @@ export default function AskAssistant() {
     defaultAlias: (import.meta.env.VITE_DEFAULT_ALIAS || "demo").trim(),
   });
 
-  // Brand tokens + logo
-  const { themeVars, assets: brandAssets } = useBrandTokens({
+  // Brand tokens (colors only)
+  const { themeVars } = useBrandTokens({
     apiBase,
     botId,
     fallback: DEFAULT_THEME_VARS,
@@ -120,7 +122,7 @@ export default function AskAssistant() {
   const contentRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Autosize ask textarea (AppShell passes value/change; we still adjust height)
+  // Autosize ask textarea
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
@@ -159,7 +161,7 @@ export default function AskAssistant() {
     requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
   };
 
-  // Tabs for AppShell (Ask is NOT a tab per baseline; ask bar is global)
+  // Tabs for AppShell (Ask is not a tab; ask bar is global)
   const tabs = useMemo(() => {
     const out = [];
     if (tabsEnabled.demos) out.push({ key: "demos", label: "Browse Demos", active: mode === "browse", onClick: openBrowse });
@@ -215,7 +217,8 @@ export default function AskAssistant() {
     );
   }
 
-  const logoUrl = brandAssets.logo_url || brandAssets.logo_light_url || brandAssets.logo_dark_url || fallbackLogo;
+  // Logo from bot; fallback to local asset
+  const logoUrl = bot?.logo_url || bot?.logo_light_url || bot?.logo_dark_url || fallbackLogo;
 
   return (
     <AppShell
@@ -239,12 +242,9 @@ export default function AskAssistant() {
         send(text);
       }}
       themeVars={themeVars}
-      // passthrough of a ref for autosize (AppShell should forward it to the textarea)
       askInputRef={inputRef}
-      // Optional: icon component to render on the send button (keeps legacy look)
       askSendIcon={<ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:text-[var(--send-color-hover)]" />}
     >
-      {/* Content area (scrolls inside AppShell content container) */}
       <div ref={contentRef} className="flex-1 flex flex-col space-y-4">
         {mode === "ask" && !selected && (
           <AskView
