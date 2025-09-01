@@ -3,30 +3,28 @@ import TabsNav from "./TabsNav";
 
 /**
  * Banner
- * - Header row (logo + title) with fixed height
- * - Tabs centered and anchored to bottom of the banner
- * - Logo renders ONLY when a valid URL is provided (no fallback)
+ * - Fixed banner area; tabs are visually attached to bottom of banner
+ * - If logoUrl is falsy, nothing is rendered on the left (no fallbacks here)
  */
-export default function Banner({ title = "Ask the Assistant", logoUrl = null, tabs = [] }) {
+export default function Banner({ title = "Ask the Assistant", logoUrl, tabs = [] }) {
   return (
     <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)]">
-      {/* Header row */}
-      <div className="flex items-center justify-between h-[60px] select-none">
+      {/* Top row: logo (optional) + title */}
+      <div className="flex items-center justify-between w-full py-3">
         <div className="flex items-center gap-3">
           {logoUrl ? (
-            <img
-              src={logoUrl}
-              alt="Logo"
-              className="h-9 w-auto object-contain drop-shadow"
-              draggable={false}
-            />
+            <img src={logoUrl} alt="Brand logo" className="h-10 object-contain" />
           ) : null}
         </div>
-        <div className="text-right text-lg sm:text-xl font-semibold opacity-90">{title}</div>
+        <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
+          {title}
+        </div>
       </div>
 
-      {/* Tabs strip (bottom of banner) */}
-      <TabsNav tabs={tabs} />
+      {/* Tabs bar anchored to the bottom of banner */}
+      <div className="flex justify-center pb-2">
+        <TabsNav tabs={tabs} />
+      </div>
     </div>
   );
 }
