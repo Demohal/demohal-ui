@@ -139,13 +139,38 @@ export default function usePricing({
 
   // ------------ mirror lines (human text recap) ------------
 
-  // Robust label resolution (handles tier_key vs label, etc.)
+  // Gather options from many possible shapes (options/choices/tiers/price_tiers_v2/etc.)
+  const getOptionsArray = (q) => {
+    const tries = [
+      q?.options,
+      q?.choices,
+      q?.tiers,
+      q?.price_tiers,
+      q?.price_tiers_v2,
+      q?.values,
+      q?.items,
+    ];
+    for (const arr of tries) {
+      if (Array.isArray(arr) && arr.length) return arr;
+    }
+    // Map-like fallbacks → synthesize array
+    const maps = [q?.value_label_map, q?.label_map, q?.price_tiers_map, q?.price_tiers_v2_map, q?.tiers_map];
+    for (const m of maps) {
+      if (m && typeof m === "object") {
+        return Object.entries(m).map(([k, v]) => ({ key: k, label: v }));
+      }
+    }
+    return [];
+  };
+
+  // Normalize option identity/labels across shapes (supports price_tiers_v2)
   const resolveOptKey = (opt) =>
     opt?.key ?? opt?.value ?? opt?.tier_key ?? opt?.id ?? opt?.code ?? opt?.slug;
 
   const resolveOptLabel = (opt, fallback) =>
     opt?.label ??
-    opt?.tier_label ??
+    opt?.tier_label ??       // price_tiers_v2
+    opt?.display_name ??     // common alias
     opt?.name ??
     opt?.title ??
     opt?.display ??
@@ -162,6 +187,20 @@ export default function usePricing({
     return (opts || []).find((o) => equals(resolveOptKey(o), normalizedAns));
   };
 
+  // If the backend ships a value→label map, honor it first.
+  const labelFromMaps = (q, ans) => {
+    const s = String(
+      typeof ans === "object" && ans !== null
+        ? ans.key ?? ans.value ?? ans.tier_key ?? ans.id ?? ans.code ?? ans.slug
+        : ans
+    );
+    const candidates = [q?.value_label_map, q?.label_map, q?.price_tiers_map, q?.price_tiers_v2_map, q?.tiers_map];
+    for (const m of candidates) {
+      if (m && typeof m === "object" && m[s]) return m[s];
+    }
+    return null;
+  };
+
   const mirrorLines = useMemo(() => {
     if (!questions?.length) return [];
     const lines = [];
@@ -169,16 +208,22 @@ export default function usePricing({
       const ans = answers[q.q_key];
       if (ans === undefined || ans === null || ans === "" || (Array.isArray(ans) && ans.length === 0)) continue;
 
-      const opts = q.options || [];
+      const opts = getOptionsArray(q);
       let label = "";
 
       if (q.type === "choice") {
-        const o = findOptionForAnswer(opts, ans);
-        label = resolveOptLabel(o, String(ans));
+        // Prefer explicit map label if provided
+        label = labelFromMaps(q, ans) ?? "";
+        if (!label) {
+          const o = findOptionForAnswer(opts, ans);
+          label = resolveOptLabel(o, String(ans));
+        }
       } else if (q.type === "multi_choice") {
         const picked = Array.isArray(ans) ? ans : [];
         const labels = picked
           .map((key) => {
+            const mapped = labelFromMaps(q, key);
+            if (mapped) return mapped;
             const o = findOptionForAnswer(opts, key);
             return resolveOptLabel(o, String(key));
           })
@@ -197,15 +242,15 @@ export default function usePricing({
 
       if (q.mirror_template) {
         line = q.mirror_template
-          .split("{{answer_label_lower}}")
-          .join(label.toLowerCase())
-          .split("{{answer_label}}")
-          .join(label);
+          .split("{{answer_label_lower}}").join(label.toLowerCase())
+          .split("{{answer_label}}").join(label);
       } else if (["edition", "editions", "product", "products", "industry_edition", "industry"].includes(key)) {
         line = `You have selected ${label}.`;
-      } else if (["transactions", "transaction_volume", "volume", "tier", "tiers"].includes(key)) {
-        // Use human label (e.g., "up to 20,000") instead of key (e.g., "Prime")
-        line = `You stated that you execute ${label.toLowerCase()} commercial transactions per month.`;
+      } else if (
+        ["transactions", "transaction_volume", "volume", "tier", "tiers", "price_tier", "transaction_tier"].includes(key)
+      ) {
+        // Use the human label (e.g., "up to 20,000")
+        line = `You stated that you execute ${label} commercial transactions per month.`;
       }
 
       if (line) lines.push(line);
