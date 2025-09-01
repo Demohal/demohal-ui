@@ -1,33 +1,42 @@
-import React, { useState } from "react";
+import React from "react";
 import Banner from "./Banner";
+import TabsNav from "./TabsNav";
 import ContentArea from "./ContentArea";
 import AskBar from "./AskBar";
 
-export default function AppShell() {
-  const [mode, setMode] = useState("ask"); // "ask" | "browse" | "docs" | "price" | "meeting"
+const DEFAULT_TABS = [
+  { id: "ask", label: "Ask" },
+  { id: "demos", label: "Browse Demos" },
+  { id: "docs", label: "Browse Documents" },
+  { id: "price", label: "Price Estimate" },
+  { id: "meeting", label: "Schedule Meeting" },
+];
 
-  // Minimal theme tokens via CSS variables; can be wired to branding later.
-  const themeVars = {
-    "--page-bg": "#eef0f3",
-    "--banner-bg": "#0b0b0b",
-    "--banner-fg": "#ffffff",
-    "--tab-active-bg": "#2a3441",
-    "--tab-active-fg": "#ffffff",
-    "--card-bg": "#ffffff",
-    "--field-bg": "#ffffff",
-    "--send-color": "#d13232",
-  };
+export default function AppShell() {
+  // In the future we can hydrate from API; for now guard everything.
+  const [config] = React.useState(() => ({ tabs: DEFAULT_TABS }));
+  const safeTabs = Array.isArray(config?.tabs) ? config.tabs : DEFAULT_TABS;
+
+  const [activeId, setActiveId] = React.useState(() => {
+    const first = safeTabs[0]?.id || "ask";
+    return first;
+  });
+
+  // If an invalid id sneaks in, snap back to a known tab.
+  React.useEffect(() => {
+    if (!safeTabs.some((t) => t.id === activeId)) {
+      setActiveId(safeTabs[0]?.id || "ask");
+    }
+  }, [activeId, safeTabs]);
 
   return (
-    <div
-      className="w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center"
-      style={themeVars}
-    >
-      <div className="w-full max-w-[720px] h-[100dvh] md:h-[96dvh] bg-white border border-gray-200 md:rounded-xl shadow flex flex-col">
-        <Banner mode={mode} onModeChange={setMode} />
-        <ContentArea mode={mode} />
-        <AskBar onSend={(txt) => console.log("SEND:", txt)} />
+    <div className="min-h-[100dvh] flex flex-col bg-[var(--page-bg,#f5f6f7)]">
+      <Banner />
+      <TabsNav tabs={safeTabs} activeId={activeId} onChange={setActiveId} />
+      <div className="flex-1">
+        <ContentArea tabs={safeTabs} activeId={activeId} />
       </div>
+      <AskBar />
     </div>
   );
 }
