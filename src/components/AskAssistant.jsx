@@ -1,8 +1,14 @@
 // src/components/AskAssistant.jsx
 // Orchestrator using Shared/AppShell + modular hooks/screens.
 // Logo comes from the bot record; colors/tokens from /brand.
+//
+// Preview Bridge (live-only, minimal): when URL has ?preview=1,
+// this file listens for postMessage events from a same-origin editor:
+//   - { type: "preview:theme",  payload: { vars: { "--banner-bg": "#123456", ... } } }
+//   - { type: "preview:go",     payload: { screen: "intro"|"ask"|"browse"|"view_demo"|"docs"|"view_doc"|"price_questions"|"price_results"|"meeting" } }
+//   - { type: "preview:reload" }  -> window.location.reload()
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import AppShell from "./shared/AppShell";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 
@@ -45,11 +51,12 @@ export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app-dev.onrender.com";
 
   // URL params
-  const { aliasFromUrl, botIdFromUrl } = useMemo(() => {
+  const { aliasFromUrl, botIdFromUrl, previewEnabled } = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     return {
       aliasFromUrl: (qs.get("alias") || qs.get("alais") || "").trim(),
       botIdFromUrl: (qs.get("bot_id") || "").trim(),
+      previewEnabled: qs.get("preview") === "1",
     };
   }, []);
 
@@ -77,6 +84,9 @@ export default function AskAssistant() {
     fallback: DEFAULT_THEME_VARS,
   });
 
+  // Preview CSS var overlay (only applied when ?preview=1)
+  const [previewVars, setPreviewVars] = useState({});
+
   // Mode & selection
   const [mode, setMode] = useState("ask"); // ask | browse | docs | price | meeting
   const [selected, setSelected] = useState(null);
@@ -98,6 +108,12 @@ export default function AskAssistant() {
     botId,
     autoLoad: false,
   });
+
+  // Snapshot the latest lists for preview navigation
+  const demoItemsRef = useRef([]);
+  const docItemsRef = useRef([]);
+  useEffect(() => { demoItemsRef.current = demoItems || []; }, [demoItems]);
+  useEffect(() => { docItemsRef.current = docItems || []; }, [docItems]);
 
   // Meeting
   const { agent, loading: agentLoading, error: agentError, refresh: refreshAgent } = useAgent({ apiBase, botId });
@@ -199,6 +215,64 @@ export default function AskAssistant() {
   }
   const nextQAugmented = nextQuestion ? { ...nextQuestion, _value: answers[nextQuestion.q_key] } : null;
 
+  // --- Preview bridge (minimal) ---
+  const goTo = useCallback(async (screen) => {
+    switch (String(screen || "")) {
+      case "intro":
+        setSelected(null);
+        setMode("ask");
+        break;
+      case "ask":
+        openAsk();
+        break;
+      case "browse":
+        openBrowse();
+        break;
+      case "view_demo":
+        openBrowse();
+        // after demos load, pick first
+        setTimeout(() => setSelected(demoItemsRef.current[0] || null), 0);
+        break;
+      case "docs":
+        openBrowseDocs();
+        break;
+      case "view_doc":
+        openBrowseDocs();
+        setTimeout(() => setSelected(docItemsRef.current[0] || null), 0);
+        break;
+      case "price_questions":
+        openPrice();
+        break;
+      case "price_results":
+        // compute will auto-run if answers complete; otherwise questions will show
+        openPrice();
+        break;
+      case "meeting":
+        openMeeting();
+        break;
+      default:
+        break;
+    }
+  }, []); // uses internal open* which are stable enough for preview
+
+  useEffect(() => {
+    if (!previewEnabled) return;
+    function onMsg(e) {
+      if (e.origin !== window.location.origin) return; // same-origin guard
+      const { type, payload } = e.data || {};
+      if (type === "preview:theme") {
+        const vars = (payload && payload.vars) || {};
+        setPreviewVars((prev) => ({ ...prev, ...vars }));
+      } else if (type === "preview:go") {
+        if (payload && payload.screen) goTo(payload.screen);
+      } else if (type === "preview:reload") {
+        window.location.reload();
+      }
+    }
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, [previewEnabled, goTo]);
+
   // Early exits
   if (fatal) {
     return (
@@ -241,7 +315,8 @@ export default function AskAssistant() {
         setSelected(null);
         send(text);
       }}
-      themeVars={themeVars}
+      // Merge live theme with preview overlay (overlay wins)
+      themeVars={{ ...themeVars, ...previewVars }}
       askInputRef={inputRef}
       askSendIcon={<ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:text-[var(--send-color-hover)]" />}
     >
