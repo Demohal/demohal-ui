@@ -1,7 +1,15 @@
 // src/components/AskAssistant.jsx
 // Orchestrator using Shared/AppShell + modular hooks/screens.
-// Adds a minimal, self-contained ThemeLab editor at ?themelab=1
-// and a live preview bridge at ?preview=1 (same-origin postMessage).
+// Adds:
+//  1) ThemeLab (/?themelab=1) + live preview bridge (/?preview=1)
+//  2) Visitor Capture modal (one-time gate) with DB-driven config/fields
+//
+// Visitor Capture behavior:
+// - Loads /visitor-capture/config?bot_id=… (show_flag, message, fields[], skip_param)
+// - Triggers ONCE per bot when user first tries to Ask or click any tab
+// - Required: Name + Email (hardcoded). Optional fields are DB-driven.
+// - Skippable via UTM param (skip_param), and globally off via show_flag.
+// - Persists completion in localStorage: vc::<bot_id>::done = "1"
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import AppShell from "./shared/AppShell";
@@ -326,6 +334,18 @@ export default function AskAssistant() {
   // Preview CSS var overlay (only applied when ?preview=1)
   const [previewVars, setPreviewVars] = useState({});
 
+  // Visitor Capture: config/state
+  const [vcConfig, setVcConfig] = useState({ show_flag: false, message: "", skip_param: "dh_skip_capture" });
+  const [vcFields, setVcFields] = useState([]); // [{field_key,label,input_type,options,placeholder,help_text,...}]
+  const [vcLoaded, setVcLoaded] = useState(false);
+  const [vcOpen, setVcOpen] = useState(false);
+  const [vcSubmitting, setVcSubmitting] = useState(false);
+  const [vcErr, setVcErr] = useState("");
+  const [vcName, setVcName] = useState("");
+  const [vcEmail, setVcEmail] = useState("");
+  const [vcExtras, setVcExtras] = useState({}); // { [field_key]: value }
+  const [deferredAction, setDeferredAction] = useState(null);
+
   // Mode & selection
   const [mode, setMode] = useState("ask"); // ask | browse | docs | price | meeting
   const [selected, setSelected] = useState(null);
@@ -385,7 +405,128 @@ export default function AskAssistant() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  // Tab handlers
+  // ---- Visitor Capture: load config + handle UTM skip + localStorage key ----
+  const vcKey = useMemo(() => (botId ? `vc::${botId}::done` : ""), [botId]);
+
+  // Load config when botId available
+  useEffect(() => {
+    let stop = false;
+    async function loadVC() {
+      if (!botId) return;
+      try {
+        const url = new URL(`${apiBase}/visitor-capture/config`);
+        url.searchParams.set("bot_id", botId);
+        const r = await fetch(url.toString());
+        const j = await r.json();
+        const cfg = j?.config || {};
+        const fields = Array.isArray(j?.fields) ? j.fields : [];
+        if (stop) return;
+
+        // Persist config
+        setVcConfig({
+          show_flag: !!cfg.show_flag,
+          message: cfg.message || "",
+          skip_param: cfg.skip_param || "dh_skip_capture",
+        });
+        setVcFields(fields);
+
+        // Check UTM skip
+        const qs = new URLSearchParams(window.location.search);
+        const skipParam = (cfg.skip_param || "dh_skip_capture").trim();
+        const hasSkip = skipParam && (qs.get(skipParam) || "").toLowerCase() === "1";
+        if (hasSkip && vcKey) {
+          localStorage.setItem(vcKey, "1");
+        }
+      } catch {
+        // non-fatal; just leave defaults
+      } finally {
+        if (!stop) setVcLoaded(true);
+      }
+    }
+    loadVC();
+    return () => { stop = true; };
+  }, [apiBase, botId, vcKey]);
+
+  const vcCompleted = useMemo(() => (vcKey ? localStorage.getItem(vcKey) === "1" : true), [vcKey]);
+
+  const gatingActive = useMemo(() => {
+    // Gate only if: config loaded, show_flag true, and not completed
+    return vcLoaded && vcConfig.show_flag && !vcCompleted;
+  }, [vcLoaded, vcConfig.show_flag, vcCompleted]);
+
+  // Capture helpers
+  const validEmail = (s) => {
+    const str = String(s || "").trim();
+    return str.includes("@") && str.split("@")[1]?.includes(".");
+  };
+
+  const openVC = useCallback((after) => {
+    setDeferredAction(() => (typeof after === "function" ? after : null));
+    setVcOpen(true);
+    setVcErr("");
+  }, []);
+
+  const finishVC = useCallback(() => {
+    if (vcKey) localStorage.setItem(vcKey, "1");
+    setVcOpen(false);
+    const run = deferredAction;
+    setDeferredAction(null);
+    if (typeof run === "function") run();
+  }, [deferredAction, vcKey]);
+
+  const submitVC = useCallback(async () => {
+    setVcErr("");
+    const name = (vcName || "").trim();
+    const email = (vcEmail || "").trim();
+    if (!name) return setVcErr("Please enter your name.");
+    if (!validEmail(email)) return setVcErr("Please enter a valid email address.");
+    setVcSubmitting(true);
+    try {
+      // session id (per-tab best effort)
+      const sidKey = botId ? `sid::${botId}` : "sid::generic";
+      let session_id = sessionStorage.getItem(sidKey);
+      if (!session_id && window.crypto && crypto.randomUUID) {
+        session_id = crypto.randomUUID();
+        sessionStorage.setItem(sidKey, session_id);
+      }
+
+      const body = {
+        bot_id: botId,
+        session_id,
+        name,
+        email,
+        extras: vcExtras,
+        landing_path: window.location.pathname + window.location.search,
+      };
+
+      const r = await fetch(`${apiBase}/visitor-capture/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      if (!j?.ok) throw new Error(j?.error || "Failed to save");
+      finishVC();
+    } catch (e) {
+      setVcErr(e.message || "Something went wrong. Please try again.");
+    } finally {
+      setVcSubmitting(false);
+    }
+  }, [apiBase, botId, vcName, vcEmail, vcExtras, finishVC]);
+
+  // Intercept helper: if gating active, open modal and defer; else run now
+  const requireCaptureOr = useCallback(
+    (fn) => {
+      if (gatingActive) {
+        openVC(fn);
+      } else {
+        fn();
+      }
+    },
+    [gatingActive, openVC]
+  );
+
+  // Tab handlers (wrapped via intercept)
   const openAsk = () => {
     setMode("ask");
     setSelected(null);
@@ -419,12 +560,12 @@ export default function AskAssistant() {
   // Tabs for AppShell (Ask is not a tab; ask bar is global)
   const tabs = useMemo(() => {
     const out = [];
-    if (tabsEnabled.demos) out.push({ key: "demos", label: "Browse Demos", active: mode === "browse", onClick: openBrowse });
-    if (tabsEnabled.docs) out.push({ key: "docs", label: "Browse Documents", active: mode === "docs", onClick: openBrowseDocs });
-    if (tabsEnabled.price) out.push({ key: "price", label: "Price Estimate", active: mode === "price", onClick: openPrice });
-    if (tabsEnabled.meeting) out.push({ key: "meeting", label: "Schedule Meeting", active: mode === "meeting", onClick: openMeeting });
+    if (tabsEnabled.demos) out.push({ key: "demos", label: "Browse Demos", active: mode === "browse", onClick: () => requireCaptureOr(openBrowse) });
+    if (tabsEnabled.docs) out.push({ key: "docs", label: "Browse Documents", active: mode === "docs", onClick: () => requireCaptureOr(openBrowseDocs) });
+    if (tabsEnabled.price) out.push({ key: "price", label: "Price Estimate", active: mode === "price", onClick: () => requireCaptureOr(openPrice) });
+    if (tabsEnabled.meeting) out.push({ key: "meeting", label: "Schedule Meeting", active: mode === "meeting", onClick: () => requireCaptureOr(openMeeting) });
     return out;
-  }, [tabsEnabled, mode]);
+  }, [tabsEnabled, mode, requireCaptureOr]);
 
   // Normalize/iframe demos
   async function onPickDemo(item) {
@@ -522,7 +663,7 @@ export default function AskAssistant() {
   if (fatal) {
     return (
       <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
-        <div className="text-red-600 font-semibold"> {fatal} </div>
+        <div className="text-red-600 font-semibold">{fatal}</div>
       </div>
     );
   }
@@ -540,81 +681,240 @@ export default function AskAssistant() {
   const logoUrl = bot?.logo_url || bot?.logo_light_url || bot?.logo_dark_url || fallbackLogo;
 
   return (
-    <AppShell
-      title={bannerTitle}
-      logoUrl={logoUrl}
-      tabs={tabs}
-      askValue={input}
-      askPlaceholder="Ask your question here"
-      onAskChange={(v) => {
-        setInput(v);
-        const el = inputRef.current;
-        if (el) {
-          el.style.height = "auto";
-          el.style.height = `${el.scrollHeight}px`;
+    <>
+      <AppShell
+        title={bannerTitle}
+        logoUrl={logoUrl}
+        tabs={tabs}
+        askValue={input}
+        askPlaceholder="Ask your question here"
+        onAskChange={(v) => {
+          setInput(v);
+          const el = inputRef.current;
+          if (el) {
+            el.style.height = "auto";
+            el.style.height = `${el.scrollHeight}px`;
+          }
+        }}
+        onAskSend={(text) =>
+          requireCaptureOr(() => {
+            setMode("ask");
+            setSelected(null);
+            send(text);
+          })
         }
-      }}
-      onAskSend={(text) => {
-        setMode("ask");
-        setSelected(null);
-        send(text);
-      }}
-      // Merge live theme with preview overlay (overlay wins)
-      themeVars={{ ...themeVars, ...previewVars }}
-      askInputRef={inputRef}
-      askSendIcon={<ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:text-[var(--send-color-hover)]" />}
-    >
-      <div ref={contentRef} className="flex-1 flex flex-col space-y-4">
-        {mode === "ask" && !selected && (
-          <AskView
-            welcomeMessage={welcomeMessage}
-            showIntroVideo={showIntroVideo}
-            introVideoUrl={introVideoUrl}
-            lastQuestion={lastQuestion}
-            loading={askLoading}
-            responseText={responseText}
-            recommendations={recommendations}
-            onPick={(it) => onPickDemo(it)}
-          />
-        )}
+        // Merge live theme with preview overlay (overlay wins)
+        themeVars={{ ...themeVars, ...previewVars }}
+        askInputRef={inputRef}
+        askSendIcon={<ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:text-[var(--send-color-hover)]" />}
+      >
+        <div ref={contentRef} className="flex-1 flex flex-col space-y-4">
+          {mode === "ask" && !selected && (
+            <AskView
+              welcomeMessage={welcomeMessage}
+              showIntroVideo={showIntroVideo}
+              introVideoUrl={introVideoUrl}
+              lastQuestion={lastQuestion}
+              loading={askLoading}
+              responseText={responseText}
+              recommendations={recommendations}
+              onPick={(it) => onPickDemo(it)}
+            />
+          )}
 
-        {mode === "ask" && selected && <ViewDemo title={selected.title} url={selected.url} />}
+          {mode === "ask" && selected && <ViewDemo title={selected.title} url={selected.url} />}
 
-        {mode === "browse" && !selected && (
-          <BrowseDemos items={demoItems} loading={demosLoading} error={demosError} onPick={(it) => onPickDemo(it)} />
-        )}
-        {mode === "browse" && selected && <ViewDemo title={selected.title} url={selected.url} />}
+          {mode === "browse" && !selected && (
+            <BrowseDemos items={demoItems} loading={demosLoading} error={demosError} onPick={(it) => onPickDemo(it)} />
+          )}
+          {mode === "browse" && selected && <ViewDemo title={selected.title} url={selected.url} />}
 
-        {mode === "docs" && !selected && (
-          <BrowseDocs
-            items={docItems}
-            loading={docsLoading}
-            error={docsError}
-            onPick={(it) => {
-              setSelected(it);
-              requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-            }}
-          />
-        )}
-        {mode === "docs" && selected && <ViewDoc title={selected.title} url={selected.url} />}
+          {mode === "docs" && !selected && (
+            <BrowseDocs
+              items={docItems}
+              loading={docsLoading}
+              error={docsError}
+              onPick={(it) => {
+                setSelected(it);
+                requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+              }}
+            />
+          )}
+          {mode === "docs" && selected && <ViewDoc title={selected.title} url={selected.url} />}
 
-        {mode === "price" && (
-          <PriceEstimate
-            mirrorLines={mirrorLines}
-            uiCopy={uiCopy}
-            nextQuestion={nextQAugmented}
-            estimate={estimate}
-            estimating={estimating}
-            errorQuestions={errorQuestions || (loadingQuestions ? "Loading questions…" : "")}
-            errorEstimate={errorEstimate}
-            onPickOption={onPickPriceOption}
-          />
-        )}
+          {mode === "price" && (
+            <PriceEstimate
+              mirrorLines={mirrorLines}
+              uiCopy={uiCopy}
+              nextQuestion={nextQAugmented}
+              estimate={estimate}
+              estimating={estimating}
+              errorQuestions={errorQuestions || (loadingQuestions ? "Loading questions…" : "")}
+              errorEstimate={errorEstimate}
+              onPickOption={onPickPriceOption}
+            />
+          )}
 
-        {mode === "meeting" && (
-          <ScheduleMeeting agent={agent} loading={agentLoading} error={agentError} onRefresh={refreshAgent} />
-        )}
-      </div>
-    </AppShell>
+          {mode === "meeting" && (
+            <ScheduleMeeting agent={agent} loading={agentLoading} error={agentError} onRefresh={refreshAgent} />
+          )}
+        </div>
+      </AppShell>
+
+      {/* -------------------- Visitor Capture Modal -------------------- */}
+      {vcOpen && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50">
+          <div className="w-[92vw] max-w-xl rounded-2xl bg-white shadow-xl border border-gray-200">
+            <div className="p-5 border-b border-gray-200">
+              <div className="text-xl font-semibold text-gray-900">Before we get started</div>
+              <div className="mt-1 text-sm text-gray-700">
+                {vcConfig.message || "Tell us a little about yourself so we can better answer your questions."}
+              </div>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-900">Name</label>
+                <input
+                  type="text"
+                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 outline-none focus:ring-2 focus:ring-gray-300"
+                  value={vcName}
+                  onChange={(e) => setVcName(e.target.value)}
+                  placeholder="Jane Doe"
+                />
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="block text-sm font-medium text-gray-900">Email</label>
+                <input
+                  type="email"
+                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 outline-none focus:ring-2 focus:ring-gray-300"
+                  value={vcEmail}
+                  onChange={(e) => setVcEmail(e.target.value)}
+                  placeholder="jane@company.com"
+                />
+              </div>
+
+              {/* Optional fields (DB-driven) */}
+              {vcFields?.length ? (
+                <div className="pt-2 space-y-4">
+                  {vcFields.map((f) => {
+                    const key = f.field_key || f.key;
+                    const type = (f.input_type || "text").toLowerCase();
+                    const val = vcExtras[key] ?? "";
+                    const onChange = (v) => setVcExtras((prev) => ({ ...prev, [key]: v }));
+                    if (type === "select") {
+                      const opts = Array.isArray(f.options) ? f.options : Array.isArray(f.options?.items) ? f.options.items : [];
+                      return (
+                        <div key={key}>
+                          <label className="block text-sm font-medium text-gray-900">{f.label || key}</label>
+                          <select
+                            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900"
+                            value={String(val)}
+                            onChange={(e) => onChange(e.target.value)}
+                          >
+                            <option value="">{f.placeholder || "Select…"}</option>
+                            {opts.map((o, idx) => (
+                              <option key={idx} value={o.value ?? o.key ?? o.id ?? o}>
+                                {o.label ?? o.name ?? String(o)}
+                              </option>
+                            ))}
+                          </select>
+                          {f.help_text ? <div className="mt-1 text-xs text-gray-600">{f.help_text}</div> : null}
+                        </div>
+                      );
+                    }
+                    if (type === "textarea") {
+                      return (
+                        <div key={key}>
+                          <label className="block text-sm font-medium text-gray-900">{f.label || key}</label>
+                          <textarea
+                            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900"
+                            rows={3}
+                            value={String(val)}
+                            onChange={(e) => onChange(e.target.value)}
+                            placeholder={f.placeholder || ""}
+                          />
+                          {f.help_text ? <div className="mt-1 text-xs text-gray-600">{f.help_text}</div> : null}
+                        </div>
+                      );
+                    }
+                    if (type === "checkbox") {
+                      return (
+                        <div key={key} className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={!!val}
+                            onChange={(e) => onChange(e.target.checked)}
+                            className="h-4 w-4"
+                          />
+                          <label className="text-sm text-gray-900">{f.label || key}</label>
+                        </div>
+                      );
+                    }
+                    if (type === "radio") {
+                      const opts = Array.isArray(f.options) ? f.options : Array.isArray(f.options?.items) ? f.options.items : [];
+                      return (
+                        <div key={key}>
+                          <div className="block text-sm font-medium text-gray-900">{f.label || key}</div>
+                          <div className="mt-2 flex flex-wrap gap-3">
+                            {opts.map((o, idx) => {
+                              const v = o.value ?? o.key ?? o.id ?? o;
+                              const l = o.label ?? o.name ?? String(o);
+                              return (
+                                <label key={idx} className="inline-flex items-center gap-2 text-sm text-gray-900">
+                                  <input
+                                    type="radio"
+                                    name={`vc-${key}`}
+                                    checked={String(val) === String(v)}
+                                    onChange={() => onChange(v)}
+                                  />
+                                  {l}
+                                </label>
+                              );
+                            })}
+                          </div>
+                          {f.help_text ? <div className="mt-1 text-xs text-gray-600">{f.help_text}</div> : null}
+                        </div>
+                      );
+                    }
+                    // default: text/email/number/tel/url
+                    return (
+                      <div key={key}>
+                        <label className="block text-sm font-medium text-gray-900">{f.label || key}</label>
+                        <input
+                          type={["email","number","tel","url"].includes(type) ? type : "text"}
+                          className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900"
+                          value={String(val)}
+                          onChange={(e) => onChange(e.target.value)}
+                          placeholder={f.placeholder || ""}
+                        />
+                        {f.help_text ? <div className="mt-1 text-xs text-gray-600">{f.help_text}</div> : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+
+              {vcErr ? <div className="text-sm text-red-600">{vcErr}</div> : null}
+            </div>
+
+            <div className="px-5 pb-5 pt-3 border-t border-gray-200 flex items-center justify-end gap-3">
+              {/* No general Skip button per spec; can add later via config */}
+              <button
+                onClick={submitVC}
+                disabled={vcSubmitting}
+                className="inline-flex items-center justify-center rounded-md bg-black px-4 py-2 text-white text-sm hover:opacity-90 disabled:opacity-50"
+              >
+                {vcSubmitting ? "Saving…" : "Continue"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ------------------ End Visitor Capture Modal ------------------ */}
+    </>
   );
 }
