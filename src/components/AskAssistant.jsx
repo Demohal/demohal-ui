@@ -37,8 +37,8 @@ import ViewDoc from "./screens/ViewDoc";
 import PriceEstimate from "./screens/PriceEstimate";
 import ScheduleMeeting from "./screens/ScheduleMeeting";
 
-// NOTE: Do NOT statically import ThemeLab to avoid build failures when the file
-// does not exist in certain deployments. We lazy-load it below when needed.
+// NOTE: Do NOT statically import ThemeLab. We lazy-load it below with `@vite-ignore`
+// so builds succeed even if src/components/ThemeLab.jsx is not present.
 
 // Assets
 import fallbackLogo from "../assets/logo.png";
@@ -69,7 +69,6 @@ export default function AskAssistant() {
       const v = (qs.get("themelab") || "").trim().toLowerCase();
       const themeFlag =
         hasThemeLab && (v === "" || v === "1" || v === "true");
-
       return {
         aliasFromUrl: (qs.get("alias") || qs.get("alais") || "").trim(),
         botIdFromUrl: (qs.get("bot_id") || "").trim(),
@@ -330,7 +329,7 @@ export default function AskAssistant() {
   };
   const openBrowse = () => {
     setMode("browse");
-    setSelected(null);
+    setSelected null;
     loadDemos();
     requestAnimationFrame(() =>
       contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
@@ -471,12 +470,14 @@ export default function AskAssistant() {
     );
   }
 
-  // ------------- ThemeLab override (render ASAP; lazy import) -------------
+  // ------------- ThemeLab override (render ASAP; lazy import with @vite-ignore) -------------
   if (themelabEnabled) {
     const ThemeLabLazy = useMemo(
       () =>
-        lazy(() =>
-          import("./ThemeLab")
+        lazy(() => {
+          const path = "./ThemeLab"; // kept separate so Vite won't resolve statically
+          // @ts-ignore
+          return import(/* @vite-ignore */ path)
             .then((m) => ({ default: m.default || m }))
             .catch(() => ({
               default: () => (
@@ -486,8 +487,8 @@ export default function AskAssistant() {
                   <code>src/components/ThemeLab.jsx</code>.
                 </div>
               ),
-            }))
-        ),
+            }));
+        }),
       []
     );
     const resolvedBotId = botId || bot?.id || botIdFromUrl || "";
@@ -846,8 +847,8 @@ export default function AskAssistant() {
 }
 
 /*
-REV: 2025-09-02 T13:40 EDT
-- ThemeLab flag expanded to ?themelab, ?themelab=1, ?themelab=true
-- Lazy-load ThemeLab to avoid build failures when file is absent
-- Render ThemeLab before other guards so it appears even while botId resolves
+REV: 2025-09-02 T13:55 EDT
+- ThemeLab: lazy import with /* @vite-ignore *\/ to prevent build-time resolution
+- Accept ?themelab, ?themelab=1, ?themelab=true
+- Render ThemeLab before guards; graceful fallback UI if file absent
 */
