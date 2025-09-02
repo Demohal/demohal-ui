@@ -3,6 +3,7 @@
 // Includes:
 //  - Preview bridge via usePreviewBridge (/?preview=1)
 //  - Visitor Capture (one-time Name/Email gate; DB-driven optional fields)
+//  - ThemeLab preview (/?themelab=1)
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import AppShell from "./shared/AppShell";
@@ -28,6 +29,9 @@ import ViewDoc from "./screens/ViewDoc";
 import PriceEstimate from "./screens/PriceEstimate";
 import ScheduleMeeting from "./screens/ScheduleMeeting";
 
+// ThemeLab (rendered when ?themelab=1)
+import ThemeLab from "./ThemeLab";
+
 // Assets
 import fallbackLogo from "../assets/logo.png";
 
@@ -49,12 +53,13 @@ export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app-dev.onrender.com";
 
   // URL params
-  const { aliasFromUrl, botIdFromUrl, previewEnabled } = useMemo(() => {
+  const { aliasFromUrl, botIdFromUrl, previewEnabled, themelabEnabled } = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     return {
       aliasFromUrl: (qs.get("alias") || qs.get("alais") || "").trim(),
       botIdFromUrl: (qs.get("bot_id") || "").trim(),
       previewEnabled: qs.get("preview") === "1",
+      themelabEnabled: qs.get("themelab") === "1",
     };
   }, []);
 
@@ -384,6 +389,11 @@ export default function AskAssistant() {
     );
   }
 
+  // --- ThemeLab override: render ThemeLab when ?themelab=1 ---
+  if (themelabEnabled) {
+    return <ThemeLab botId={botId} apiBase={apiBase} themeVars={{ ...themeVars, ...previewVars }} />;
+  }
+
   // Logo from bot; fallback to local asset
   const logoUrl = bot?.logo_url || bot?.logo_light_url || bot?.logo_dark_url || fallbackLogo;
 
@@ -624,3 +634,7 @@ export default function AskAssistant() {
     </>
   );
 }
+
+/* 
+REV: 2025-09-02 T12:35 EDT — Add ThemeLab support (/?themelab=1) with early return rendering <ThemeLab />.
+*/
