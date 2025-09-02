@@ -173,17 +173,17 @@ function ThemeLab({ apiBase }) {
     <div className="w-screen h-[100dvh] grid grid-cols-1 md:grid-cols-[300px_1fr]">
       {/* Left control */}
       <div className="border-r border-gray-200 p-4 overflow-y-auto bg-white">
-        <div className="text-sm font-semibold mb-2">Theme Editor</div>
-        <div className="text-xs text-gray-500 mb-4">
+        <div className="text-sm font-semibold mb-2 text-black">Theme Editor</div>
+        <div className="text-xs text-black mb-4">
           {botId ? <>bot_id <code>{botId}</code></> : alias ? <>alias <code>{alias}</code> (resolving…)</> : "Provide alias or bot_id in the URL."}
         </div>
 
-        {loading ? <div className="text-xs text-gray-500 mb-4">Loading tokens…</div> : null}
+        {loading ? <div className="text-xs text-black mb-4">Loading tokens…</div> : null}
         {error ? <div className="text-xs text-red-600 mb-4">{error}</div> : null}
 
         {grouped.map(([grp, rows]) => (
           <div key={grp} className="mb-6">
-            <div className="text-[0.8rem] font-bold mb-2">{grp}</div>
+            <div className="text-[0.8rem] font-bold mb-2 text-black">{grp}</div>
             <div className="space-y-2">
               {rows.map((t) => {
                 const key = t.token_key || t.key;
@@ -204,9 +204,9 @@ function ThemeLab({ apiBase }) {
                       }
                     }}
                   >
-                    <div className="text-[0.8rem]">
+                    <div className="text-[0.8rem] text-black">
                       <div className="font-medium">{label}</div>
-                      {t.description ? <div className="text-[0.7rem] text-gray-500">{t.description}</div> : null}
+                      {t.description ? <div className="text-[0.7rem] text-black/70">{t.description}</div> : null}
                     </div>
                     {type === "boolean" ? (
                       <input
@@ -217,7 +217,7 @@ function ThemeLab({ apiBase }) {
                     ) : type === "length" || type === "number" ? (
                       <input
                         type="text"
-                        className="w-28 border rounded px-2 py-1 text-sm"
+                        className="w-28 border rounded px-2 py-1 text-sm text-black"
                         value={val}
                         onChange={(e) => onChangeToken(t, e.target.value)}
                         placeholder={type === "length" ? "0.75rem" : "number"}
@@ -241,7 +241,7 @@ function ThemeLab({ apiBase }) {
         {/* Footer actions */}
         <div className="sticky bottom-0 pt-3 bg-white border-t border-gray-200 mt-6">
           <button
-            className="w-full mb-2 py-2 rounded bg-gray-100 hover:bg-gray-200 text-sm"
+            className="w-full mb-2 py-2 rounded bg-gray-100 hover:bg-gray-200 text-sm text-black"
             onClick={onDiscard}
             disabled={saving || !Object.keys(draft).length}
           >
@@ -499,7 +499,15 @@ export default function AskAssistant() {
       const { type, payload } = e.data || {};
       if (type === "preview:theme") {
         const vars = (payload && payload.vars) || {};
+        // 1) merge into local overlay (used by AppShell container)
         setPreviewVars((prev) => ({ ...prev, ...vars }));
+        // 2) also set directly on :root to ensure immediate visibility
+        try {
+          const root = document.documentElement;
+          Object.entries(vars).forEach(([k, v]) => {
+            if (k && typeof v === "string") root.style.setProperty(k, v);
+          });
+        } catch {}
       } else if (type === "preview:go") {
         if (payload && payload.screen) goTo(payload.screen);
       } else if (type === "preview:reload") {
@@ -514,7 +522,7 @@ export default function AskAssistant() {
   if (fatal) {
     return (
       <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
-        <div className="text-red-600 font-semibold">{fatal}</div>
+        <div className="text-red-600 font-semibold"> {fatal} </div>
       </div>
     );
   }
