@@ -3,9 +3,17 @@
 // Includes:
 //  - Preview bridge via usePreviewBridge (/?preview=1)
 //  - Visitor Capture (one-time Name/Email gate; DB-driven optional fields)
-//  - ThemeLab preview (/?themelab=1)
+//  - ThemeLab preview (/?themelab)
 
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+  lazy,
+  Suspense,
+} from "react";
 import AppShell from "./shared/AppShell";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 
@@ -29,8 +37,8 @@ import ViewDoc from "./screens/ViewDoc";
 import PriceEstimate from "./screens/PriceEstimate";
 import ScheduleMeeting from "./screens/ScheduleMeeting";
 
-// ThemeLab (rendered when ?themelab=1)
-import ThemeLab from "./ThemeLab";
+// NOTE: Do NOT statically import ThemeLab to avoid build failures when the file
+// does not exist in certain deployments. We lazy-load it below when needed.
 
 // Assets
 import fallbackLogo from "../assets/logo.png";
@@ -50,18 +58,25 @@ const DEFAULT_THEME_VARS = {
 };
 
 export default function AskAssistant() {
-  const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app-dev.onrender.com";
+  const apiBase =
+    import.meta.env.VITE_API_URL || "https://demohal-app-dev.onrender.com";
 
   // URL params
-  const { aliasFromUrl, botIdFromUrl, previewEnabled, themelabEnabled } = useMemo(() => {
-    const qs = new URLSearchParams(window.location.search);
-    return {
-      aliasFromUrl: (qs.get("alias") || qs.get("alais") || "").trim(),
-      botIdFromUrl: (qs.get("bot_id") || "").trim(),
-      previewEnabled: qs.get("preview") === "1",
-      themelabEnabled: qs.get("themelab") === "1",
-    };
-  }, []);
+  const { aliasFromUrl, botIdFromUrl, previewEnabled, themelabEnabled } =
+    useMemo(() => {
+      const qs = new URLSearchParams(window.location.search);
+      const hasThemeLab = qs.has("themelab");
+      const v = (qs.get("themelab") || "").trim().toLowerCase();
+      const themeFlag =
+        hasThemeLab && (v === "" || v === "1" || v === "true");
+
+      return {
+        aliasFromUrl: (qs.get("alias") || qs.get("alais") || "").trim(),
+        botIdFromUrl: (qs.get("bot_id") || "").trim(),
+        previewEnabled: qs.get("preview") === "1",
+        themelabEnabled: themeFlag,
+      };
+    }, []);
 
   // Bot settings (tabs + welcome + intro video) — includes bot for logo
   const {
@@ -88,7 +103,11 @@ export default function AskAssistant() {
   });
 
   // ---------------- Visitor Capture (config/state) ----------------
-  const [vcConfig, setVcConfig] = useState({ show_flag: false, message: "", skip_param: "dh_skip_capture" });
+  const [vcConfig, setVcConfig] = useState({
+    show_flag: false,
+    message: "",
+    skip_param: "dh_skip_capture",
+  });
   const [vcFields, setVcFields] = useState([]);
   const [vcLoaded, setVcLoaded] = useState(false);
   const [vcOpen, setVcOpen] = useState(false);
@@ -104,18 +123,36 @@ export default function AskAssistant() {
   const [selected, setSelected] = useState(null);
 
   // Ask
-  const { input, setInput, lastQuestion, responseText, recommendations, loading: askLoading, send } = useAsk({
+  const {
+    input,
+    setInput,
+    lastQuestion,
+    responseText,
+    recommendations,
+    loading: askLoading,
+    send,
+  } = useAsk({
     apiBase,
     botId,
   });
 
   // Lists
-  const { items: demoItems, loading: demosLoading, error: demosError, load: loadDemos } = useDemos({
+  const {
+    items: demoItems,
+    loading: demosLoading,
+    error: demosError,
+    load: loadDemos,
+  } = useDemos({
     apiBase,
     botId,
     autoLoad: false,
   });
-  const { items: docItems, loading: docsLoading, error: docsError, load: loadDocs } = useDocs({
+  const {
+    items: docItems,
+    loading: docsLoading,
+    error: docsError,
+    load: loadDocs,
+  } = useDocs({
     apiBase,
     botId,
     autoLoad: false,
@@ -124,11 +161,20 @@ export default function AskAssistant() {
   // Snapshot the latest lists for preview navigation
   const demoItemsRef = useRef([]);
   const docItemsRef = useRef([]);
-  useEffect(() => { demoItemsRef.current = demoItems || []; }, [demoItems]);
-  useEffect(() => { docItemsRef.current = docItems || []; }, [docItems]);
+  useEffect(() => {
+    demoItemsRef.current = demoItems || [];
+  }, [demoItems]);
+  useEffect(() => {
+    docItemsRef.current = docItems || [];
+  }, [docItems]);
 
   // Meeting
-  const { agent, loading: agentLoading, error: agentError, refresh: refreshAgent } = useAgent({ apiBase, botId });
+  const {
+    agent,
+    loading: agentLoading,
+    error: agentError,
+    refresh: refreshAgent,
+  } = useAgent({ apiBase, botId });
 
   // Pricing
   const {
@@ -159,7 +205,10 @@ export default function AskAssistant() {
   }, [input]);
 
   // ---- Visitor Capture: load config + UTM skip ----
-  const vcKey = useMemo(() => (botId ? `vc::${botId}::done` : ""), [botId]);
+  const vcKey = useMemo(
+    () => (botId ? `vc::${botId}::done` : ""),
+    [botId]
+  );
 
   useEffect(() => {
     let stop = false;
@@ -183,7 +232,9 @@ export default function AskAssistant() {
 
         // UTM skip
         const qs = new URLSearchParams(window.location.search);
-        const hasSkip = ((cfg.skip_param || "dh_skip_capture") && (qs.get(cfg.skip_param) || "").toLowerCase() === "1");
+        const hasSkip =
+          (cfg.skip_param || "dh_skip_capture") &&
+          (qs.get(cfg.skip_param) || "").toLowerCase() === "1";
         if (hasSkip && vcKey) localStorage.setItem(vcKey, "1");
       } catch {
         // ignore
@@ -192,11 +243,19 @@ export default function AskAssistant() {
       }
     }
     loadVC();
-    return () => { stop = true; };
+    return () => {
+      stop = true;
+    };
   }, [apiBase, botId, vcKey]);
 
-  const vcCompleted = useMemo(() => (vcKey ? localStorage.getItem(vcKey) === "1" : true), [vcKey]);
-  const gatingActive = useMemo(() => vcLoaded && vcConfig.show_flag && !vcCompleted, [vcLoaded, vcConfig.show_flag, vcCompleted]);
+  const vcCompleted = useMemo(
+    () => (vcKey ? localStorage.getItem(vcKey) === "1" : true),
+    [vcKey]
+  );
+  const gatingActive = useMemo(
+    () => vcLoaded && vcConfig.show_flag && !vcCompleted,
+    [vcLoaded, vcConfig.show_flag, vcCompleted]
+  );
 
   const validEmail = (s) => {
     const str = String(s || "").trim();
@@ -265,31 +324,41 @@ export default function AskAssistant() {
   const openAsk = () => {
     setMode("ask");
     setSelected(null);
-    requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+    requestAnimationFrame(() =>
+      contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+    );
   };
   const openBrowse = () => {
     setMode("browse");
     setSelected(null);
     loadDemos();
-    requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+    requestAnimationFrame(() =>
+      contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+    );
   };
   const openBrowseDocs = () => {
     setMode("docs");
     setSelected(null);
     loadDocs();
-    requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+    requestAnimationFrame(() =>
+      contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+    );
   };
   const openPrice = () => {
     setMode("price");
     setSelected(null);
     loadQuestions();
-    requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+    requestAnimationFrame(() =>
+      contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+    );
   };
   const openMeeting = () => {
     setMode("meeting");
     setSelected(null);
     refreshAgent();
-    requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+    requestAnimationFrame(() =>
+      contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+    );
   };
 
   // Banner title
@@ -301,7 +370,9 @@ export default function AskAssistant() {
     if (q.type === "multi_choice") toggleMulti(q.q_key, opt.key);
     else setAnswer(q.q_key, opt.key);
   }
-  const nextQAugmented = nextQuestion ? { ...nextQuestion, _value: answers[nextQuestion.q_key] } : null;
+  const nextQAugmented = nextQuestion
+    ? { ...nextQuestion, _value: answers[nextQuestion.q_key] }
+    : null;
 
   // --- Preview navigation callback (consumed by usePreviewBridge) ---
   const goTo = useCallback(async (screen) => {
@@ -342,15 +413,42 @@ export default function AskAssistant() {
   }, []);
 
   // Hook: preview message bridge (replaces inline listener)
-  const { previewVars } = usePreviewBridge({ enabled: previewEnabled, onGo: goTo });
+  const { previewVars } = usePreviewBridge({
+    enabled: previewEnabled,
+    onGo: goTo,
+  });
 
   // Tabs for AppShell (Ask is not a tab; ask bar is global)
   const tabs = useMemo(() => {
     const out = [];
-    if (tabsEnabled.demos) out.push({ key: "demos", label: "Browse Demos", active: mode === "browse", onClick: () => requireCaptureOr(openBrowse) });
-    if (tabsEnabled.docs) out.push({ key: "docs", label: "Browse Documents", active: mode === "docs", onClick: () => requireCaptureOr(openBrowseDocs) });
-    if (tabsEnabled.price) out.push({ key: "price", label: "Price Estimate", active: mode === "price", onClick: () => requireCaptureOr(openPrice) });
-    if (tabsEnabled.meeting) out.push({ key: "meeting", label: "Schedule Meeting", active: mode === "meeting", onClick: () => requireCaptureOr(openMeeting) });
+    if (tabsEnabled.demos)
+      out.push({
+        key: "demos",
+        label: "Browse Demos",
+        active: mode === "browse",
+        onClick: () => requireCaptureOr(openBrowse),
+      });
+    if (tabsEnabled.docs)
+      out.push({
+        key: "docs",
+        label: "Browse Documents",
+        active: mode === "docs",
+        onClick: () => requireCaptureOr(openBrowseDocs),
+      });
+    if (tabsEnabled.price)
+      out.push({
+        key: "price",
+        label: "Price Estimate",
+        active: mode === "price",
+        onClick: () => requireCaptureOr(openPrice),
+      });
+    if (tabsEnabled.meeting)
+      out.push({
+        key: "meeting",
+        label: "Schedule Meeting",
+        active: mode === "meeting",
+        onClick: () => requireCaptureOr(openMeeting),
+      });
     return out;
   }, [tabsEnabled, mode, requireCaptureOr]);
 
@@ -368,7 +466,40 @@ export default function AskAssistant() {
     } catch {
       setSelected(item);
     }
-    requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+    requestAnimationFrame(() =>
+      contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+    );
+  }
+
+  // ------------- ThemeLab override (render ASAP; lazy import) -------------
+  if (themelabEnabled) {
+    const ThemeLabLazy = useMemo(
+      () =>
+        lazy(() =>
+          import("./ThemeLab")
+            .then((m) => ({ default: m.default || m }))
+            .catch(() => ({
+              default: () => (
+                <div className="p-4 text-sm text-gray-700">
+                  ThemeLab isn’t installed in this build. Remove{" "}
+                  <code>?themelab</code> or add{" "}
+                  <code>src/components/ThemeLab.jsx</code>.
+                </div>
+              ),
+            }))
+        ),
+      []
+    );
+    const resolvedBotId = botId || bot?.id || botIdFromUrl || "";
+    return (
+      <Suspense fallback={<div className="p-4 text-sm text-gray-600">Loading ThemeLab…</div>}>
+        <ThemeLabLazy
+          botId={resolvedBotId}
+          apiBase={apiBase}
+          themeVars={{ ...themeVars, ...previewVars }}
+        />
+      </Suspense>
+    );
   }
 
   // Early exits
@@ -381,7 +512,10 @@ export default function AskAssistant() {
   }
   if (!botId) {
     return (
-      <div className="w-screen min-h-[100dvh] flex items-center justify-center" style={DEFAULT_THEME_VARS}>
+      <div
+        className="w-screen min-h-[100dvh] flex items-center justify-center"
+        style={DEFAULT_THEME_VARS}
+      >
         <div className="text-gray-800 text-center space-y-2">
           <div className="text-lg font-semibold">Resolving bot…</div>
         </div>
@@ -389,13 +523,9 @@ export default function AskAssistant() {
     );
   }
 
-  // --- ThemeLab override: render ThemeLab when ?themelab=1 ---
-  if (themelabEnabled) {
-    return <ThemeLab botId={botId} apiBase={apiBase} themeVars={{ ...themeVars, ...previewVars }} />;
-  }
-
   // Logo from bot; fallback to local asset
-  const logoUrl = bot?.logo_url || bot?.logo_light_url || bot?.logo_dark_url || fallbackLogo;
+  const logoUrl =
+    bot?.logo_url || bot?.logo_light_url || bot?.logo_dark_url || fallbackLogo;
 
   return (
     <>
@@ -423,7 +553,9 @@ export default function AskAssistant() {
         // Merge live theme with preview overlay (overlay wins)
         themeVars={{ ...themeVars, ...previewVars }}
         askInputRef={inputRef}
-        askSendIcon={<ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:text-[var(--send-color-hover)]" />}
+        askSendIcon={
+          <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:text-[var(--send-color-hover)]" />
+        }
       >
         <div ref={contentRef} className="flex-1 flex flex-col space-y-4">
           {mode === "ask" && !selected && (
@@ -439,12 +571,21 @@ export default function AskAssistant() {
             />
           )}
 
-          {mode === "ask" && selected && <ViewDemo title={selected.title} url={selected.url} />}
+          {mode === "ask" && selected && (
+            <ViewDemo title={selected.title} url={selected.url} />
+          )}
 
           {mode === "browse" && !selected && (
-            <BrowseDemos items={demoItems} loading={demosLoading} error={demosError} onPick={(it) => onPickDemo(it)} />
+            <BrowseDemos
+              items={demoItems}
+              loading={demosLoading}
+              error={demosError}
+              onPick={(it) => onPickDemo(it)}
+            />
           )}
-          {mode === "browse" && selected && <ViewDemo title={selected.title} url={selected.url} />}
+          {mode === "browse" && selected && (
+            <ViewDemo title={selected.title} url={selected.url} />
+          )}
 
           {mode === "docs" && !selected && (
             <BrowseDocs
@@ -453,11 +594,15 @@ export default function AskAssistant() {
               error={docsError}
               onPick={(it) => {
                 setSelected(it);
-                requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+                requestAnimationFrame(() =>
+                  contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+                );
               }}
             />
           )}
-          {mode === "docs" && selected && <ViewDoc title={selected.title} url={selected.url} />}
+          {mode === "docs" && selected && (
+            <ViewDoc title={selected.title} url={selected.url} />
+          )}
 
           {mode === "price" && (
             <PriceEstimate
@@ -466,14 +611,21 @@ export default function AskAssistant() {
               nextQuestion={nextQAugmented}
               estimate={estimate}
               estimating={estimating}
-              errorQuestions={errorQuestions || (loadingQuestions ? "Loading questions…" : "")}
+              errorQuestions={
+                errorQuestions || (loadingQuestions ? "Loading questions…" : "")
+              }
               errorEstimate={errorEstimate}
               onPickOption={onPickPriceOption}
             />
           )}
 
           {mode === "meeting" && (
-            <ScheduleMeeting agent={agent} loading={agentLoading} error={agentError} onRefresh={refreshAgent} />
+            <ScheduleMeeting
+              agent={agent}
+              loading={agentLoading}
+              error={agentError}
+              onRefresh={refreshAgent}
+            />
           )}
         </div>
       </AppShell>
@@ -483,16 +635,21 @@ export default function AskAssistant() {
         <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50">
           <div className="w-[92vw] max-w-xl rounded-2xl bg-white shadow-xl border border-gray-200">
             <div className="p-5 border-b border-gray-200">
-              <div className="text-xl font-semibold text-gray-900">Before we get started</div>
+              <div className="text-xl font-semibold text-gray-900">
+                Before we get started
+              </div>
               <div className="mt-1 text-sm text-gray-700">
-                {vcConfig.message || "Tell us a little about yourself so we can better answer your questions."}
+                {vcConfig.message ||
+                  "Tell us a little about yourself so we can better answer your questions."}
               </div>
             </div>
 
             <div className="p-5 space-y-4">
               {/* Name */}
               <div>
-                <label className="block text-sm font-medium text-gray-900">Name</label>
+                <label className="block text-sm font-medium text-gray-900">
+                  Name
+                </label>
                 <input
                   type="text"
                   className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 outline-none focus:ring-2 focus:ring-gray-300"
@@ -504,7 +661,9 @@ export default function AskAssistant() {
 
               {/* Email */}
               <div>
-                <label className="block text-sm font-medium text-gray-900">Email</label>
+                <label className="block text-sm font-medium text-gray-900">
+                  Email
+                </label>
                 <input
                   type="email"
                   className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 outline-none focus:ring-2 focus:ring-gray-300"
@@ -521,32 +680,50 @@ export default function AskAssistant() {
                     const key = f.field_key || f.key;
                     const type = (f.input_type || "text").toLowerCase();
                     const val = vcExtras[key] ?? "";
-                    const onChange = (v) => setVcExtras((prev) => ({ ...prev, [key]: v }));
+                    const onChange = (v) =>
+                      setVcExtras((prev) => ({ ...prev, [key]: v }));
                     if (type === "select") {
-                      const opts = Array.isArray(f.options) ? f.options : Array.isArray(f.options?.items) ? f.options.items : [];
+                      const opts = Array.isArray(f.options)
+                        ? f.options
+                        : Array.isArray(f.options?.items)
+                        ? f.options.items
+                        : [];
                       return (
                         <div key={key}>
-                          <label className="block text-sm font-medium text-gray-900">{f.label || key}</label>
+                          <label className="block text-sm font-medium text-gray-900">
+                            {f.label || key}
+                          </label>
                           <select
                             className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900"
                             value={String(val)}
                             onChange={(e) => onChange(e.target.value)}
                           >
-                            <option value="">{f.placeholder || "Select…"}</option>
+                            <option value="">
+                              {f.placeholder || "Select…"}
+                            </option>
                             {opts.map((o, idx) => (
-                              <option key={idx} value={o.value ?? o.key ?? o.id ?? o}>
+                              <option
+                                key={idx}
+                                value={o.value ?? o.key ?? o.id ?? o}
+                              >
                                 {o.label ?? o.name ?? String(o)}
                               </option>
                             ))}
                           </select>
-                          {f.help_text ? <div className="mt-1 text-xs text-gray-600">{f.help_text}</div> : null}
+                          {f.help_text ? (
+                            <div className="mt-1 text-xs text-gray-600">
+                              {f.help_text}
+                            </div>
+                          ) : null}
                         </div>
                       );
                     }
                     if (type === "textarea") {
                       return (
                         <div key={key}>
-                          <label className="block text-sm font-medium text-gray-900">{f.label || key}</label>
+                          <label className="block text-sm font-medium text-gray-900">
+                            {f.label || key}
+                          </label>
                           <textarea
                             className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900"
                             rows={3}
@@ -554,7 +731,11 @@ export default function AskAssistant() {
                             onChange={(e) => onChange(e.target.value)}
                             placeholder={f.placeholder || ""}
                           />
-                          {f.help_text ? <div className="mt-1 text-xs text-gray-600">{f.help_text}</div> : null}
+                          {f.help_text ? (
+                            <div className="mt-1 text-xs text-gray-600">
+                              {f.help_text}
+                            </div>
+                          ) : null}
                         </div>
                       );
                     }
@@ -567,21 +748,34 @@ export default function AskAssistant() {
                             onChange={(e) => onChange(e.target.checked)}
                             className="h-4 w-4"
                           />
-                          <label className="text-sm text-gray-900">{f.label || key}</label>
+                          <label className="text-sm text-gray-900">
+                            {f.label || key}
+                          </label>
                         </div>
                       );
                     }
                     if (type === "radio") {
-                      const opts = Array.isArray(f.options) ? f.options : Array.isArray(f.options?.items) ? f.options.items : [];
+                      const opts = Array.isArray(f.options)
+                        ? f.options
+                        : Array.isArray(f.options?.items)
+                        ? f.options.items
+                        : [];
                       return (
                         <div key={key}>
-                          <div className="block text-sm font-medium text-gray-900">{f.label || key}</div>
+                          <div className="block text-sm font-medium text-gray-900">
+                            {f.label || key}
+                          </div>
                           <div className="mt-2 flex flex-wrap gap-3">
                             {opts.map((o, idx) => {
-                              const v = o.value ?? o.key ?? o.id ?? o;
-                              const l = o.label ?? o.name ?? String(o);
+                              const v =
+                                o.value ?? o.key ?? o.id ?? o;
+                              const l =
+                                o.label ?? o.name ?? String(o);
                               return (
-                                <label key={idx} className="inline-flex items-center gap-2 text-sm text-gray-900">
+                                <label
+                                  key={idx}
+                                  className="inline-flex items-center gap-2 text-sm text-gray-900"
+                                >
                                   <input
                                     type="radio"
                                     name={`vc-${key}`}
@@ -593,29 +787,45 @@ export default function AskAssistant() {
                               );
                             })}
                           </div>
-                          {f.help_text ? <div className="mt-1 text-xs text-gray-600">{f.help_text}</div> : null}
+                          {f.help_text ? (
+                            <div className="mt-1 text-xs text-gray-600">
+                              {f.help_text}
+                            </div>
+                          ) : null}
                         </div>
                       );
                     }
                     // default: text/email/number/tel/url
                     return (
                       <div key={key}>
-                        <label className="block text-sm font-medium text-gray-900">{f.label || key}</label>
+                        <label className="block text-sm font-medium text-gray-900">
+                          {f.label || key}
+                        </label>
                         <input
-                          type={["email","number","tel","url"].includes(type) ? type : "text"}
+                          type={
+                            ["email", "number", "tel", "url"].includes(type)
+                              ? type
+                              : "text"
+                          }
                           className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900"
                           value={String(val)}
                           onChange={(e) => onChange(e.target.value)}
                           placeholder={f.placeholder || ""}
                         />
-                        {f.help_text ? <div className="mt-1 text-xs text-gray-600">{f.help_text}</div> : null}
+                        {f.help_text ? (
+                          <div className="mt-1 text-xs text-gray-600">
+                            {f.help_text}
+                          </div>
+                        ) : null}
                       </div>
                     );
                   })}
                 </div>
               ) : null}
 
-              {vcErr ? <div className="text-sm text-red-600">{vcErr}</div> : null}
+              {vcErr ? (
+                <div className="text-sm text-red-600">{vcErr}</div>
+              ) : null}
             </div>
 
             <div className="px-5 pb-5 pt-3 border-t border-gray-200 flex items-center justify-end gap-3">
@@ -635,6 +845,9 @@ export default function AskAssistant() {
   );
 }
 
-/* 
-REV: 2025-09-02 T12:35 EDT — Add ThemeLab support (/?themelab=1) with early return rendering <ThemeLab />.
+/*
+REV: 2025-09-02 T13:40 EDT
+- ThemeLab flag expanded to ?themelab, ?themelab=1, ?themelab=true
+- Lazy-load ThemeLab to avoid build failures when file is absent
+- Render ThemeLab before other guards so it appears even while botId resolves
 */
