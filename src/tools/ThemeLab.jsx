@@ -1,4 +1,7 @@
 // src/tools/ThemeLab.jsx
+// Standalone Theme editor. Open via: /?themelab=1&alias=... (or &bot_id=...)
+// Sends preview messages to the app when the iframe URL includes ?preview=1.
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 const snakeToKebab = (s) => String(s || "").trim().replace(/_/g, "-");
@@ -8,6 +11,7 @@ export default function ThemeLab({ apiBase = import.meta.env.VITE_API_URL || "ht
   const qs = new URLSearchParams(window.location.search);
   const alias = (qs.get("alias") || "").trim();
   const botIdFromUrl = (qs.get("bot_id") || "").trim();
+
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [loading, setLoading] = useState(false);
   const [tokens, setTokens] = useState([]);        // [{ token_key, value, input_type, label, screen_key, client_controlled, group_key, description }]
@@ -30,7 +34,7 @@ export default function ThemeLab({ apiBase = import.meta.env.VITE_API_URL || "ht
     return () => { stop = true; };
   }, [alias, botId, apiBase]);
 
-  // Load editable tokens
+  // Load editable tokens (and push current values into preview on load)
   useEffect(() => {
     if (!botId) return;
     let stop = false;
@@ -57,10 +61,18 @@ export default function ThemeLab({ apiBase = import.meta.env.VITE_API_URL || "ht
           } catch {}
         }
         if (stop) return;
+
         // Filter to client-controlled if present; otherwise include all
         const filtered = rows.filter((r) => r.client_controlled !== false);
         setTokens(filtered);
         setDraft({});
+
+        // Push current server values into preview so it starts synced
+        const vars = {};
+        for (const t of filtered) vars[tokenKeyToCssVar(t.token_key || t.key)] = t.value;
+        try {
+          iframeRef.current?.contentWindow?.postMessage({ type: "preview:theme", payload: { vars } }, window.location.origin);
+        } catch {}
       } catch (e) {
         if (!stop) setError("Unable to load tokens.");
       } finally {
@@ -84,10 +96,12 @@ export default function ThemeLab({ apiBase = import.meta.env.VITE_API_URL || "ht
   function pushPreview(token_key, value, screen_key) {
     const cssVar = tokenKeyToCssVar(token_key);
     const msg = { type: "preview:theme", payload: { vars: { [cssVar]: value } } };
-    iframeRef.current?.contentWindow?.postMessage(msg, window.location.origin);
-    if (screen_key) {
-      iframeRef.current?.contentWindow?.postMessage({ type: "preview:go", payload: { screen: screen_key } }, window.location.origin);
-    }
+    try {
+      iframeRef.current?.contentWindow?.postMessage(msg, window.location.origin);
+      if (screen_key) {
+        iframeRef.current?.contentWindow?.postMessage({ type: "preview:go", payload: { screen: screen_key } }, window.location.origin);
+      }
+    } catch {}
   }
 
   function onChangeToken(t, value) {
@@ -110,7 +124,9 @@ export default function ThemeLab({ apiBase = import.meta.env.VITE_API_URL || "ht
       if (!data?.ok) throw new Error(data?.error || "Save failed");
       setDraft({});
       // Ask the app to re-read brand vars
-      iframeRef.current?.contentWindow?.postMessage({ type: "preview:reload" }, window.location.origin);
+      try {
+        iframeRef.current?.contentWindow?.postMessage({ type: "preview:reload" }, window.location.origin);
+      } catch {}
     } catch (e) {
       setError(e.message || "Save failed");
     } finally {
@@ -123,7 +139,9 @@ export default function ThemeLab({ apiBase = import.meta.env.VITE_API_URL || "ht
     // Re-apply server values from current token list
     const vars = {};
     for (const t of tokens) vars[tokenKeyToCssVar(t.token_key || t.key)] = t.value;
-    iframeRef.current?.contentWindow?.postMessage({ type: "preview:theme", payload: { vars } }, window.location.origin);
+    try {
+      iframeRef.current?.contentWindow?.postMessage({ type: "preview:theme", payload: { vars } }, window.location.origin);
+    } catch {}
   }
 
   const previewSrc = useMemo(() => {
@@ -139,14 +157,14 @@ export default function ThemeLab({ apiBase = import.meta.env.VITE_API_URL || "ht
   return (
     <div className="w-screen h-[100dvh] grid grid-cols-1 md:grid-cols-[300px_1fr]">
       {/* Left control box */}
-      <div className="border-r border-gray-200 p-4 overflow-y-auto">
+      <div className="border-r border-gray-200 p-4 overflow-y-auto bg-white text-black">
         <div className="text-sm font-semibold mb-2">Theme Editor</div>
-        <div className="text-xs text-gray-500 mb-4">
+        <div className="text-xs text-black mb-4">
           {botId ? <>bot_id <code>{botId}</code></> : alias ? <>alias <code>{alias}</code> (resolving…)</> : "Provide alias or bot_id in the URL."}
         </div>
 
-        {loading ? <div className="text-xs text-gray-500">Loading tokens…</div> : null}
-        {error ? <div className="text-xs text-red-600">{error}</div> : null}
+        {loading ? <div className="text-xs text-black mb-4">Loading tokens…</div> : null}
+        {error ? <div className="text-xs text-red-600 mb-4">{error}</div> : null}
 
         {grouped.map(([grp, rows]) => (
           <div key={grp} className="mb-6">
@@ -164,16 +182,18 @@ export default function ThemeLab({ apiBase = import.meta.env.VITE_API_URL || "ht
                     className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 p-2 hover:bg-gray-50"
                     onClick={() => {
                       if (screenKey) {
-                        iframeRef.current?.contentWindow?.postMessage(
-                          { type: "preview:go", payload: { screen: screenKey } },
-                          window.location.origin
-                        );
+                        try {
+                          iframeRef.current?.contentWindow?.postMessage(
+                            { type: "preview:go", payload: { screen: screenKey } },
+                            window.location.origin
+                          );
+                        } catch {}
                       }
                     }}
                   >
                     <div className="text-[0.8rem]">
                       <div className="font-medium">{label}</div>
-                      {t.description ? <div className="text-[0.7rem] text-gray-500">{t.description}</div> : null}
+                      {t.description ? <div className="text-[0.7rem] text-black/70">{t.description}</div> : null}
                     </div>
                     {type === "boolean" ? (
                       <input
@@ -184,7 +204,7 @@ export default function ThemeLab({ apiBase = import.meta.env.VITE_API_URL || "ht
                     ) : type === "length" || type === "number" ? (
                       <input
                         type="text"
-                        className="w-28 border rounded px-2 py-1 text-sm"
+                        className="w-28 border rounded px-2 py-1 text-sm text-black"
                         value={val}
                         onChange={(e) => onChangeToken(t, e.target.value)}
                         placeholder={type === "length" ? "e.g. 0.75rem" : "number"}
@@ -208,7 +228,7 @@ export default function ThemeLab({ apiBase = import.meta.env.VITE_API_URL || "ht
         {/* Footer actions */}
         <div className="sticky bottom-0 pt-3 bg-white border-t border-gray-200 mt-6">
           <button
-            className="w-full mb-2 py-2 rounded bg-gray-100 hover:bg-gray-200 text-sm"
+            className="w-full mb-2 py-2 rounded bg-gray-100 hover:bg-gray-200 text-sm text-black"
             onClick={onDiscard}
             disabled={saving || !Object.keys(draft).length}
             title="Discard unsaved changes"
