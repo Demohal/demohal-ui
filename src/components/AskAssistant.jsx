@@ -58,18 +58,21 @@ export default function AskAssistant() {
   const apiBase =
     import.meta.env.VITE_API_URL || "https://demohal-app-dev.onrender.com";
 
-  // URL params
+  // URL params (read from both search and hash to support Vercel previews)
   const { aliasFromUrl, botIdFromUrl, previewEnabled, themelabEnabled } =
     useMemo(() => {
-      const qs = new URLSearchParams(window.location.search);
-      const hasThemeLab = qs.has("themelab");
-      const v = (qs.get("themelab") || "").trim().toLowerCase();
-      const themeFlag =
-        hasThemeLab && (v === "" || v === "1" || v === "true");
+      const search = window.location.search || "";
+      const hash = window.location.hash || "";
+      const merged = new URLSearchParams(
+        [search.replace(/^\?/, ""), hash.replace(/^#\??/, "")].join("&")
+      );
+      const hasThemeLab = merged.has("themelab");
+      const v = (merged.get("themelab") || "").trim().toLowerCase();
+      const themeFlag = hasThemeLab && (v === "" || v === "1" || v === "true");
       return {
-        aliasFromUrl: (qs.get("alias") || qs.get("alais") || "").trim(),
-        botIdFromUrl: (qs.get("bot_id") || "").trim(),
-        previewEnabled: qs.get("preview") === "1",
+        aliasFromUrl: (merged.get("alias") || merged.get("alais") || "").trim(),
+        botIdFromUrl: (merged.get("bot_id") || "").trim(),
+        previewEnabled: merged.get("preview") === "1",
         themelabEnabled: themeFlag,
       };
     }, []);
@@ -224,10 +227,12 @@ export default function AskAssistant() {
         setVcFields(fields);
 
         // UTM skip
-        const qs = new URLSearchParams(window.location.search);
+        const merged = new URLSearchParams(
+          [(window.location.search||"").replace(/^\?/, ""), (window.location.hash||"").replace(/^#\??/, "")].join("&")
+        );
         const hasSkip =
           (cfg.skip_param || "dh_skip_capture") &&
-          (qs.get(cfg.skip_param) || "").toLowerCase() === "1";
+          (merged.get(cfg.skip_param) || "").toLowerCase() === "1";
         if (hasSkip && vcKey) localStorage.setItem(vcKey, "1");
       } catch {
         // ignore
@@ -839,8 +844,8 @@ export default function AskAssistant() {
 }
 
 /*
-REV: 2025-09-02 T15:20 EDT
+REV: 2025-09-02 T16:10 EDT
 - ThemeLab: dynamic import path fixed to "./tools/ThemeLab" (under components/tools)
-- Kept lazy import with /* @vite-ignore *\/ so builds succeed if file is absent
-- Accept ?themelab, ?themelab=1, ?themelab=true; render before guards
+- Accept ?themelab, ?themelab=1, ?themelab=true (from search or hash); render before guards
+- Lazy import with /* @vite-ignore *\/ so builds succeed if file is absent
 */
