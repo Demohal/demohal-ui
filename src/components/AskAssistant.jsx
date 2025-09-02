@@ -3,7 +3,7 @@
 // Includes:
 //  - Preview bridge via usePreviewBridge (/?preview=1)
 //  - Visitor Capture (one-time Name/Email gate; DB-driven optional fields)
-//  - ThemeLab preview (/?themelab)
+//  - ThemeLab preview (/?themelab[=1|true])
 
 import React, {
   useEffect,
@@ -37,8 +37,8 @@ import ViewDoc from "./screens/ViewDoc";
 import PriceEstimate from "./screens/PriceEstimate";
 import ScheduleMeeting from "./screens/ScheduleMeeting";
 
-// NOTE: Do NOT statically import ThemeLab. We lazy-load it below with `@vite-ignore`
-// so builds succeed even if src/components/ThemeLab.jsx is not present.
+// NOTE: Do NOT statically import ThemeLab. We lazy-load it only if requested,
+// so builds succeed even if src/components/ThemeLab.jsx is absent.
 
 // Assets
 import fallbackLogo from "../assets/logo.png";
@@ -329,7 +329,7 @@ export default function AskAssistant() {
   };
   const openBrowse = () => {
     setMode("browse");
-    setSelected null;
+    setSelected(null);
     loadDemos();
     requestAnimationFrame(() =>
       contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
@@ -475,7 +475,7 @@ export default function AskAssistant() {
     const ThemeLabLazy = useMemo(
       () =>
         lazy(() => {
-          const path = "./ThemeLab"; // kept separate so Vite won't resolve statically
+          const path = "./ThemeLab"; // keep separate to avoid static resolution
           // @ts-ignore
           return import(/* @vite-ignore */ path)
             .then((m) => ({ default: m.default || m }))
@@ -847,8 +847,8 @@ export default function AskAssistant() {
 }
 
 /*
-REV: 2025-09-02 T13:55 EDT
-- ThemeLab: lazy import with /* @vite-ignore *\/ to prevent build-time resolution
-- Accept ?themelab, ?themelab=1, ?themelab=true
-- Render ThemeLab before guards; graceful fallback UI if file absent
+REV: 2025-09-02 T13:59 EDT
+- Fixed syntax error: setSelected(null);
+- Lazy-load ThemeLab with /* @vite-ignore *\/ to avoid build-time resolution.
+- Accept ?themelab, ?themelab=1, ?themelab=true; render before guards.
 */
