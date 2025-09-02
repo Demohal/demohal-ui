@@ -37,9 +37,6 @@ import ViewDoc from "./screens/ViewDoc";
 import PriceEstimate from "./screens/PriceEstimate";
 import ScheduleMeeting from "./screens/ScheduleMeeting";
 
-// NOTE: Do NOT statically import ThemeLab. We lazy-load it only if requested,
-// so builds succeed even if src/components/ThemeLab.jsx is absent.
-
 // Assets
 import fallbackLogo from "../assets/logo.png";
 
@@ -204,10 +201,7 @@ export default function AskAssistant() {
   }, [input]);
 
   // ---- Visitor Capture: load config + UTM skip ----
-  const vcKey = useMemo(
-    () => (botId ? `vc::${botId}::done` : ""),
-    [botId]
-  );
+  const vcKey = useMemo(() => (botId ? `vc::${botId}::done` : ""), [botId]);
 
   useEffect(() => {
     let stop = false;
@@ -475,7 +469,7 @@ export default function AskAssistant() {
     const ThemeLabLazy = useMemo(
       () =>
         lazy(() => {
-          const path = "./ThemeLab"; // keep separate to avoid static resolution
+          const path = "./tools/ThemeLab"; // correct location under components/tools
           // @ts-ignore
           return import(/* @vite-ignore */ path)
             .then((m) => ({ default: m.default || m }))
@@ -484,7 +478,7 @@ export default function AskAssistant() {
                 <div className="p-4 text-sm text-gray-700">
                   ThemeLab isn’t installed in this build. Remove{" "}
                   <code>?themelab</code> or add{" "}
-                  <code>src/components/ThemeLab.jsx</code>.
+                  <code>src/components/tools/ThemeLab.jsx</code>.
                 </div>
               ),
             }));
@@ -768,10 +762,8 @@ export default function AskAssistant() {
                           </div>
                           <div className="mt-2 flex flex-wrap gap-3">
                             {opts.map((o, idx) => {
-                              const v =
-                                o.value ?? o.key ?? o.id ?? o;
-                              const l =
-                                o.label ?? o.name ?? String(o);
+                              const v = o.value ?? o.key ?? o.id ?? o;
+                              const l = o.label ?? o.name ?? String(o);
                               return (
                                 <label
                                   key={idx}
@@ -847,8 +839,8 @@ export default function AskAssistant() {
 }
 
 /*
-REV: 2025-09-02 T13:59 EDT
-- Fixed syntax error: setSelected(null);
-- Lazy-load ThemeLab with /* @vite-ignore *\/ to avoid build-time resolution.
-- Accept ?themelab, ?themelab=1, ?themelab=true; render before guards.
+REV: 2025-09-02 T15:20 EDT
+- ThemeLab: dynamic import path fixed to "./tools/ThemeLab" (under components/tools)
+- Kept lazy import with /* @vite-ignore *\/ so builds succeed if file is absent
+- Accept ?themelab, ?themelab=1, ?themelab=true; render before guards
 */
