@@ -911,10 +911,9 @@ const brandingMode = !!themeLabEnabled;
             >
                 {brandingMode ? (
                     <>
-                        {/* Left control rail — anchored relative to the 720px app container */}
+                        {/* Left control rail */}
                         <div
-                            className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-3 max-h-[75vh] overflow-auto text-black"
-                            style={{ left: "calc(50% - 360px - 18rem - 8px)" }} /* 18rem = w-72 */
+                            className="fixed left-4 top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-3 max-h-[75vh] overflow-auto text-black"
                         >
                             <div className="font-semibold text-sm tracking-wide uppercase text-black">Controls</div>
 
@@ -997,88 +996,6 @@ const brandingMode = !!themeLabEnabled;
                                 />
                             </div>
                         </div>
-
-                        {/* Right color picker rail — anchored relative to the 720px app container */}
-                        <div
-                            className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-2 max-h-[75vh] overflow-auto text-black"
-                            style={{ left: "calc(50% + 360px + 8px)" }}
-                        >
-                            <div className="font-semibold text-xs tracking-wide uppercase text-black">Colors</div>
-
-                            <label className="flex items-center justify-between text-xs text-black">
-                                Banner Title
-                                <input
-                                    type="color"
-                                    value={brandDraft.css_vars["--banner-fg"] || themeVars["--banner-fg"]}
-                                    onChange={(e) => updateCssVar("--banner-fg", e.target.value)}
-                                />
-                            </label>
-                            <label className="flex items-center justify-between text-xs text-black">
-                                Banner Background
-                                <input
-                                    type="color"
-                                    value={brandDraft.css_vars["--banner-bg"] || themeVars["--banner-bg"]}
-                                    onChange={(e) => updateCssVar("--banner-bg", e.target.value)}
-                                />
-                            </label>
-
-                            <div className="border-t border-black/10 my-1" />
-
-                            <label className="flex items-center justify-between text-xs text-black">
-                                Tab Titles
-                                <input
-                                    type="color"
-                                    value={brandDraft.css_vars["--tab-active-fg"] || themeVars["--tab-active-fg"]}
-                                    onChange={(e) => updateCssVar("--tab-active-fg", e.target.value)}
-                                />
-                            </label>
-                            <label className="flex items-center justify-between text-xs text-black">
-                                Tab Background
-                                <input
-                                    type="color"
-                                    value={brandDraft.css_vars["--tab-active-bg"] || themeVars["--tab-active-bg"]}
-                                    onChange={(e) => updateCssVar("--tab-active-bg", e.target.value)}
-                                />
-                            </label>
-
-                            <div className="border-t border-black/10 my-1" />
-
-                            <label className="flex items-center justify-between text-xs text-black">
-                                Card Background
-                                <input
-                                    type="color"
-                                    value={brandDraft.css_vars["--card-bg"] || themeVars["--card-bg"]}
-                                    onChange={(e) => updateCssVar("--card-bg", e.target.value)}
-                                />
-                            </label>
-                            <label className="flex items-center justify-between text-xs text-black">
-                                Message Field BG
-                                <input
-                                    type="color"
-                                    value={brandDraft.css_vars["--field-bg"] || themeVars["--field-bg"]}
-                                    onChange={(e) => updateCssVar("--field-bg", e.target.value)}
-                                />
-                            </label>
-
-                            <div className="border-t border-black/10 my-1" />
-
-                            <label className="flex items-center justify-between text-xs text-black">
-                                Send Button
-                                <input
-                                    type="color"
-                                    value={brandDraft.css_vars["--send-color"] || themeVars["--send-color"]}
-                                    onChange={(e) => updateCssVar("--send-color", e.target.value)}
-                                />
-                            </label>
-                            <label className="flex items-center justify-between text-xs text-black">
-                                Send Hover
-                                <input
-                                    type="color"
-                                    value={brandDraft.css_vars["--send-color-hover"] || themeVars["--send-color-hover"]}
-                                    onChange={(e) => updateCssVar("--send-color-hover", e.target.value)}
-                                />
-                            </label>
-                        </div>
                     </>
                 ) : null}
 
@@ -1118,7 +1035,81 @@ const brandingMode = !!themeLabEnabled;
             )}
             style={themeVars}
         >
-            
+            {/* ThemeLab Colors box - positioned in left margin outside main card */}
+            {brandingMode && (
+                <div className="hidden md:block fixed left-4 top-[10vh] bottom-[10vh] w-72 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-xl shadow-lg p-4 overflow-y-auto z-10">
+                    <div className="font-semibold text-xs tracking-wide uppercase text-black mb-2">Colors</div>
+                    <div className="space-y-2">
+                        <label className="flex items-center justify-between text-xs text-black">
+                            Banner Title
+                            <input
+                                type="color"
+                                value={brandDraft.css_vars["--banner-fg"] || themeVars["--banner-fg"]}
+                                onChange={(e) => updateCssVar("--banner-fg", e.target.value)}
+                            />
+                        </label>
+                        <label className="flex items-center justify-between text-xs text-black">
+                            Banner Background
+                            <input
+                                type="color"
+                                value={brandDraft.css_vars["--banner-bg"] || themeVars["--banner-bg"]}
+                                onChange={(e) => updateCssVar("--banner-bg", e.target.value)}
+                            />
+                        </label>
+                        <div className="border-t border-black/10 my-1" />
+                        <label className="flex items-center justify-between text-xs text-black">
+                            Page Background
+                            <input
+                                type="color"
+                                value={brandDraft.css_vars["--page-bg"] || themeVars["--page-bg"]}
+                                onChange={(e) => updateCssVar("--page-bg", e.target.value)}
+                            />
+                        </label>
+                        <label className="flex items-center justify-between text-xs text-black">
+                            Card Background
+                            <input
+                                type="color"
+                                value={brandDraft.css_vars["--card-bg"] || themeVars["--card-bg"]}
+                                onChange={(e) => updateCssVar("--card-bg", e.target.value)}
+                            />
+                        </label>
+                        <div className="border-t border-black/10 my-1" />
+                        <label className="flex items-center justify-between text-xs text-black">
+                            Tab Titles
+                            <input
+                                type="color"
+                                value={brandDraft.css_vars["--tab-active-fg"] || themeVars["--tab-active-fg"]}
+                                onChange={(e) => updateCssVar("--tab-active-fg", e.target.value)}
+                            />
+                        </label>
+                        <label className="flex items-center justify-between text-xs text-black">
+                            Tab Background
+                            <input
+                                type="color"
+                                value={brandDraft.css_vars["--tab-active-bg"] || themeVars["--tab-active-bg"]}
+                                onChange={(e) => updateCssVar("--tab-active-bg", e.target.value)}
+                            />
+                        </label>
+                        <div className="border-t border-black/10 my-1" />
+                        <label className="flex items-center justify-between text-xs text-black">
+                            Send Button
+                            <input
+                                type="color"
+                                value={brandDraft.css_vars["--send-color"] || themeVars["--send-color"]}
+                                onChange={(e) => updateCssVar("--send-color", e.target.value)}
+                            />
+                        </label>
+                        <label className="flex items-center justify-between text-xs text-black">
+                            Send Hover
+                            <input
+                                type="color"
+                                value={brandDraft.css_vars["--send-color-hover"] || themeVars["--send-color-hover"]}
+                                onChange={(e) => updateCssVar("--send-color-hover", e.target.value)}
+                            />
+                        </label>
+                    </div>
+                </div>
+            )}
 
 
             {/* Main card */}
@@ -1146,36 +1137,9 @@ const brandingMode = !!themeLabEnabled;
                     <TabsNav mode={mode} tabs={tabs} />
                 </div>
 
-                {/* CONTENT AREA WITH COLORS PANEL */}
+                {/* CONTENT AREA */}
                 <div className="flex-1 relative">
-                  {brandingMode && (
-                    <div className="absolute left-0 top-0 bottom-0 w-72 border-r bg-white/90 backdrop-blur-sm p-4 overflow-y-auto">
-                      <div className="font-semibold text-xs tracking-wide uppercase text-black mb-2">Colors</div>
-                      <label className="flex items-center justify-between text-xs mb-1">
-                        Banner Title
-                        <input type="color" value={brandDraft.css_vars["--banner-fg"] || themeVars["--banner-fg"]} onChange={(e) => updateCssVar("--banner-fg", e.target.value)} />
-                      </label>
-                      <label className="flex items-center justify-between text-xs mb-1">
-                        Banner Background
-                        <input type="color" value={brandDraft.css_vars["--banner-bg"] || themeVars["--banner-bg"]} onChange={(e) => updateCssVar("--banner-bg", e.target.value)} />
-                      </label>
-                      <div className="border-t border-black/10 my-1" />
-                      <label className="flex items-center justify-between text-xs mb-1">
-                        Page Background
-                        <input type="color" value={brandDraft.css_vars["--page-bg"] || themeVars["--page-bg"]} onChange={(e) => updateCssVar("--page-bg", e.target.value)} />
-                      </label>
-                      <label className="flex items-center justify-between text-xs mb-1">
-                        Card Background
-                        <input type="color" value={brandDraft.css_vars["--card-bg"] || themeVars["--card-bg"]} onChange={(e) => updateCssVar("--card-bg", e.target.value)} />
-                      </label>
-                      <div className="border-t border-black/10 my-1" />
-                      <label className="flex items-center justify-between text-xs">
-                        Send Button
-                        <input type="color" value={brandDraft.css_vars["--send-color"] || themeVars["--send-color"]} onChange={(e) => updateCssVar("--send-color", e.target.value)} />
-                      </label>
-                    </div>
-                  )}
-                  <div className={brandingMode ? "pl-72" : ""}>
+                  <div>
 
                 {mode === "price" ? (
                     <>
