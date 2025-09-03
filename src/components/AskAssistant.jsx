@@ -904,18 +904,17 @@ const brandingMode = !!themeLabEnabled;
         return (
             <div
                 className={classNames(
-                    "w-screen min-h-[100dvh] flex items-center justify-center bg-[var(--page-bg)] p-4 transition-opacity duration-200",
+                    "w-screen min-h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 transition-opacity duration-200",
                     brandReady ? "opacity-100" : "opacity-0"
                 )}
                 style={themeVars}
             >
                 {brandingMode ? (
-                    <>
-                        {/* Left control rail — anchored relative to the 720px app container */}
-                        <div
-                            className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-3 max-h-[75vh] overflow-auto text-black"
-                            style={{ left: "calc(50% - 360px - 18rem - 8px)" }} /* 18rem = w-72 */
-                        >
+                    <div className="flex items-center justify-center min-h-[100dvh] md:min-h-[96dvh]">
+                        {/* Left control rail */}
+                        <div className="hidden lg:block w-72 bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 space-y-3 max-h-[75vh] overflow-auto text-black mr-4">
+                        {/* Left control rail */}
+                        <div className="hidden lg:block w-72 bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 space-y-3 max-h-[75vh] overflow-auto text-black mr-4">
                             <div className="font-semibold text-sm tracking-wide uppercase text-black">Controls</div>
 
                             {/* Upload/Logo URL */}
@@ -998,11 +997,23 @@ const brandingMode = !!themeLabEnabled;
                             </div>
                         </div>
 
-                        {/* Right color picker rail — anchored relative to the 720px app container */}
-                        <div
-                            className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-2 max-h-[75vh] overflow-auto text-black"
-                            style={{ left: "calc(50% + 360px + 8px)" }}
-                        >
+                        {/* Main app card placeholder */}
+                        <div className="w-full max-w-[720px] h-[100dvh] md:h-[96dvh] bg-white border border-[var(--card-border)] md:rounded-[var(--radius-card)] [box-shadow:var(--shadow-card)] flex items-center justify-center">
+                            <div className="text-gray-800 text-center space-y-2">
+                                <div className="text-lg font-semibold">No bot selected</div>
+                                {alias ? (
+                                    <div className="text-sm text-gray-600">Resolving alias "{alias}"...</div>
+                                ) : (
+                                    <div className="text-sm text-gray-600">
+                                        Provide a <code>?bot_id=…</code> or <code>?alias=…</code> in the URL
+                                        {defaultAlias ? <> (trying default alias "{defaultAlias}")</> : null}.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Right color picker rail - positioned beside app card with ml-4 buffer */}
+                        <div className="hidden lg:block w-72 bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 space-y-2 max-h-[75vh] overflow-auto text-black ml-4">
                             <div className="font-semibold text-xs tracking-wide uppercase text-black">Colors</div>
 
                             <label className="flex items-center justify-between text-xs text-black">
@@ -1079,19 +1090,23 @@ const brandingMode = !!themeLabEnabled;
                                 />
                             </label>
                         </div>
-                    </>
-                ) : null}
-
-                <div className="text-gray-800 text-center space-y-2">
-                    <div className="text-lg font-semibold">No bot selected</div>
-                    {alias ? (
-                        <div className="text-sm text-gray-600">Resolving alias “{alias}”...</div>
-                    ) : (
-                        <div className="text-sm text-gray-600">
-                            Provide a <code>?bot_id=…</code> or <code>?alias=…</code> in the URL
-                            {defaultAlias ? <> (trying default alias “{defaultAlias}”)</> : null}.
+                    </div>
+                ) : (
+                    <div className="flex items-center justify-center min-h-[100dvh] p-4">
+                        <div className="text-gray-800 text-center space-y-2">
+                            <div className="text-lg font-semibold">No bot selected</div>
+                            {alias ? (
+                                <div className="text-sm text-gray-600">Resolving alias "{alias}"...</div>
+                            ) : (
+                                <div className="text-sm text-gray-600">
+                                    Provide a <code>?bot_id=…</code> or <code>?alias=…</code> in the URL
+                                    {defaultAlias ? <> (trying default alias "{defaultAlias}")</> : null}.
+                                </div>
+                            )}
                         </div>
-                    )}
+                    </div>
+                )}
+
                 </div>
             </div>
         );
