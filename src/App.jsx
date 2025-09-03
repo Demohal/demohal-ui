@@ -1,5 +1,5 @@
 import React from "react";
-import AskAssistant from "./components/Demohal";
+import AskAssistant from "./components/DemoHal";
 
 function useQuery() {
   return new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
