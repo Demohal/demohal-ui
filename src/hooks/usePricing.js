@@ -312,7 +312,7 @@ export default function usePricing({
     }
 
     return lines;
-  }, [questions, answers]);
+  }, [questions, answers, humanLabelForAnswer, lower]);
 
   // ------------ return API ------------
 

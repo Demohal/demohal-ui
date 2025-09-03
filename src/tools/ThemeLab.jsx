@@ -232,7 +232,7 @@ export default function AskAssistant() {
           (window.location.hash || "").replace(/^#\??/, ""),
         ].join("&"));
         const hasSkip =
-          (cfg.skip_param || "dh_skip_capture") &&
+          cfg.skip_param &&
           (merged.get(cfg.skip_param) || "").toLowerCase() === "1";
         if (hasSkip && vcKey) localStorage.setItem(vcKey, "1");
       } catch {
@@ -409,7 +409,7 @@ export default function AskAssistant() {
       default:
         break;
     }
-  }, []);
+  }, [openBrowse, openBrowseDocs, openMeeting, openPrice]);
 
   // Hook: preview message bridge (replaces inline listener)
   const { previewVars } = usePreviewBridge({
@@ -449,7 +449,7 @@ export default function AskAssistant() {
         onClick: () => requireCaptureOr(openMeeting),
       });
     return out;
-  }, [tabsEnabled, mode, requireCaptureOr]);
+  }, [tabsEnabled, mode, requireCaptureOr, openBrowse, openBrowseDocs, openMeeting, openPrice]);
 
   // Normalize/iframe demos
   async function onPickDemo(item) {
@@ -470,18 +470,38 @@ export default function AskAssistant() {
     );
   }
 
+  // ------------- ThemeLab lazy loading (defined unconditionally) -------------
+  const ThemeLabLazy = useMemo(
+    () =>
+      lazy(() => {
+        const path = "../tools/ThemeLab"; // NOTE: ThemeLab is at src/tools/ThemeLab.jsx
+        // @ts-ignore
+        return import(/* @vite-ignore */ path)
+          .then((m) => ({ default: m.default || m }))
+          .catch(() => ({
+            default: () => (
+              <div className="p-4 text-sm text-gray-700">
+                ThemeLab isn't installed in this build. Remove {" "}
+                <code>?themelab</code> or add {" "}
+                <code>src/tools/ThemeLab.jsx</code>.
+              </div>
+            ),
+          }));
+      }),
+    []
+  );
+
   // ------------- ThemeLab override (render ASAP; lazy import with @vite-ignore) -------------
   if (themelabEnabled) {
-    const ThemeLabLazy = useMemo(
-      () =>
-        lazy(() => {
-          const path = "../tools/ThemeLab"; // NOTE: ThemeLab is at src/tools/ThemeLab.jsx
-          // @ts-ignore
-          return import(/* @vite-ignore */ path)
-            .then((m) => ({ default: m.default || m }))
-            .catch(() => ({
-              default: () => (
-                <div className="p-4 text-sm text-gray-700">
+    const resolvedBotId = botId || bot?.id || botIdFromUrl || "";
+    return (
+
+
+
+
+
+
+
                   ThemeLab isn’t installed in this build. Remove {" "}
                   <code>?themelab</code> or add {" "}
                   <code>src/tools/ThemeLab.jsx</code>.

@@ -42,7 +42,7 @@ export default function useAsk({
         const title =
           it.title ??
           it.button_title ??
-          (typeof it.label === "string" ? it.label.replace(/^Watch the \"|\" demo$/g, "") : it.label) ??
+          (typeof it.label === "string" ? it.label.replace(/^Watch the |" demo$/g, "") : it.label) ??
           "";
         const url = it.url ?? it.value ?? it.button_value ?? "";
         const description = it.description ?? it.summary ?? it.functions_text ?? "";
@@ -89,7 +89,8 @@ export default function useAsk({
         setResponseText(data?.response_text || "");
         setRecommendations(normalizeRecs(data));
         setInput("");
-      } catch (e) {
+      } catch (error) {
+        console.log("Ask error:", error);
         setError("Failed to get a response.");
       } finally {
         clearTimeout(t);
