@@ -1101,132 +1101,137 @@ const brandingMode = !!themeLabEnabled;
 
     // [SECTION 5 END]
 
-    // [SECTION 6 BEGIN]
+  // [SECTION 6 BEGIN]
 
-    const showAskBottom = mode !== "price" || !!priceEstimate;
-    const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
+const showAskBottom = mode !== "price" || !!priceEstimate;
+const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
 
-    const logoSrc =
-        brandAssets.logo_url ||
-        brandAssets.logo_light_url ||
-        brandAssets.logo_dark_url ||
-        "";
+const logoSrc =
+    brandAssets.logo_url ||
+    brandAssets.logo_light_url ||
+    brandAssets.logo_dark_url ||
+    "";
 
-    return (
-        <div
-            className={classNames(
-                "w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center transition-opacity duration-200",
-                brandReady ? "opacity-100" : "opacity-0"
-            )}
-            style={themeVars}
-        >
-            
-
-
-            {/* Main card */}
-            <div className="w-full max-w-[720px] h-[100dvh] md:h-[96dvh] bg-white border border-[var(--card-border)] md:rounded-[var(--radius-card)] [box-shadow:var(--shadow-card)] flex flex-col transition-all duration-300">
-                {/* Header */}
-                <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)]">
-                    <div className="flex items-center justify-between w-full py-3">
-                        <div className="flex items-center gap-3">
-                            <img src={logoSrc} alt="Brand logo" className="h-10 object-contain" />
-                        </div>
-                        <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
-                            {selected
-                                ? selected.title
-                                : mode === "browse"
-                                    ? "Browse Demos"
-                                    : mode === "docs"
-                                        ? "Browse Documents"
-                                        : mode === "price"
-                                            ? "Price Estimate"
-                                            : mode === "meeting"
-                                                ? "Schedule Meeting"
-                                                : "Ask the Assistant"}
-                        </div>
+return (
+    <div
+        className={classNames(
+            "w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center transition-opacity duration-200",
+            brandReady ? "opacity-100" : "opacity-0"
+        )}
+        style={themeVars}
+    >
+        {/* Main card */}
+        <div className="w-full max-w-[720px] h-[100dvh] md:h-[96dvh] bg-white border border-[var(--card-border)] md:rounded-[var(--radius-card)] [box-shadow:var(--shadow-card)] flex flex-col transition-all duration-300">
+            {/* Header */}
+            <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)]">
+                <div className="flex items-center justify-between w-full py-3">
+                    <div className="flex items-center gap-3">
+                        <img src={logoSrc} alt="Brand logo" className="h-10 object-contain" />
                     </div>
-                    <TabsNav mode={mode} tabs={tabs} />
+                    <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
+                        {selected
+                            ? selected.title
+                            : mode === "browse"
+                                ? "Browse Demos"
+                                : mode === "docs"
+                                    ? "Browse Documents"
+                                    : mode === "price"
+                                        ? "Price Estimate"
+                                        : mode === "meeting"
+                                            ? "Schedule Meeting"
+                                            : "Ask the Assistant"}
+                    </div>
                 </div>
+                <TabsNav mode={mode} tabs={tabs} />
+            </div>
 
-                {/* CONTENT AREA WITH COLORS PANEL */}
-                <div className="flex-1 relative">
-                  {brandingMode && (
-                    <div className="absolute left-0 top-0 bottom-0 w-72 border-r bg-white/90 backdrop-blur-sm p-4 overflow-y-auto">
-                      <div className="font-semibold text-xs tracking-wide uppercase text-black mb-2">Colors</div>
-                      <label className="flex items-center justify-between text-xs mb-1">
+            {/* Right color picker rail — anchored relative to the viewport */}
+            {brandingMode && (
+                <div
+                    className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-2 max-h-[75vh] overflow-auto text-black"
+                    style={{ right: "8px" }} /* Position outside the app */
+                >
+                    <div className="font-semibold text-xs tracking-wide uppercase text-black">Colors</div>
+
+                    <label className="flex items-center justify-between text-xs text-black">
                         Banner Title
-                        <input type="color" value={brandDraft.css_vars["--banner-fg"] || themeVars["--banner-fg"]} onChange={(e) => updateCssVar("--banner-fg", e.target.value)} />
-                      </label>
-                      <label className="flex items-center justify-between text-xs mb-1">
+                        <input
+                            type="color"
+                            value={brandDraft.css_vars["--banner-fg"] || themeVars["--banner-fg"]}
+                            onChange={(e) => updateCssVar("--banner-fg", e.target.value)}
+                        />
+                    </label>
+                    <label className="flex items-center justify-between text-xs text-black">
                         Banner Background
-                        <input type="color" value={brandDraft.css_vars["--banner-bg"] || themeVars["--banner-bg"]} onChange={(e) => updateCssVar("--banner-bg", e.target.value)} />
-                      </label>
-                      <div className="border-t border-black/10 my-1" />
-                      <label className="flex items-center justify-between text-xs mb-1">
-                        Page Background
-                        <input type="color" value={brandDraft.css_vars["--page-bg"] || themeVars["--page-bg"]} onChange={(e) => updateCssVar("--page-bg", e.target.value)} />
-                      </label>
-                      <label className="flex items-center justify-between text-xs mb-1">
+                        <input
+                            type="color"
+                            value={brandDraft.css_vars["--banner-bg"] || themeVars["--banner-bg"]}
+                            onChange={(e) => updateCssVar("--banner-bg", e.target.value)}
+                        />
+                    </label>
+
+                    <div className="border-t border-black/10 my-1" />
+
+                    <label className="flex items-center justify-between text-xs text-black">
+                        Tab Titles
+                        <input
+                            type="color"
+                            value={brandDraft.css_vars["--tab-active-fg"] || themeVars["--tab-active-fg"]}
+                            onChange={(e) => updateCssVar("--tab-active-fg", e.target.value)}
+                        />
+                    </label>
+                    <label className="flex items-center justify-between text-xs text-black">
+                        Tab Background
+                        <input
+                            type="color"
+                            value={brandDraft.css_vars["--tab-active-bg"] || themeVars["--tab-active-bg"]}
+                            onChange={(e) => updateCssVar("--tab-active-bg", e.target.value)}
+                        />
+                    </label>
+
+                    <div className="border-t border-black/10 my-1" />
+
+                    <label className="flex items-center justify-between text-xs text-black">
                         Card Background
-                        <input type="color" value={brandDraft.css_vars["--card-bg"] || themeVars["--card-bg"]} onChange={(e) => updateCssVar("--card-bg", e.target.value)} />
-                      </label>
-                      <div className="border-t border-black/10 my-1" />
-                      <label className="flex items-center justify-between text-xs">
+                        <input
+                            type="color"
+                            value={brandDraft.css_vars["--card-bg"] || themeVars["--card-bg"]}
+                            onChange={(e) => updateCssVar("--card-bg", e.target.value)}
+                        />
+                    </label>
+                    <label className="flex items-center justify-between text-xs text-black">
+                        Message Field BG
+                        <input
+                            type="color"
+                            value={brandDraft.css_vars["--field-bg"] || themeVars["--field-bg"]}
+                            onChange={(e) => updateCssVar("--field-bg", e.target.value)}
+                        />
+                    </label>
+
+                    <div className="border-t border-black/10 my-1" />
+
+                    <label className="flex items-center justify-between text-xs text-black">
                         Send Button
-                        <input type="color" value={brandDraft.css_vars["--send-color"] || themeVars["--send-color"]} onChange={(e) => updateCssVar("--send-color", e.target.value)} />
-                      </label>
-                    </div>
-                  )}
-                  <div className={brandingMode ? "pl-72" : ""}>
-
-                {mode === "price" ? (
-                    <>
-                        <div className="px-6 pt-3 pb-2" data-patch="price-intro">
-                            <PriceMirror lines={mirrorLines.length ? mirrorLines : null} />
-                            {!mirrorLines.length ? (
-                                <div className="text-black text-base font-bold whitespace-pre-line">
-                                    {((priceUiCopy?.intro?.heading || "").trim()
-                                        ? `${priceUiCopy.intro.heading.trim()}\n\n`
-                                        : "") +
-                                        (priceUiCopy?.intro?.body ||
-                                            "This tool provides a quick estimate based on your selections. Final pricing may vary by configuration, usage, and implementation.")}
-                                </div>
-                            ) : null}
-                        </div>
-                        <div ref={priceScrollRef} className="px-6 pt-0 pb-6 flex-1 overflow-y-auto">
-                            {!priceQuestions?.length ? null : nextPriceQuestion ? (
-                                <QuestionBlock
-                                    q={nextPriceQuestion}
-                                    value={priceAnswers[nextPriceQuestion.q_key]}
-                                    onPick={handlePickOption}
-                                />
-                            ) : (
-                                <EstimateCard
-                                    estimate={priceEstimate}
-                                    outroText={
-                                        ((priceUiCopy?.outro?.heading || "").trim()
-                                            ? `${priceUiCopy.outro.heading.trim()}\n\n`
-                                            : "") + (priceUiCopy?.outro?.body || "")
-                                    }
-                                />
-                            )}
-                            {priceBusy ? <div className="mt-2 text-sm text-gray-500">Calculating…</div> : null}
-                            {priceErr ? <div className="mt-2 text-sm text-red-600">{priceErr}</div> : null}
-                        </div>
-                    </>
-                ) : (
-                    /* OTHER MODES */
-                    <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
-                        {mode === "meeting" ? (
-                            <div className="w-full flex-1 flex flex-col" data-patch="meeting-pane">
-                                <div className="bg-white pt-2 pb-2">
-                                    {agent?.schedule_header ? (
-                                        <div className="mb-2 text-sm italic text-gray-600 whitespace-pre-line">
-                                            {agent.schedule_header}
-                                        </div>
-                                    ) : null}
-
-                                    {/* END OF SECTION 6 */}
+                        <input
+                            type="color"
+                            value={brandDraft.css_vars["--send-color"] || themeVars["--send-color"]}
+                            onChange={(e) => updateCssVar("--send-color", e.target.value)}
+                        />
+                    </label>
+                    <label className="flex items-center justify-between text-xs text-black">
+                        Send Hover
+                        <input
+                            type="color"
+                            value={brandDraft.css_vars["--send-color-hover"] || themeVars["--send-color-hover"]}
+                            onChange={(e) => updateCssVar("--send-color-hover", e.target.value)}
+                        />
+                    </label>
+                </div>
+            )}
+        </div>
+    </div>
+);
+// [SECTION 6 END]
 
 
                                     {/* BEGIN SECTION 7 */}
