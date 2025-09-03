@@ -1,18 +1,13 @@
-// src/App.jsx
 import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-
+import ShellEntry from "./components/ShellEntry";
 import AskAssistant from "./components/AskAssistant";
-import RecoMock from "./features/reco/RecoMock";  // ⬅️ new test page
+
+function useQuery() {
+  return new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+}
 
 export default function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<AskAssistant />} />
-        <Route path="/reco-mock" element={<RecoMock />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
-  );
+  const q = useQuery();
+  const v = (q.get("version") || "").trim();
+  return v === "2" ? <ShellEntry /> : <AskAssistant />;
 }

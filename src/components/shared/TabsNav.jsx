@@ -1,39 +1,30 @@
-// src/components/shared/TabsNav.jsx
 import React from "react";
 
-// Pure-presentational Tabs strip:
-// - props: mode (string), tabs (array of {key,label,onClick})
-// - optional: className
-// - Accessibility: role=tablist / aria-selected on active
-export default function TabsNav({ mode, tabs, className = "" }) {
+/**
+ * TabsNav
+ * tabs: [{ key, label, active, onClick }]
+ * Centered across the banner bottom; looks like tabs (not buttons).
+ */
+export default function TabsNav({ tabs = [] }) {
   return (
-    <div
-      className={
-        "w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden " +
-        className
-      }
-      data-patch="tabs-nav"
-    >
+    <div className="w-full max-w-[650px]">
       <nav
-        className="inline-flex min-w-max items-center gap-0.5 overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="w-full flex justify-center gap-2 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         role="tablist"
       >
         {tabs.map((t) => {
-          const active =
-            (mode === "browse" && t.key === "demos") ||
-            (mode === "docs" && t.key === "docs") ||
-            (mode === "price" && t.key === "price") ||
-            (mode === "meeting" && t.key === "meeting") ||
-            (mode === "ask" && t.key === "ask");
-
+          const active = !!t.active;
+          const onClick = t.onClick || (() => {});
+          const cls = active
+            ? "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none rounded-t-md border border-b-0 bg-white text-gray-900 -mb-px shadow"
+            : "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none rounded-t-md border border-b-0 text-white/85 bg-gradient-to-b from-white/10 to-black/20 hover:from-white/15 hover:to-black/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]";
           return (
             <button
-              key={t.key}
-              onClick={t.onClick}
+              key={t.key || t.label}
+              onClick={onClick}
               role="tab"
               aria-selected={active}
-              className={active ? (globalThis?.UI?.TAB_ACTIVE ?? "") : (globalThis?.UI?.TAB_INACTIVE ?? "")}
-              type="button"
+              className={cls}
             >
               {t.label}
             </button>

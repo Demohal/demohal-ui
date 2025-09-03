@@ -1,17 +1,7 @@
-// src/hooks/useDemos.js
+// src/hooks/useDocs.js
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-/**
- * Load the demo browse list.
- * GET /browse-demos?bot_id=...
- *
- * Returns:
- *  items:        [{ id, title, url, description, functions_text }]
- *  loading:      boolean
- *  error:        string|""
- *  load():       Promise<void>
- */
-export default function useDemos({
+export default function useDocs({
   apiBase = import.meta.env.VITE_API_URL || "https://demohal-app-dev.onrender.com",
   botId,
   autoLoad = true,
@@ -38,12 +28,12 @@ export default function useDemos({
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`);
+      const res = await fetch(`${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`);
       const data = await res.json();
       const src = Array.isArray(data?.items) ? data.items : [];
       setItems(normalize(src));
     } catch {
-      setError("Failed to load demos.");
+      setError("Failed to load documents.");
       setItems([]);
     } finally {
       setLoading(false);
