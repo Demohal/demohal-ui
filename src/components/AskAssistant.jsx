@@ -839,7 +839,9 @@ const brandingMode = !!themeLabEnabled;
                     const title =
                         it.title ??
                         it.button_title ??
-                        (typeof it.label === "string" ? it.label.replace(/^Watch the \"|\" demo$/g, "") : it.label) ??
+                        (typeof it.label === "string"
+                            ? it.label.replace(/^Watch the "|" demo$/g, "")
+                            : it.label) ??
                         "";
                     const url = it.url ?? it.value ?? it.button_value ?? "";
                     const description = it.description ?? it.summary ?? it.functions_text ?? "";
