@@ -1118,235 +1118,8 @@ const brandingMode = !!themeLabEnabled;
             )}
             style={themeVars}
         >
-            {/* BRANDING RAILS (anchored to the 720px app container) */}
-            {brandingMode ? (
-                <>
-                    {/* Left control rail — left of the 720px card, 8px gap */}
-                    <div
-                        className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-3 max-h-[75vh] overflow-auto text-black"
-                        style={{ left: "calc(50% - 360px - 18rem - 8px)" }} /* 18rem = w-72 */
-                    >
-                        <div className="font-semibold text-xs tracking-wide uppercase text-black">Controls</div>
+            
 
-                        {/* Show toggles */}
-                        <div className="space-y-1">
-                            <div className="text-[11px] font-medium">Show Sections</div>
-
-                            <label className="flex items-center justify-between text-[12px]">
-                                <span>Browse Demos</span>
-                                <input
-                                    type="checkbox"
-                                    checked={!!tabsEnabled.demos}
-                                    onChange={(e) => setTabsEnabled((t) => ({ ...t, demos: e.target.checked }))}
-                                />
-                            </label>
-
-                            <label className="flex items-center justify-between text-[12px]">
-                                <span>Browse Documents</span>
-                                <input
-                                    type="checkbox"
-                                    checked={!!tabsEnabled.docs}
-                                    onChange={(e) => setTabsEnabled((t) => ({ ...t, docs: e.target.checked }))}
-                                />
-                            </label>
-
-                            <label className="flex items-center justify-between text-[12px]">
-                                <span>Price Estimate</span>
-                                <input
-                                    type="checkbox"
-                                    checked={!!tabsEnabled.price}
-                                    onChange={(e) => setTabsEnabled((t) => ({ ...t, price: e.target.checked }))}
-                                />
-                            </label>
-
-                            <label className="flex items-center justify-between text-[12px]">
-                                <span>Schedule Meeting</span>
-                                <input
-                                    type="checkbox"
-                                    checked={!!tabsEnabled.meeting}
-                                    onChange={(e) => setTabsEnabled((t) => ({ ...t, meeting: e.target.checked }))}
-                                />
-                            </label>
-
-                            <label className="flex items-center justify-between text-[12px]">
-                                <span>Intro Video</span>
-                                <input
-                                    type="checkbox"
-                                    checked={!!showIntroVideo}
-                                    onChange={(e) => setShowIntroVideo(e.target.checked)}
-                                />
-                            </label>
-                        </div>
-
-                        {/* Text Editors */}
-                        <div className="space-y-1">
-                            <div className="text-[11px] font-medium">Text Editors</div>
-                            <button
-                                className="w-full text-left border rounded-md px-2 py-1 text-[12px]"
-                                onClick={() => setEditing((e) => ({ ...e, welcome: true, priceIntro: false, priceOutro: false }))}
-                            >
-                                Edit Welcome Message
-                            </button>
-                            <button
-                                className="w-full text-left border rounded-md px-2 py-1 text-[12px]"
-                                onClick={() => setEditing((e) => ({ ...e, welcome: false, priceIntro: true, priceOutro: false }))}
-                            >
-                                Edit Price Introduction
-                            </button>
-                            <button
-                                className="w-full text-left border rounded-md px-2 py-1 text-[12px]"
-                                onClick={() => setEditing((e) => ({ ...e, welcome: false, priceIntro: false, priceOutro: true }))}
-                            >
-                                Edit Price CTA
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Left-side TEXT EDITOR WINDOW — far left of the Controls rail */}
-                    {(editing.welcome || editing.priceIntro || editing.priceOutro) && (
-                        <div
-                            className="fixed top-20 z-[9998] bg-white/95 backdrop-blur-sm border rounded-xl shadow p-4 w-[30rem] max-w-[30rem] max-h-[75vh] overflow-auto text-black"
-                            style={{ left: "calc(50% - 360px - 18rem - 8px - 30rem - 12px)" }} /* controls (18rem) + gap (8px) + editor (30rem) + gap (12px) */
-                        >
-                            <div className="flex items-center justify-between mb-2">
-                                <div className="font-semibold text-xs tracking-wide uppercase">
-                                    {editing.welcome ? "Welcome Message" : editing.priceIntro ? "Price Introduction" : "Price CTA"}
-                                </div>
-                                <button
-                                    className="text-[11px] border rounded px-2 py-0.5 hover:brightness-110"
-                                    onClick={() => setEditing({ welcome: false, priceIntro: false, priceOutro: false, scheduleHeader: false })}
-                                >
-                                    Close
-                                </button>
-                            </div>
-
-                            {/* WELCOME MESSAGE EDITOR */}
-                            {editing.welcome && (
-                                <div className="space-y-2">
-                                    <label className="text-[12px] font-medium">Message</label>
-                                    <textarea
-                                        className="w-full border rounded-md p-2 text-sm text-black min-h-[220px]"
-                                        value={brandDraft.text?.welcome_message || ""}
-                                        onChange={(e) => updateDraftText("welcome_message", e.target.value)}
-                                    />
-                                </div>
-                            )}
-
-                            {/* PRICE INTRO EDITOR */}
-                            {editing.priceIntro && (
-                                <div className="space-y-2">
-                                    <label className="text-[12px] font-medium">Intro Heading</label>
-                                    <input
-                                        className="w-full border rounded-md p-2 text-sm text-black"
-                                        value={brandDraft.text?.ui_copy?.intro?.heading || ""}
-                                        onChange={(e) => updateDraftText("ui_copy.intro.heading", e.target.value)}
-                                    />
-                                    <label className="text-[12px] font-medium mt-2">Intro Body</label>
-                                    <textarea
-                                        className="w-full border rounded-md p-2 text-sm text-black min-h-[180px]"
-                                        value={brandDraft.text?.ui_copy?.intro?.body || ""}
-                                        onChange={(e) => updateDraftText("ui_copy.intro.body", e.target.value)}
-                                    />
-                                </div>
-                            )}
-
-                            {/* PRICE OUTRO (CTA) EDITOR */}
-                            {editing.priceOutro && (
-                                <div className="space-y-2">
-                                    <label className="text-[12px] font-medium">CTA Heading</label>
-                                    <input
-                                        className="w-full border rounded-md p-2 text-sm text-black"
-                                        value={brandDraft.text?.ui_copy?.outro?.heading || ""}
-                                        onChange={(e) => updateDraftText("ui_copy.outro.heading", e.target.value)}
-                                    />
-                                    <label className="text-[12px] font-medium mt-2">CTA Body</label>
-                                    <textarea
-                                        className="w-full border rounded-md p-2 text-sm text-black min-h-[180px]"
-                                        value={brandDraft.text?.ui_copy?.outro?.body || ""}
-                                        onChange={(e) => updateDraftText("ui_copy.outro.body", e.target.value)}
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Right color rail — right of the 720px card, 8px gap */}
-                    <div
-                        className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-2 max-h-[75vh] overflow-auto text-black"
-                        style={{ left: "calc(50% + 360px + 8px)" }}
-                    >
-                        <div className="font-semibold text-xs tracking-wide uppercase text-black">Colors</div>
-
-                        <label className="flex items-center justify-between text-xs">
-                            Banner Title
-                            <input
-                                type="color"
-                                value={brandDraft.css_vars["--banner-fg"] || themeVars["--banner-fg"]}
-                                onChange={(e) => updateCssVar("--banner-fg", e.target.value)}
-                            />
-                        </label>
-                        <label className="flex items-center justify-between text-xs">
-                            Banner Background
-                            <input
-                                type="color"
-                                value={brandDraft.css_vars["--banner-bg"] || themeVars["--banner-bg"]}
-                                onChange={(e) => updateCssVar("--banner-bg", e.target.value)}
-                            />
-                        </label>
-
-                        <div className="border-t border-black/10 my-1" />
-
-                        <label className="flex items-center justify-between text-xs">
-                            Tab Titles
-                            <input
-                                type="color"
-                                value={brandDraft.css_vars["--tab-active-fg"] || themeVars["--tab-active-fg"]}
-                                onChange={(e) => updateCssVar("--tab-active-fg", e.target.value)}
-                            />
-                        </label>
-                        <label className="flex items-center justify-between text-xs">
-                            Tab Background
-                            <input
-                                type="color"
-                                value={brandDraft.css_vars["--tab-active-bg"] || themeVars["--tab-active-bg"]}
-                                onChange={(e) => updateCssVar("--tab-active-bg", e.target.value)}
-                            />
-                        </label>
-
-                        <div className="border-t border-black/10 my-1" />
-
-                        <label className="flex items-center justify-between text-xs">
-                            Card Background
-                            <input
-                                type="color"
-                                value={brandDraft.css_vars["--card-bg"] || themeVars["--card-bg"]}
-                                onChange={(e) => updateCssVar("--card-bg", e.target.value)}
-                            />
-                        </label>
-                        <label className="flex items-center justify-between text-xs">
-                            Message Field BG
-                            <input
-                                type="color"
-                                value={brandDraft.css_vars["--field-bg"] || themeVars["--field-bg"]}
-                                onChange={(e) => updateCssVar("--field-bg", e.target.value)}
-                            />
-                        </label>
-
-                        <div className="border-t border-black/10 my-1" />
-
-                        <label className="flex items-center justify-between text-xs">
-                            Send Button
-                            <input
-                                type="color"
-                                value={brandDraft.css_vars["--send-color"] || themeVars["--send-color"]}
-                                onChange={(e) => updateCssVar("--send-color", e.target.value)}
-                            />
-                        </label>
-
-                        {/* NOTE: "Send Hover" control removed per spec. */}
-                    </div>
-                </>
-            ) : null}
 
             {/* Main card */}
             <div className="w-full max-w-[720px] h-[100dvh] md:h-[96dvh] bg-white border border-[var(--card-border)] md:rounded-[var(--radius-card)] [box-shadow:var(--shadow-card)] flex flex-col transition-all duration-300">
@@ -1373,7 +1146,37 @@ const brandingMode = !!themeLabEnabled;
                     <TabsNav mode={mode} tabs={tabs} />
                 </div>
 
-                {/* PRICE MODE */}
+                {/* CONTENT AREA WITH COLORS PANEL */}
+                <div className="flex-1 relative">
+                  {brandingMode && (
+                    <div className="absolute left-0 top-0 bottom-0 w-72 border-r bg-white/90 backdrop-blur-sm p-4 overflow-y-auto">
+                      <div className="font-semibold text-xs tracking-wide uppercase text-black mb-2">Colors</div>
+                      <label className="flex items-center justify-between text-xs mb-1">
+                        Banner Title
+                        <input type="color" value={brandDraft.css_vars["--banner-fg"] || themeVars["--banner-fg"]} onChange={(e) => updateCssVar("--banner-fg", e.target.value)} />
+                      </label>
+                      <label className="flex items-center justify-between text-xs mb-1">
+                        Banner Background
+                        <input type="color" value={brandDraft.css_vars["--banner-bg"] || themeVars["--banner-bg"]} onChange={(e) => updateCssVar("--banner-bg", e.target.value)} />
+                      </label>
+                      <div className="border-t border-black/10 my-1" />
+                      <label className="flex items-center justify-between text-xs mb-1">
+                        Page Background
+                        <input type="color" value={brandDraft.css_vars["--page-bg"] || themeVars["--page-bg"]} onChange={(e) => updateCssVar("--page-bg", e.target.value)} />
+                      </label>
+                      <label className="flex items-center justify-between text-xs mb-1">
+                        Card Background
+                        <input type="color" value={brandDraft.css_vars["--card-bg"] || themeVars["--card-bg"]} onChange={(e) => updateCssVar("--card-bg", e.target.value)} />
+                      </label>
+                      <div className="border-t border-black/10 my-1" />
+                      <label className="flex items-center justify-between text-xs">
+                        Send Button
+                        <input type="color" value={brandDraft.css_vars["--send-color"] || themeVars["--send-color"]} onChange={(e) => updateCssVar("--send-color", e.target.value)} />
+                      </label>
+                    </div>
+                  )}
+                  <div className={brandingMode ? "pl-72" : ""}>
+
                 {mode === "price" ? (
                     <>
                         <div className="px-6 pt-3 pb-2" data-patch="price-intro">
@@ -1589,6 +1392,9 @@ const brandingMode = !!themeLabEnabled;
                         )}
                     </div>
                 )}
+                  </div>
+                </div>
+
 
                 {/* Bottom Ask Bar */}
                 <div className="px-4 py-3 border-t border-gray-200" data-patch="ask-bottom-bar">
