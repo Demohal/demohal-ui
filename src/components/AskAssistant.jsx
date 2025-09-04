@@ -914,7 +914,7 @@ if (!botId) {
                 <>
                     {/* Left control rail */}
                     <div
-                        className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 max-h-[75vh] overflow-auto text-black"
+                        className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 max-h-[75vh] overflow-auto text-black"
                         style={{ left: "calc(50% - 360px - 18rem - 8px)" }}
                     >
                         <div className="font-semibold text-sm tracking-wide uppercase text-black">Controls</div>
@@ -966,7 +966,7 @@ if (!botId) {
 
                     {/* Right color picker rail */}
                     <div
-                        className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 max-h-[75vh] overflow-auto text-black"
+                        className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 max-h-[75vh] overflow-auto text-black"
                         style={{ left: "calc(50% + 360px + 8px)" }}
                     >
                         <div className="font-semibold text-xs tracking-wide uppercase text-black">Colors</div>
@@ -1085,7 +1085,7 @@ if (!botId) {
                       </label>
                     </div>
                   )}
-                  <div className={brandingMode ? "pl-72" : ""}>
+#                  <div className={brandingMode ? "pl-72" : ""}>
 
                 {mode === "price" ? (
                     <>
