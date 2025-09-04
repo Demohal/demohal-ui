@@ -956,24 +956,6 @@ async function sendMessage() {
     }
 }
 
-const listSource = mode === "browse" ? browseItems : items;
-const askUnderVideo = useMemo(() => {
-    if (!selected) return items;
-    const selKey = selected.id ?? selected.url ?? selected.title;
-    return (items || []).filter((it) => (it.id ?? it.url ?? it.title) !== selKey);
-}, [selected, items]);
-const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
-
-// NEW: dynamically build tabs from bot flags
-const tabs = useMemo(() => {
-    const out = [];
-    if (tabsEnabled.demos) out.push({ key: "demos", label: "Browse Demos", onClick: openBrowse });
-    if (tabsEnabled.docs) out.push({ key: "docs", label: "Browse Documents", onClick: openBrowseDocs });
-    if (tabsEnabled.price) out.push({ key: "price", label: "Price Estimate", onClick: () => { setSelected(null); setMode("price"); } });
-    if (tabsEnabled.meeting) out.push({ key: "meeting", label: "Schedule Meeting", onClick: openMeeting });
-    return out;
-}, [tabsEnabled]);
-
 // [SECTION 5 END]
 
 // [SECTION 6 BEGIN]
