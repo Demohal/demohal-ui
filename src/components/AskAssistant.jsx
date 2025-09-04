@@ -1056,7 +1056,7 @@ if (!botId) {
                 <div className="flex-1 relative">
                   {brandingMode && (
                     <div
-                      className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-2 max-h-[75vh] overflow-auto text-black"
+                      className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 space-y-2 max-h-[75vh] overflow-auto text-black"
                       style={{ left: "calc(50% - 360px - 18rem - 8px)" }} /* Anchored to left edge of app frame */
                     >
                       <div className="font-semibold text-xs tracking-wide uppercase text-black mb-2">Colors</div>
