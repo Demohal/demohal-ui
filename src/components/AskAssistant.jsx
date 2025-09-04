@@ -1149,13 +1149,14 @@ const brandingMode = !!themeLabEnabled;
                 {/* CONTENT AREA WITH COLORS PANEL */}
                 <div className="flex-1 relative">
                   {brandingMode && (
-                    <div className="absolute left-0 top-0 bottom-0 w-72 border-r bg-white/90 backdrop-blur-sm p-4 overflow-y-auto">
+                    <div className="relative w-72 border-r bg-white/90 backdrop-blur-sm p-4 overflow-y-auto">
                       <div className="font-semibold text-xs tracking-wide uppercase text-black mb-2">Colors</div>
                       <label className="flex items-center justify-between text-xs mb-1">
                         Banner Title
                         <input type="color" value={brandDraft.css_vars["--banner-fg"] || themeVars["--banner-fg"]} onChange={(e) => updateCssVar("--banner-fg", e.target.value)} />
                       </label>
-                      <label className="flex items-center justify-between text-xs mb-1">
+                        <div className="border-t border-black/10 my-1" />
+                        <label className="flex items-center justify-between text-xs mb-1">
                         Banner Background
                         <input type="color" value={brandDraft.css_vars["--banner-bg"] || themeVars["--banner-bg"]} onChange={(e) => updateCssVar("--banner-bg", e.target.value)} />
                       </label>
