@@ -196,205 +196,36 @@ function EstimateCard({ estimate, outroText }) {
 }
 
 // [SECTION 1 END]
-
 // [SECTION 2 BEGIN]
 
-function QuestionBlock({ q, value, onPick }) {
-  return (
-    <div data-patch="question-block" className={UI.FIELD}>
-      <div className="text-black font-bold text-base">{q.prompt}</div>
-      {q.help_text ? <div className="text-xs text-black italic mt-1">{q.help_text}</div> : null}
+// Component state & refs (INTENTIONALLY excludes apiBase/alias/botId/brandAssets/tabsEnabled/introVideo)
+const [mode, setMode] = useState("ask"); // "ask" | "browse" | "docs" | "price" | "meeting"
+const [items, setItems] = useState([]);
+const [browseItems, setBrowseItems] = useState([]);
+const [browseDocs, setBrowseDocs] = useState([]);
+const [selected, setSelected] = useState(null);
 
-      {Array.isArray(q.options) && q.options.length > 0 ? (
-        <div className="mt-3 flex flex-col gap-3">
-          {q.options.map((opt) => (
-            <OptionButton
-              key={opt.key || opt.id}
-              opt={opt}
-              selected={q.type === "multi_choice" ? Array.isArray(value) && value.includes(opt.key) : value === opt.key}
-              onClick={() => onPick(q, opt)}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="mt-3 text-xs text-gray-600">No options available.</div>
-      )}
-    </div>
-  );
-}
+const [lastQuestion, setLastQuestion] = useState("");
+const [responseText, setResponseText] = useState("");
+const [loading, setLoading] = useState(false);
 
-function TabsNav({ mode, tabs }) {
-  return (
-    <div
-      className="w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden border-b border-gray-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      data-patch="tabs-nav"
-    >
-      <nav
-        className="inline-flex min-w-max items-center gap-0.5 overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        role="tablist"
-      >
-        {tabs.map((t) => {
-          const active =
-            (mode === "browse" && t.key === "demos") ||
-            (mode === "docs" && t.key === "docs") ||
-            (mode === "price" && t.key === "price") ||
-            (mode === "meeting" && t.key === "meeting");
-          return (
-            <button key={t.key} onClick={t.onClick} role="tab" aria-selected={active} className={active ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}>
-              {t.label}
-            </button>
-          );
-        })}
-      </nav>
-    </div>
-  );
-}
+const inputRef = useRef(null);
+const contentRef = useRef(null);
+const priceScrollRef = useRef(null);
 
-/* =================== *
- *  MAIN APP COMPONENT *
- * =================== */
+// Pricing state (does not duplicate brand/tabs/bot vars)
+const [priceQuestions, setPriceQuestions] = useState([]);
+const [priceAnswers, setPriceAnswers] = useState({});
+const [priceEstimate, setPriceEstimate] = useState(null);
+const [priceBusy, setPriceBusy] = useState(false);
+const [priceErr, setPriceErr] = useState("");
+const [mirrorLines, setMirrorLines] = useState([]);
+const [priceUiCopy, setPriceUiCopy] = useState({});
 
-export default function AskAssistant() {
-  const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
+// Helper-phase for suggested demos on Ask tab
+const [helperPhase, setHelperPhase] = useState("buttons"); // "hidden" | "buttons"
 
-  // Pull both alias and bot_id from URL; give precedence to bot_id.
-  const { alias, botIdFromUrl } = useMemo(() => {
-    const qs = new URLSearchParams(window.location.search);
-    const a = (qs.get("alias") || qs.get("alais") || "").trim();
-    const b = (qs.get("bot_id") || "").trim();
-    return { alias: a, botIdFromUrl: b };
-  }, []);
-
-  // Optional: allow a default alias via env, e.g., VITE_DEFAULT_ALIAS=demo
-  const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
-  
-  const [botId, setBotId] = useState(botIdFromUrl || "");
-  const [fatal, setFatal] = useState("");
-
-  // Modes: ask | browse | docs | price | meeting
-  const [mode, setMode] = useState("ask");
-  const [input, setInput] = useState("");
-  const [lastQuestion, setLastQuestion] = useState("");
-  const [responseText, setResponseText] = useState("");
-  const [introVideoUrl, setIntroVideoUrl] = useState("");
-  const [showIntroVideo, setShowIntroVideo] = useState(false);
-
-  const [loading, setLoading] = useState(false);
-
-  const [items, setItems] = useState([]); // Ask suggestions
-  const [browseItems, setBrowseItems] = useState([]); // Demos
-  const [browseDocs, setBrowseDocs] = useState([]); // Docs
-  const [selected, setSelected] = useState(null);
-
-  const [helperPhase, setHelperPhase] = useState("hidden");
-  const [isAnchored, setIsAnchored] = useState(false);
-
-  const contentRef = useRef(null);
-  const inputRef = useRef(null);
-
-  // Theme (DB-driven CSS variables)
-  const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
-
-  // Brand assets (logo variants)
-  const [brandAssets, setBrandAssets] = useState({logo_url: null});
-
-  // Prevent brand FOUC: gate UI until brand is loaded at least once
-  // If no alias and no bot_id in the URL, there’s no brand fetch to wait for.
-  // In that case, start visible; otherwise gate until /brand finishes.
-  const initialBrandReady = useMemo(() => !(botIdFromUrl || alias), [botIdFromUrl, alias]);
-  const [brandReady, setBrandReady] = useState(initialBrandReady);
-
-  // NEW: Tab visibility flags
-  const [tabsEnabled, setTabsEnabled] = useState({
-    demos: false,
-    docs: false,
-    meeting: false,
-    price: false,
-  });
-
-  // Pricing state
-  const [priceUiCopy, setPriceUiCopy] = useState({});
-  const [priceQuestions, setPriceQuestions] = useState([]);
-  const [priceAnswers, setPriceAnswers] = useState({});
-  const [priceEstimate, setPriceEstimate] = useState(null);
-  const [priceBusy, setPriceBusy] = useState(false);
-  const [priceErr, setPriceErr] = useState("");
-
-  // Agent for meeting tab
-  const [agent, setAgent] = useState(null);
-
-  // Resolve bot settings first when alias is present and botId not already known
-  useEffect(() => {
-    if (botId) return; // already have a bot id from URL
-    if (!alias) return; // nothing to resolve
-    let cancel = false;
-    (async () => {
-      try {
-        const res = await fetch(`${apiBase}/bot-settings?alias=${encodeURIComponent(alias)}`);
-        const data = await res.json();
-        if (cancel) return;
-        const id = data?.ok ? data?.bot?.id : null;
-
-        // NEW: tab flags from bot row when resolving by alias
-        const b = data?.ok ? data?.bot : null;
-        if (b) {
-          setTabsEnabled({
-            demos: !!b.show_browse_demos,
-            docs: !!b.show_browse_docs,
-            meeting: !!b.show_schedule_meeting,
-            price: !!b.show_price_estimate,
-          });
-          setResponseText(b.welcome_message || "");
-          setIntroVideoUrl(b.intro_video_url || "");
-          setShowIntroVideo(!!b.show_intro_video);
-        }
-        if (id) {
-          setBotId(id);
-          setFatal("");
-        } else if (!res.ok || data?.ok === false) {
-          setFatal("Invalid or inactive alias.");
-        }
-      } catch {
-        if (!cancel) setFatal("Invalid or inactive alias.");
-      }
-    })();
-    return () => { cancel = true; };
-  }, [alias, apiBase, botId]);
-
-  // If neither bot_id nor alias present, try resolving defaultAlias once.
-  useEffect(() => {
-    if (botId || alias || !defaultAlias) return;
-    let cancel = false;
-    (async () => {
-      try {
-        const res = await fetch(`${apiBase}/bot-settings?alias=${encodeURIComponent(defaultAlias)}`);
-        const data = await res.json();
-        if (cancel) return;
-        const id = data?.ok ? data?.bot?.id : null;
-
-        // NEW: tab flags from bot row when using default alias
-        const b = data?.ok ? data?.bot : null;
-        if (b) {
-          setTabsEnabled({
-            demos: !!b.show_browse_demos,
-            docs: !!b.show_browse_docs,
-            meeting: !!b.show_schedule_meeting,
-            price: !!b.show_price_estimate,
-          });
-          setResponseText(b.welcome_message || "");
-          setIntroVideoUrl(b.intro_video_url || "");
-          setShowIntroVideo(!!b.show_intro_video);
-        }       
-        if (id) setBotId(id);
-      } catch {
-        // ignore; UI will show a friendly prompt instead of a spinner
-      }
-    })();
-    return () => { cancel = true; };
-  }, [botId, alias, defaultAlias, apiBase]);
- 
 // [SECTION 2 END]
-
 // [SECTION 3 BEGIN]
 
 // ------------------------------
@@ -508,7 +339,6 @@ useEffect(() => {
 }, [apiBase, botId]);
 
 // [SECTION 3 END]
-
 
 // [SECTION 4 BEGIN]
 
