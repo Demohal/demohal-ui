@@ -435,7 +435,7 @@ useEffect(() => {
         setBotId(id);
         setAliasResolved(true);
       }
-    } catch (_) {
+    } catch {
       /* noop */
     }
   })();
@@ -467,11 +467,9 @@ useEffect(() => {
       };
       setTabsEnabled(flags);
 
-      const copy = data?.ui_copy || {};
       setShowIntroVideo(!!data?.show_intro_video && !!data?.intro_video_url);
       setIntroVideoUrl((data?.intro_video_url || "").trim());
-      // other UI copy state may be set elsewhere as needed
-    } catch (_) {
+    } catch {
       /* noop */
     }
   })();
@@ -497,7 +495,7 @@ useEffect(() => {
         logo_url: assets?.logo_url || "",
       });
       // tokens if needed: data?.tokens
-    } catch (_) {
+    } catch {
       setBrandAssets({ logo_url: "" });
     } finally {
       if (!cancelled) setBrandLoading(false);
