@@ -1206,12 +1206,11 @@ const brandingMode = !!themeLabEnabled;
                                 <div className="flex flex-col items-center w-full px-4">
                                   <EstimateCard estimate={priceEstimate} />
                                 </div>
-                                    outroText={
-                                        ((priceUiCopy?.outro?.heading || "").trim()
-                                            ? `${priceUiCopy.outro.heading.trim()}\n\n`
-                                            : "") + (priceUiCopy?.outro?.body || "")
-                                    }
-                                />
+                                outroText={
+                                    ((priceUiCopy?.outro?.heading || "").trim()
+                                        ? `${priceUiCopy.outro.heading.trim()}\n\n`
+                                        : "") + (priceUiCopy?.outro?.body || "")
+                                }
                             )}
                             {priceBusy ? <div className="mt-2 text-sm text-gray-500">Calculating…</div> : null}
                             {priceErr ? <div className="mt-2 text-sm text-red-600">{priceErr}</div> : null}
