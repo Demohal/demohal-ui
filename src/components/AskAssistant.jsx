@@ -711,7 +711,6 @@ useEffect(() => {
 // (merged into Section 4 — no additional code in this section)
 // [SECTION 6 END]
 
- // [SECTION 7 BEGIN]
-} // end AskAssistant component
+// [SECTION 7 BEGIN]
 export default AskAssistant;
- // [SECTION 7 END]
+// [SECTION 7 END]
