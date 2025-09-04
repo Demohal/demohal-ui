@@ -1149,7 +1149,10 @@ const brandingMode = !!themeLabEnabled;
                 {/* CONTENT AREA WITH COLORS PANEL */}
                 <div className="flex-1 relative">
                   {brandingMode && (
-                    <div className="relative w-72 border-r bg-white/90 backdrop-blur-sm p-4 overflow-y-auto">
+                    <div
+                      className="fixed top-20 left-4 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-2 max-h-[75vh] overflow-auto text-black"
+                      style={{ marginLeft: "-76px" }} /* Adjust box placement with a buffer */
+                    >
                       <div className="font-semibold text-xs tracking-wide uppercase text-black mb-2">Colors</div>
                       <label className="flex items-center justify-between text-xs mb-1">
                         Banner Title
