@@ -340,7 +340,7 @@ useEffect(() => {
 
 // [SECTION 3 END]
 
-/ [SECTION 4 BEGIN]
+// [SECTION 4 BEGIN]
 
   const showAskBottom = mode !== "price" || !!priceEstimate;
   const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
