@@ -781,11 +781,11 @@ export default function AskAssistant() {
   const showAskBottom = mode !== "price" || !!priceEstimate;
   const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
 
-  // Single logo from bots_v2 only; no local/public fallback.
+  // Single logo from bots_v2 only; no fallback.
   const logoSrc = brandAssets.logo_url || "";
 
-  // Only block the UI if there's no logo AND we're not in themelab.
-  if (!logoSrc && !brandingMode) {
+  // If the bot has no logo_url configured, show an error and stop rendering.
+  if (!logoSrc) {
     return (
       <div
         className={classNames(
@@ -811,86 +811,12 @@ export default function AskAssistant() {
       )}
       style={themeVars}
     >
-      {/* THEME LAB: floating color panel */}
-      {brandingMode && (
-        <div
-          className="fixed top-20 z-[9999] bg-white/90 backdrop-blur-sm border rounded-xl shadow p-4 w-72 space-y-2 max-h-[75vh] overflow-auto text-black"
-          style={{ left: "calc(50% + 360px + 8px)" }} // anchored to right of 720px app frame
-        >
-          <div className="font-semibold text-xs tracking-wide uppercase text-black mb-1">Colors</div>
-
-          <label className="flex items-center justify-between text-xs">
-            Banner Title
-            <input
-              type="color"
-              value={brandDraft.css_vars["--banner-fg"] || themeVars["--banner-fg"]}
-              onChange={(e) => updateCssVar("--banner-fg", e.target.value)}
-            />
-          </label>
-          <label className="flex items-center justify-between text-xs">
-            Banner Background
-            <input
-              type="color"
-              value={brandDraft.css_vars["--banner-bg"] || themeVars["--banner-bg"]}
-              onChange={(e) => updateCssVar("--banner-bg", e.target.value)}
-            />
-          </label>
-
-          <div className="border-t border-black/10 my-1" />
-
-          <label className="flex items-center justify-between text-xs">
-            Page Background
-            <input
-              type="color"
-              value={brandDraft.css_vars["--page-bg"] || themeVars["--page-bg"]}
-              onChange={(e) => updateCssVar("--page-bg", e.target.value)}
-            />
-          </label>
-          <label className="flex items-center justify-between text-xs">
-            Card Background
-            <input
-              type="color"
-              value={brandDraft.css_vars["--card-bg"] || themeVars["--card-bg"]}
-              onChange={(e) => updateCssVar("--card-bg", e.target.value)}
-            />
-          </label>
-
-          <div className="border-t border-black/10 my-1" />
-
-          <label className="flex items-center justify-between text-xs">
-            Field Background
-            <input
-              type="color"
-              value={brandDraft.css_vars["--field-bg"] || themeVars["--field-bg"]}
-              onChange={(e) => updateCssVar("--field-bg", e.target.value)}
-            />
-          </label>
-          <label className="flex items-center justify-between text-xs">
-            Send Button
-            <input
-              type="color"
-              value={brandDraft.css_vars["--send-color"] || themeVars["--send-color"]}
-              onChange={(e) => updateCssVar("--send-color", e.target.value)}
-            />
-          </label>
-          <label className="flex items-center justify-between text-xs">
-            Send Hover
-            <input
-              type="color"
-              value={brandDraft.css_vars["--send-color-hover"] || themeVars["--send-color-hover"]}
-              onChange={(e) => updateCssVar("--send-color-hover", e.target.value)}
-            />
-          </label>
-        </div>
-      )}
-
       <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] border border-[var(--card-border)] md:rounded-[var(--radius-card)] [box-shadow:var(--shadow-card)] flex flex-col overflow-hidden transition-all duration-300">
         {/* Header */}
         <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)]">
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
-              {/* If themelab and logo not yet loaded, don't block UI */}
-              {logoSrc ? <img src={logoSrc} alt="Brand logo" className="h-10 object-contain" /> : null}
+              <img src={logoSrc} alt="Brand logo" className="h-10 object-contain" />
             </div>
             <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
               {selected
@@ -1039,7 +965,7 @@ export default function AskAssistant() {
                           item={it}
                           variant="docs"
                           onPick={(val) => {
-                            setSelected(val);
+                            setSelected(val); // docs pass through without normalization
                             requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
                           }}
                         />
