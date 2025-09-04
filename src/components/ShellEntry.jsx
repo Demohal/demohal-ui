@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
-import AppShell from "../shared/AppShell";
-import ContentArea from "../shared/ContentArea";
+import AppShell from "./shared/AppShell";
+import ContentArea from "./shared/ContentArea";
 
 // NOTE: Logo is controlled by the bot's record only. Pass null to hide if absent.
 export default function ShellEntry() {
