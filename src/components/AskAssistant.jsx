@@ -340,7 +340,7 @@ useEffect(() => {
 
 // [SECTION 3 END]
 
-// [SECTION 4 BEGIN]
+/ [SECTION 4 BEGIN]
 
   const showAskBottom = mode !== "price" || !!priceEstimate;
   const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
@@ -386,6 +386,72 @@ useEffect(() => {
         </div>
       </div>
     );
+  }
+
+  // Moved here from Section 5 so it closes over component state/vars.
+  async function sendMessage() {
+    if (!input.trim() || !botId) return;
+    const outgoing = input.trim();
+    setMode("ask");
+    setLastQuestion(outgoing);
+    setInput("");
+    setSelected(null);
+    setResponseText("");
+    setHelperPhase("hidden");
+    setItems([]);
+    setLoading(true);
+
+    try {
+      const res = await axios.post(
+        `${apiBase}/demo-hal`,
+        { bot_id: botId, user_question: outgoing },
+        { timeout: 30000 }
+      );
+      const data = res?.data || {};
+
+      const text = data?.response_text || "";
+      const recSource = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
+
+      const recs = (Array.isArray(recSource) ? recSource : [])
+        .map((it) => {
+          const id = it.id ?? it.button_id ?? it.value ?? it.url ?? it.title;
+          const title =
+            it.title ??
+            it.button_title ??
+            (typeof it.label === "string" ? it.label.replace(/^Watch the \"|\" demo$/g, "") : it.label) ??
+            "";
+          const url = it.url ?? it.value ?? it.button_value ?? "";
+          const description = it.description ?? it.summary ?? it.functions_text ?? "";
+          const action = it.action ?? it.button_action ?? "demo";
+          return { id, title, url, description, functions_text: it.functions_text ?? description, action };
+        })
+        .filter((b) => {
+          const act = (b.action || "").toLowerCase();
+          const lbl = (b.title || "").toLowerCase();
+          return act !== "continue" && act !== "options" && lbl !== "continue" && lbl !== "show me options";
+        });
+
+      setResponseText(text);
+      setLoading(false);
+
+      if (recs.length > 0) {
+        setHelperPhase("header");
+        setTimeout(() => {
+          setItems(recs);
+          setHelperPhase("buttons");
+        }, 60);
+      } else {
+        setHelperPhase("hidden");
+        setItems([]);
+      }
+
+      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+    } catch {
+      setLoading(false);
+      setResponseText("Sorry—something went wrong.");
+      setHelperPhase("hidden");
+      setItems([]);
+    }
   }
 
   return (
@@ -637,74 +703,8 @@ useEffect(() => {
 
 // [SECTION 4 END]
 
-
 // [SECTION 5 BEGIN]
-
-async function sendMessage() {
-    if (!input.trim() || !botId) return;
-    const outgoing = input.trim();
-    setMode("ask");
-    setLastQuestion(outgoing);
-    setInput("");
-    setSelected(null);
-    setResponseText("");
-    setHelperPhase("hidden");
-    setItems([]);
-    setLoading(true);
-
-    try {
-        const res = await axios.post(
-            `${apiBase}/demo-hal`,
-            { bot_id: botId, user_question: outgoing },
-            { timeout: 30000 }
-        );
-        const data = res?.data || {};
-
-        const text = data?.response_text || "";
-        const recSource = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
-
-        const recs = (Array.isArray(recSource) ? recSource : [])
-            .map((it) => {
-                const id = it.id ?? it.button_id ?? it.value ?? it.url ?? it.title;
-                const title =
-                    it.title ??
-                    it.button_title ??
-                    (typeof it.label === "string" ? it.label.replace(/^Watch the \"|\" demo$/g, "") : it.label) ??
-                    "";
-                const url = it.url ?? it.value ?? it.button_value ?? "";
-                const description = it.description ?? it.summary ?? it.functions_text ?? "";
-                const action = it.action ?? it.button_action ?? "demo";
-                return { id, title, url, description, functions_text: it.functions_text ?? description, action };
-            })
-            .filter((b) => {
-                const act = (b.action || "").toLowerCase();
-                const lbl = (b.title || "").toLowerCase();
-                return act !== "continue" && act !== "options" && lbl !== "continue" && lbl !== "show me options";
-            });
-
-        setResponseText(text);
-        setLoading(false);
-
-        if (recs.length > 0) {
-            setHelperPhase("header");
-            setTimeout(() => {
-                setItems(recs);
-                setHelperPhase("buttons");
-            }, 60);
-        } else {
-            setHelperPhase("hidden");
-            setItems([]);
-        }
-
-        requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-    } catch {
-        setLoading(false);
-        setResponseText("Sorry—something went wrong.");
-        setHelperPhase("hidden");
-        setItems([]);
-    }
-}
-
+// (merged into Section 4 — no additional code in this section)
 // [SECTION 5 END]
 
 // [SECTION 6 BEGIN]
@@ -712,5 +712,6 @@ async function sendMessage() {
 // [SECTION 6 END]
 
  // [SECTION 7 BEGIN]
-}
+} // end AskAssistant component
+export default AskAssistant;
  // [SECTION 7 END]
