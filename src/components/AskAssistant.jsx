@@ -781,7 +781,7 @@ export default function AskAssistant() {
   const showAskBottom = mode !== "price" || !!priceEstimate;
   const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
 
-  // Use only the single logo_url from bots_v2; no local/public fallback.
+  // Single logo from bots_v2 only; no local/public fallback.
   const logoSrc = brandAssets.logo_url || "";
 
   // If the bot has no logo_url configured, show a friendly error screen (like bot_id/alias message).
@@ -867,7 +867,155 @@ export default function AskAssistant() {
         ) : (
           /* OTHER MODES */
           <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
-            {/* ... meeting, docs, demos, ask modes unchanged ... */}
+            {mode === "meeting" ? (
+              <div className="w-full flex-1 flex flex-col" data-patch="meeting-pane">
+                <div className="bg-white pt-2 pb-2">
+                  {agent?.schedule_header ? (
+                    <div className="mb-2 text-sm italic text-gray-600 whitespace-pre-line">{agent.schedule_header}</div>
+                  ) : null}
+
+                  {/* calendar_link_type handling */}
+                  {!agent ? (
+                    <div className="text-sm text-gray-600">Loading scheduling…</div>
+                  ) : agent.calendar_link_type && String(agent.calendar_link_type).toLowerCase() === "embed" && agent.calendar_link ? (
+                    <iframe
+                      title="Schedule a Meeting"
+                      src={`${agent.calendar_link}?embed_domain=${embedDomain}&embed_type=Inline`}
+                      style={{ width: "100%", height: "60vh", maxHeight: "640px" }}
+                      className="rounded-xl border border-gray-200 shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
+                    />
+                  ) : agent.calendar_link_type && String(agent.calendar_link_type).toLowerCase() === "external" && agent.calendar_link ? (
+                    <div className="text-sm text-gray-700">
+                      We opened the scheduling page in a new tab. If it didn’t open,&nbsp;
+                      <a href={agent.calendar_link} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
+                        click here to open it
+                      </a>.
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-600">No scheduling link is configured.</div>
+                  )}
+                </div>
+              </div>
+            ) : selected ? (
+              <div className="w-full flex-1 flex flex-col">
+                {mode === "docs" ? (
+                  <div className="bg-white pt-2 pb-2">
+                    <iframe
+                      className="w-full h-[65vh] md:h-[78vh] rounded-xl border border-gray-200 shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
+                      src={selected.url}
+                      title={selected.title}
+                      loading="lazy"
+                      referrerPolicy="strict-origin-when-cross-origin"
+                    />
+                  </div>
+                ) : (
+                  <div className="bg-white pt-2 pb-2">
+                    <iframe
+                      style={{ width: "100%", aspectRatio: "471 / 272" }}
+                      src={selected.url}
+                      title={selected.title}
+                      className="rounded-xl shadow-[0_4px_12px_0_rgba(107,114,128,0.3)]"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  </div>
+                )}
+                {mode === "ask" && (visibleUnderVideo || []).length > 0 && (
+                  <>
+                    <div className="flex items-center justify-between mt-1 mb-3">
+                      <p className="italic text-gray-600">Recommended demos</p>
+                      <span />
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      {visibleUnderVideo.map((it) => (
+                        <Row key={it.id || it.url || it.title} item={it} onPick={(val) => normalizeAndSelectDemo(val)} />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : mode === "browse" ? (
+              <div className="w-full flex-1 flex flex-col">
+                {(browseItems || []).length > 0 && (
+                  <>
+                    <div className="flex items-center justify-between mt-2 mb-3">
+                      <p className="italic text-gray-600">Select a demo to view it</p>
+                      <span />
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      {browseItems.map((it) => (
+                        <Row key={it.id || it.url || it.title} item={it} onPick={(val) => normalizeAndSelectDemo(val)} />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : mode === "docs" ? (
+              <div className="w-full flex-1 flex flex-col">
+                {(browseDocs || []).length > 0 && (
+                  <>
+                    <div className="flex items-center justify-between mt-2 mb-3">
+                      <p className="italic text-gray-600">Select a document to view it</p>
+                      <span />
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      {browseDocs.map((it) => (
+                        <Row
+                          key={it.id || it.url || it.title}
+                          item={it}
+                          variant="docs"
+                          onPick={(val) => {
+                            setSelected(val); // docs pass through without normalization
+                            requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="w-full flex-1 flex flex-col">
+                {!lastQuestion && !loading && (
+                  <div className="space-y-3">
+                    <div className="text-black text-base font-bold whitespace-pre-line">{responseText}</div>
+                    {showIntroVideo && introVideoUrl ? (
+                      <div style={{ position: "relative", paddingTop: "56.25%" }}>
+                        <iframe
+                          src={introVideoUrl}
+                          title="Intro Video"
+                          frameBorder="0"
+                          allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
+                          referrerPolicy="strict-origin-when-cross-origin"
+                          style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+                {lastQuestion ? <p className="text-base text-black italic text-center mb-2">"{lastQuestion}"</p> : null}
+                <div className="text-left mt-2">
+                  {loading ? (
+                    <p className="text-gray-500 font-semibold animate-pulse">Thinking…</p>
+                  ) : lastQuestion ? (
+                    <p className="text-black text-base font-bold whitespace-pre-line">{responseText}</p>
+                  ) : null}
+                </div>
+                {helperPhase !== "hidden" && (
+                  <div className="flex items-center justify-between mt-3 mb-2">
+                    <p className="italic text-gray-600">Recommended demos</p>
+                    <span />
+                  </div>
+                )}
+                {helperPhase === "buttons" && (items || []).length > 0 && (
+                  <div className="flex flex-col gap-3">
+                    {items.map((it) => (
+                      <Row key={it.id || it.url || it.title} item={it} onPick={(val) => normalizeAndSelectDemo(val)} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -904,7 +1052,6 @@ export default function AskAssistant() {
   );
 
 // [SECTION 4 END]
-
 
 // [SECTION 5 BEGIN]
 
