@@ -1179,7 +1179,8 @@ if (!botId) {
 }
 
 // [SECTION 5 END]
-    // [SECTION 6 BEGIN]
+
+// [SECTION 6 BEGIN]
 
     const showAskBottom = mode !== "price" || !!priceEstimate;
     const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
@@ -1199,7 +1200,6 @@ if (!botId) {
             style={themeVars}
         >
             
-
 
             {/* Main card */}
             <div className="w-full max-w-[720px] h-[100dvh] md:h-[96dvh] bg-white border border-[var(--card-border)] md:rounded-[var(--radius-card)] [box-shadow:var(--shadow-card)] flex flex-col transition-all duration-300">
@@ -1311,7 +1311,6 @@ if (!botId) {
                                     ) : null}
 
                                     {/* END OF SECTION 6 */}
-
 
                                     {/* BEGIN SECTION 7 */}
 
@@ -1481,7 +1480,6 @@ if (!botId) {
                   </div>
                 </div>
 
-
                 {/* Bottom Ask Bar */}
                 <div className="px-4 py-3 border-t border-gray-200" data-patch="ask-bottom-bar">
                     {showAskBottom ? (
@@ -1517,5 +1515,4 @@ if (!botId) {
             </div>
         </div>
     );
-}
 // [SECTION 7 END]
