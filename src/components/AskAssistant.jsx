@@ -1179,7 +1179,7 @@ if (!botId) {
                       </label>
                     </div>
                   )}
-                  <div className={brandingMode ? "pl-72" : ""}>
+                  <div>
 
                 {mode === "price" ? (
                     <>
