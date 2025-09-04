@@ -781,17 +781,33 @@ export default function AskAssistant() {
   const showAskBottom = mode !== "price" || !!priceEstimate;
   const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
 
-  const logoSrc =
-    brandAssets.logo_url ||
-    brandAssets.logo_light_url ||
-    brandAssets.logo_dark_url ||
-    fallbackLogo;
+  // Use only the single logo_url from bots_v2; no local/public fallback.
+  const logoSrc = brandAssets.logo_url || "";
+
+  // If the bot has no logo_url configured, show a friendly error screen (like bot_id/alias message).
+  if (!logoSrc) {
+    return (
+      <div
+        className={classNames(
+          "w-screen min-h-[100dvh] flex items-center justify-center bg-[var(--page-bg)] p-4"
+        )}
+        style={themeVars}
+      >
+        <div className="max-w-[720px] w-full bg-white border border-[var(--card-border)] rounded-xl shadow p-6 text-center">
+          <div className="text-lg font-semibold text-red-600 mb-2">Brand logo missing</div>
+          <div className="text-sm text-gray-700">
+            This bot does not have a logo configured. Please add a{" "}
+            <code className="px-1 py-0.5 bg-gray-100 rounded border">logo_url</code> in <code>bots_v2</code> for this bot.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
       className={classNames(
-        "w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center transition-opacity duration-200",
-        brandReady ? "opacity-100" : "opacity-0"
+        "w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center"
       )}
       style={themeVars}
     >
@@ -888,6 +904,7 @@ export default function AskAssistant() {
   );
 
 // [SECTION 4 END]
+
 
 // [SECTION 5 BEGIN]
 
