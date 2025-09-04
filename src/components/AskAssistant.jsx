@@ -198,34 +198,36 @@ function EstimateCard({ estimate, outroText }) {
 // [SECTION 1 END]
 // [SECTION 2 BEGIN]
 
-// Component state & refs (INTENTIONALLY excludes apiBase/alias/botId/brandAssets/tabsEnabled/introVideo)
-const [mode, setMode] = useState("ask"); // "ask" | "browse" | "docs" | "price" | "meeting"
-const [items, setItems] = useState([]);
-const [browseItems, setBrowseItems] = useState([]);
-const [browseDocs, setBrowseDocs] = useState([]);
-const [selected, setSelected] = useState(null);
+function AskAssistant() {
+  // Component state & refs (INTENTIONALLY excludes apiBase/alias/botId/brandAssets/tabsEnabled/introVideo)
+  const [mode, setMode] = useState("ask"); // "ask" | "browse" | "docs" | "price" | "meeting"
+  const [items, setItems] = useState([]);
+  const [browseItems, setBrowseItems] = useState([]);
+  const [browseDocs, setBrowseDocs] = useState([]);
+  const [selected, setSelected] = useState(null);
 
-const [lastQuestion, setLastQuestion] = useState("");
-const [responseText, setResponseText] = useState("");
-const [loading, setLoading] = useState(false);
+  const [lastQuestion, setLastQuestion] = useState("");
+  const [responseText, setResponseText] = useState("");
+  const [loading, setLoading] = useState(false);
 
-const inputRef = useRef(null);
-const contentRef = useRef(null);
-const priceScrollRef = useRef(null);
+  const inputRef = useRef(null);
+  const contentRef = useRef(null);
+  const priceScrollRef = useRef(null);
 
-// Pricing state (does not duplicate brand/tabs/bot vars)
-const [priceQuestions, setPriceQuestions] = useState([]);
-const [priceAnswers, setPriceAnswers] = useState({});
-const [priceEstimate, setPriceEstimate] = useState(null);
-const [priceBusy, setPriceBusy] = useState(false);
-const [priceErr, setPriceErr] = useState("");
-const [mirrorLines, setMirrorLines] = useState([]);
-const [priceUiCopy, setPriceUiCopy] = useState({});
+  // Pricing state (does not duplicate brand/tabs/bot vars)
+  const [priceQuestions, setPriceQuestions] = useState([]);
+  const [priceAnswers, setPriceAnswers] = useState({});
+  const [priceEstimate, setPriceEstimate] = useState(null);
+  const [priceBusy, setPriceBusy] = useState(false);
+  const [priceErr, setPriceErr] = useState("");
+  const [mirrorLines, setMirrorLines] = useState([]);
+  const [priceUiCopy, setPriceUiCopy] = useState({});
 
-// Helper-phase for suggested demos on Ask tab
-const [helperPhase, setHelperPhase] = useState("buttons"); // "hidden" | "buttons"
+  // Helper-phase for suggested demos on Ask tab
+  const [helperPhase, setHelperPhase] = useState("buttons"); // "hidden" | "buttons"
 
 // [SECTION 2 END]
+
 // [SECTION 3 BEGIN]
 
 // ------------------------------
@@ -339,7 +341,6 @@ useEffect(() => {
 }, [apiBase, botId]);
 
 // [SECTION 3 END]
-
 // [SECTION 4 BEGIN]
 
   const showAskBottom = mode !== "price" || !!priceEstimate;
@@ -700,7 +701,6 @@ useEffect(() => {
       </div>
     </div>
   );
-
 // [SECTION 4 END]
 
 // [SECTION 5 BEGIN]
