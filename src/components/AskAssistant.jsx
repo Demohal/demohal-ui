@@ -781,10 +781,30 @@ export default function AskAssistant() {
   const showAskBottom = mode !== "price" || !!priceEstimate;
   const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
 
+  // If there is no bot selected (no bot_id and no alias), show that message FIRST and stop.
+  if (!botId && !alias) {
+    return (
+      <div
+        className={classNames(
+          "w-screen min-h-[100dvh] flex items-center justify-center bg-[var(--page-bg)] p-4"
+        )}
+        style={themeVars}
+      >
+        <div className="max-w-[720px] w-full bg-white border border-[var(--card-border)] rounded-xl shadow p-6 text-center">
+          <div className="text-lg font-semibold mb-2">No bot selected</div>
+          <div className="text-sm text-gray-700">
+            Provide a <code className="px-1 py-0.5 bg-gray-100 rounded border">?bot_id=…</code> or{" "}
+            <code className="px-1 py-0.5 bg-gray-100 rounded border">?alias=…</code> in the URL.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Single logo from bots_v2 only; no fallback.
   const logoSrc = brandAssets.logo_url || "";
 
-  // If the bot has no logo_url configured, show an error and stop rendering.
+  // If the bot has no logo_url configured, show an error and stop rendering (AFTER bot presence check).
   if (!logoSrc) {
     return (
       <div
@@ -1052,6 +1072,7 @@ export default function AskAssistant() {
   );
 
 // [SECTION 4 END]
+
 
 // [SECTION 5 BEGIN]
 
