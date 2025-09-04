@@ -1186,7 +1186,7 @@ const brandingMode = !!themeLabEnabled;
                         <div className="px-6 pt-3 pb-2" data-patch="price-intro">
                             <PriceMirror lines={mirrorLines.length ? mirrorLines : null} />
                             {!mirrorLines.length ? (
-                                <div className="text-black text-base font-bold whitespace-pre-line">
+                                <div className="text-black text-base font-bold whitespace-pre-line px-4">
                                     {((priceUiCopy?.intro?.heading || "").trim()
                                         ? `${priceUiCopy.intro.heading.trim()}\n\n`
                                         : "") +
@@ -1203,8 +1203,9 @@ const brandingMode = !!themeLabEnabled;
                                     onPick={handlePickOption}
                                 />
                             ) : (
-                                <EstimateCard
-                                    estimate={priceEstimate}
+                                <div className="flex flex-col items-center w-full px-4">
+                                  <EstimateCard estimate={priceEstimate} />
+                                </div>
                                     outroText={
                                         ((priceUiCopy?.outro?.heading || "").trim()
                                             ? `${priceUiCopy.outro.heading.trim()}\n\n`
@@ -1357,7 +1358,7 @@ const brandingMode = !!themeLabEnabled;
                             <div className="w-full flex-1 flex flex-col">
                                 {!lastQuestion && !loading && (
                                     <div className="space-y-3">
-                                        <div className="text-black text-base font-bold whitespace-pre-line">{responseText}</div>
+                                        <div className="text-black text-base font-bold whitespace-pre-line px-4">{responseText}</div>
                                         {showIntroVideo && introVideoUrl ? (
                                             <div style={{ position: "relative", paddingTop: "56.25%" }}>
                                                 <iframe
@@ -1376,7 +1377,7 @@ const brandingMode = !!themeLabEnabled;
                                     {loading ? (
                                         <p className="text-gray-500 font-semibold animate-pulse">Thinking…</p>
                                     ) : lastQuestion ? (
-                                        <p className="text-black text-base font-bold whitespace-pre-line">{responseText}</p>
+                                        <p className="text-black text-base font-bold whitespace-pre-line px-4">{responseText}</p>
                                     ) : null}
                                 </div>
                                 {helperPhase !== "hidden" && (
