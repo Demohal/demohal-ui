@@ -296,11 +296,7 @@ export default function AskAssistant() {
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
 
   // Brand assets (logo variants)
-  const [brandAssets, setBrandAssets] = useState({
-    logo_url: null,
-    logo_light_url: null,
-    logo_dark_url: null,
-  });
+  const [brandAssets, setBrandAssets] = useState({logo_url: null});
 
   // Prevent brand FOUC: gate UI until brand is loaded at least once
   // If no alias and no bot_id in the URL, there’s no brand fetch to wait for.
@@ -401,378 +397,117 @@ export default function AskAssistant() {
 
 // [SECTION 3 BEGIN]
 
-  useEffect(() => {
-    // If there’s nothing to resolve (no alias, no botId) and we somehow stayed gated, un-gate.
-    if (!botId && !alias && !brandReady) setBrandReady(true);
-  }, [botId, alias, brandReady]);
-  
+// ------------------------------
+// Data fetching & derived flags
+// ------------------------------
 
-  // Fetch brand once we know botId (DB-driven CSS + logo)
-  useEffect(() => {
-    if (!botId) return;
-    let cancel = false;
-    (async () => {
-      try {
-        const res = await fetch(`${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`);
-        const data = await res.json();
-        if (cancel) return;
+const apiBase = import.meta.env.VITE_API_BASE || "";
+const query = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+const alias = query.get("alias") || "";
+const themelabParam = query.get("themelab");
+const brandingMode = themelabParam === "1" || themelabParam === "true";
 
-        if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
-          setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
-        }
-        if (data?.ok && data?.assets) {
-          setBrandAssets({
-            logo_url: data.assets.logo_url || null,
-            logo_light_url: data.assets.logo_light_url || null,
-            logo_dark_url: data.assets.logo_dark_url || null,
-          });
-        }
-      } catch {
-        // keep defaults if brand fails
-      } finally {
-        if (!cancel) setBrandReady(true);
-      }
-    })();
-    return () => {
-      cancel = true;
-    };
-  }, [botId, apiBase]);
+const [botId, setBotId] = useState(query.get("bot_id") || "");
+const [aliasResolved, setAliasResolved] = useState(false); // prevents double /bot-settings
+const [botSettings, setBotSettings] = useState(null);
+const [brandAssets, setBrandAssets] = useState({ logo_url: "" });
+const [brandLoading, setBrandLoading] = useState(false);
 
-  // NEW: when botId is known (e.g., bot_id in URL), fetch bot-settings to get show_* flags
-  useEffect(() => {
-    if (!botId) return;
-    let cancel = false;
-    (async () => {
-      try {
-        const res = await fetch(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botId)}`);
-        const data = await res.json();
-        if (cancel) return;
-        const b = data?.ok ? data?.bot : null;
-        if (b) {
-          setTabsEnabled({
-            demos: !!b.show_browse_demos,
-            docs: !!b.show_browse_docs,
-            meeting: !!b.show_schedule_meeting,
-            price: !!b.show_price_estimate,
-          });
-          setResponseText(b.welcome_message || "");
-          setIntroVideoUrl(b.intro_video_url || "");
-          setShowIntroVideo(!!b.show_intro_video);
-        }        
-      } catch {
-        // silent; tabs remain default false if call fails
-      }
-    })();
-    return () => { cancel = true; };
-  }, [botId, apiBase]);
+const [tabsEnabled, setTabsEnabled] = useState({
+  demos: false,
+  docs: false,
+  price: false,
+  meeting: false,
+});
 
-  // Autosize ask box
-  useEffect(() => {
-    const el = inputRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [input]);
+const [showIntroVideo, setShowIntroVideo] = useState(false);
+const [introVideoUrl, setIntroVideoUrl] = useState("");
 
-  // Release video/doc sticky when scrolling
-  useEffect(() => {
-    const el = contentRef.current;
-    if (!el || !selected) return;
-    const onScroll = () => {
-      if (el.scrollTop > 8 && isAnchored) setIsAnchored(false);
-    };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-  }, [selected, isAnchored]);
-
-  // Helpers
-  async function normalizeAndSelectDemo(item) {
-    // Normalize demo URL to an embeddable form via backend
+// Resolve alias -> bot_id for endpoints that require id (e.g., /brand, pricing, etc)
+useEffect(() => {
+  if (botId || !alias) return;
+  let cancelled = false;
+  (async () => {
     try {
-      const r = await fetch(`${apiBase}/render-video-iframe`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ video_url: item.url }),
-      });
-      const j = await r.json();
-      const embed = j?.video_url || item.url;
-      setSelected({ ...item, url: embed });
-      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-    } catch {
-      setSelected(item);
-      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+      const res = await axios.get(`${apiBase}/id`, { params: { alias } });
+      const id = res?.data?.id || "";
+      if (!cancelled && id) {
+        setBotId(id);
+        setAliasResolved(true);
+      }
+    } catch (_) {
+      /* noop */
     }
-  }
+  })();
+  return () => {
+    cancelled = true;
+  };
+}, [alias, botId]);
 
-  async function openMeeting() {
-    if (!botId) return;
-    setSelected(null);
-    setMode("meeting");
+// Fetch bot settings ONCE: prefer bot_id; if not yet resolved, use alias.
+// When alias later resolves to bot_id, avoid a second fetch by checking aliasResolved.
+useEffect(() => {
+  const param =
+    botId ? { bot_id: botId } : !aliasResolved && alias ? { alias } : null;
+  if (!param) return;
+
+  let cancelled = false;
+  (async () => {
     try {
-      const res = await fetch(`${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`);
-      const data = await res.json();
-      const ag = data?.ok ? data.agent : null;
-      setAgent(ag);
-
-      // NEW: if external, open in a new tab immediately (with in-pane fallback link)
-      if (ag && ag.calendar_link_type && String(ag.calendar_link_type).toLowerCase() === "external" && ag.calendar_link) {
-        try { window.open(ag.calendar_link, "_blank", "noopener,noreferrer"); } catch (_) {}
-      }
-
-      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-    } catch {
-      setAgent(null);
-    }
-  }
-
-  async function openBrowse() {
-    if (!botId) return;
-    setMode("browse");
-    setSelected(null);
-    try {
-      const res = await fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`);
-      const data = await res.json();
-      const src = Array.isArray(data?.items) ? data.items : [];
-      setBrowseItems(
-        src.map((it) => ({
-          id: it.id ?? it.value ?? it.url ?? it.title,
-          title: it.title ?? it.button_title ?? it.label ?? "",
-          url: it.url ?? it.value ?? it.button_value ?? "",
-          description: it.description ?? it.summary ?? it.functions_text ?? "",
-          functions_text: it.functions_text ?? it.description ?? "",
-        }))
-      );
-      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-    } catch {
-      setBrowseItems([]);
-    }
-  }
-
-  async function openBrowseDocs() {
-    if (!botId) return;
-    setMode("docs");
-    setSelected(null);
-    try {
-      const res = await fetch(`${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`);
-      const data = await res.json();
-      const src = Array.isArray(data?.items) ? data.items : [];
-      setBrowseDocs(
-        src.map((it) => ({
-          id: it.id ?? it.value ?? it.url ?? it.title,
-          title: it.title ?? it.button_title ?? it.label ?? "",
-          url: it.url ?? it.value ?? it.button_value ?? "",
-          description: it.description ?? it.summary ?? it.functions_text ?? "",
-          functions_text: it.functions_text ?? it.description ?? "",
-        }))
-      );
-      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-    } catch {
-      setBrowseDocs([]);
-    }
-  }
-
-  // Pricing loader
-  const priceScrollRef = useRef(null);
-  useEffect(() => {
-    if (mode !== "price" || !botId) return;
-    let cancel = false;
-    (async () => {
-      try {
-        setPriceErr("");
-        setPriceEstimate(null);
-        setPriceAnswers({});
-        const res = await fetch(`${apiBase}/pricing/questions?bot_id=${encodeURIComponent(botId)}`);
-        const data = await res.json();
-        if (cancel) return;
-        if (!data?.ok) throw new Error(data?.error || "Failed to load pricing questions");
-        setPriceUiCopy(data.ui_copy || {});
-        setPriceQuestions(Array.isArray(data.questions) ? data.questions : []);
-        requestAnimationFrame(() => priceScrollRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-      } catch {
-        if (!cancel) setPriceErr("Unable to load price estimator.");
-      }
-    })();
-    return () => {
-      cancel = true;
-    };
-  }, [mode, botId, apiBase]);
-
-  // Pricing: compute estimate when inputs ready
-  useEffect(() => {
-    const haveAll = (() => {
-      if (!priceQuestions?.length) return false;
-      const req = priceQuestions.filter((q) => q.group === "estimation" && q.required !== false);
-      if (!req.length) return false;
-      return req.every((q) => {
-        const v = priceAnswers[q.q_key];
-        return !(v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0));
-      });
-    })();
-
-    if (mode !== "price" || !botId || !haveAll) {
-      setPriceEstimate(null);
-      return;
-    }
-    let cancel = false;
-    (async () => {
-      try {
-        setPriceBusy(true);
-        const res = await fetch(`${apiBase}/pricing/estimate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ bot_id: botId, answers: priceAnswers }),
-        });
-        const data = await res.json();
-        if (cancel) return;
-        if (!data?.ok) throw new Error(data?.error || "Failed to compute estimate");
-        setPriceEstimate(data);
-      } catch {
-        if (!cancel) setPriceErr("Unable to compute estimate.");
-      } finally {
-        if (!cancel) setPriceBusy(false);
-      }
-    })();
-    return () => {
-      cancel = true;
-    };
-  }, [mode, botId, apiBase, priceQuestions, priceAnswers]);
-
-  // Next unanswered (required) question
-  const nextPriceQuestion = useMemo(() => {
-    if (!priceQuestions?.length) return null;
-    for (const q of priceQuestions) {
-      const v = priceAnswers[q.q_key];
-      const empty =
-        (q.type === "multi_choice" && Array.isArray(v) && v.length === 0) || v === undefined || v === null || v === "";
-      if (empty && q.group === "estimation" && q.required !== false) return q;
-    }
-    return null;
-  }, [priceQuestions, priceAnswers]);
-
-  // Mirror lines (for PriceTop)
-  const mirrorLines = useMemo(() => {
-    if (!priceQuestions?.length) return [];
-    const lines = [];
-    for (const q of priceQuestions) {
-      const ans = priceAnswers[q.q_key];
-      if (ans === undefined || ans === null || ans === "" || (Array.isArray(ans) && ans.length === 0)) continue;
-      const opts = q.options || [];
-      let label = "";
-      if (q.type === "choice") {
-        const o = opts.find((o) => o.key === ans);
-        label = o?.label || String(ans);
-      } else if (q.type === "multi_choice") {
-        const picked = Array.isArray(ans) ? ans : [];
-        label = opts.filter((o) => picked.includes(o.key)).map((o) => o.label).join(", ");
-      } else {
-        label = String(ans);
-      }
-      if (!label) continue;
-
-      const key = normKey(q.q_key);
-      let line = null;
-      if (q.mirror_template) line = renderMirror(q.mirror_template, label);
-      else if (CFG.qKeys.product.includes(key)) line = `You have selected ${label}.`;
-      else if (CFG.qKeys.tier.includes(key)) line = `You stated that you execute ${label.toLowerCase()} commercial transactions per month.`;
-      if (line) lines.push(line);
-    }
-    return lines;
-  }, [priceQuestions, priceAnswers]);
-
-  // Actions used in multiple panes
-  function handlePickOption(q, opt) {
-    setPriceAnswers((prev) => {
-      if (q.type === "multi_choice") {
-        const curr = Array.isArray(prev[q.q_key]) ? prev[q.q_key] : [];
-        const exists = curr.includes(opt.key);
-        const next = exists ? curr.filter((k) => k !== opt.key) : [...curr, opt.key];
-        return { ...prev, [q.q_key]: next };
-      }
-      return { ...prev, [q.q_key]: opt.key };
-    });
-  }
-
-  async function sendMessage() {
-    if (!input.trim() || !botId) return;
-    const outgoing = input.trim();
-    setMode("ask");
-    setLastQuestion(outgoing);
-    setInput("");
-    setSelected(null);
-    setResponseText("");
-    setHelperPhase("hidden");
-    setItems([]);
-    setLoading(true);
-    try {
-      const res = await axios.post(
-        `${apiBase}/demo-hal`,
-        { bot_id: botId, user_question: outgoing },
-        { timeout: 30000 }
-      );
+      const res = await axios.get(`${apiBase}/bot-settings`, { params: param });
+      if (cancelled) return;
       const data = res?.data || {};
+      setBotSettings(data);
 
-      const text = data?.response_text || "";
-      const recSource = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
+      const flags = {
+        demos: !!data?.show_browse_demos || !!data?.has_demos,
+        docs: !!data?.show_browse_docs || !!data?.has_docs,
+        price: !!data?.show_price_estimate,
+        meeting: !!data?.show_schedule_meeting,
+      };
+      setTabsEnabled(flags);
 
-      const recs = (Array.isArray(recSource) ? recSource : [])
-        .map((it) => {
-          const id = it.id ?? it.button_id ?? it.value ?? it.url ?? it.title;
-          const title =
-            it.title ??
-            it.button_title ??
-            (typeof it.label === "string" ? it.label.replace(/^Watch the \"|\" demo$/g, "") : it.label) ??
-            "";
-          const url = it.url ?? it.value ?? it.button_value ?? "";
-          const description = it.description ?? it.summary ?? it.functions_text ?? "";
-          const action = it.action ?? it.button_action ?? "demo";
-          return { id, title, url, description, functions_text: it.functions_text ?? description, action };
-        })
-        .filter((b) => {
-          const act = (b.action || "").toLowerCase();
-          const lbl = (b.title || "").toLowerCase();
-          return act !== "continue" && act !== "options" && lbl !== "continue" && lbl !== "show me options";
-        });
-
-      setResponseText(text);
-      setLoading(false);
-
-      if (recs.length > 0) {
-        setHelperPhase("header");
-        setTimeout(() => {
-          setItems(recs);
-          setHelperPhase("buttons");
-        }, 60);
-      } else {
-        setHelperPhase("hidden");
-        setItems([]);
-      }
-
-      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-    } catch {
-      setLoading(false);
-      setResponseText("Sorry—something went wrong.");
-      setHelperPhase("hidden");
-      setItems([]);
+      const copy = data?.ui_copy || {};
+      setShowIntroVideo(!!data?.show_intro_video && !!data?.intro_video_url);
+      setIntroVideoUrl((data?.intro_video_url || "").trim());
+      // other UI copy state may be set elsewhere as needed
+    } catch (_) {
+      /* noop */
     }
-  }
+  })();
 
-  const listSource = mode === "browse" ? browseItems : items;
-  const askUnderVideo = useMemo(() => {
-    if (!selected) return items;
-    const selKey = selected.id ?? selected.url ?? selected.title;
-    return (items || []).filter((it) => (it.id ?? it.url ?? it.title) !== selKey);
-  }, [selected, items]);
-  const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
+  return () => {
+    cancelled = true;
+  };
+}, [apiBase, botId, alias, aliasResolved]);
 
-  // NEW: dynamically build tabs from bot flags
-  const tabs = useMemo(() => {
-    const out = [];
-    if (tabsEnabled.demos) out.push({ key: "demos", label: "Browse Demos", onClick: openBrowse });
-    if (tabsEnabled.docs) out.push({ key: "docs", label: "Browse Documents", onClick: openBrowseDocs });
-    if (tabsEnabled.price) out.push({ key: "price", label: "Price Estimate", onClick: () => { setSelected(null); setMode("price"); } });
-    if (tabsEnabled.meeting) out.push({ key: "meeting", label: "Schedule Meeting", onClick: openMeeting });
-    return out;
-  }, [tabsEnabled]);
+// Fetch brand (logo + tokens) — requires bot_id
+useEffect(() => {
+  if (!botId) return;
+  let cancelled = false;
+  setBrandLoading(true);
+
+  (async () => {
+    try {
+      const res = await axios.get(`${apiBase}/brand`, { params: { bot_id: botId } });
+      if (cancelled) return;
+      const data = res?.data || {};
+      const assets = data?.assets || {};
+      setBrandAssets({
+        logo_url: assets?.logo_url || "",
+      });
+      // tokens if needed: data?.tokens
+    } catch (_) {
+      setBrandAssets({ logo_url: "" });
+    } finally {
+      if (!cancelled) setBrandLoading(false);
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+  };
+}, [apiBase, botId]);
 
 // [SECTION 3 END]
 
