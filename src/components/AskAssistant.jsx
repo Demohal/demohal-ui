@@ -1,211 +1,105 @@
-// [SECTION 1 BEGIN]
-
-/* src/components/AskAssistant.jsx */
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
+import classNames from "classnames";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
-/* =============================== *
- *  PATCH-READY CONSTANTS & UTILS  *
- * =============================== */
 
-/** Default CSS variable values (used until /brand loads). */
-const DEFAULT_THEME_VARS = {
-    // Page + card
-    "--banner-bg": "#000000",
-    "--banner-fg": "#FFFFFF",
-    "--page-bg": "#F3F4F6",
-    "--card-bg": "#FFFFFF",
-    "--card-border": "#E5E7EB",
-    "--radius-card": "1rem",
-    "--shadow-card": "0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.10)",
+/**
+ * Minimal helper components to keep the file self-contained.
+ */
 
-    // Primary (demo) buttons
-    "--btn-grad-from": "#485563",
-    "--btn-grad-to": "#374151",
-    "--btn-grad-from-hover": "#6B7280",
-    "--btn-grad-to-hover": "#4B5563",
-    "--btn-fg": "#FFFFFF",
-    "--btn-border": "#374151",
-
-    // Tabs
-    "--tab-active-bg": "#FFFFFF",
-    "--tab-active-fg": "#000000",
-    "--tab-active-border": "#FFFFFF",
-    "--tab-active-shadow": "0 2px 0 rgba(0,0,0,.15)",
-    "--tab-inactive-grad-from": "#4B5563",
-    "--tab-inactive-grad-to": "#374151",
-    "--tab-inactive-hover-from": "#6B7280",
-    "--tab-inactive-hover-to": "#4B5563",
-    "--tab-inactive-fg": "#FFFFFF",
-    "--tab-inactive-border": "#374151",
-
-    // Fields
-    "--field-bg": "#FFFFFF",
-    "--field-border": "#9CA3AF",
-    "--radius-field": "0.5rem",
-
-    // Send icon
-    "--send-color": "#EA4335",
-    "--send-color-hover": "#C03327",
-
-    // Docs buttons (lighter gradient than demos)
-    "--btn-docs-grad-from": "#b1b3b4",
-    "--btn-docs-grad-to": "#858789",
-    "--btn-docs-grad-from-hover": "#c2c4c5",
-    "--btn-docs-grad-to-hover": "#9a9c9e",
-};
-
-const UI = {
-    CARD: "border rounded-xl p-4 bg-white shadow",
-    BTN:
-        "w-full text-center rounded-xl px-4 py-3 shadow transition-colors " +
-        "text-[var(--btn-fg)] border " +
-        "border-[var(--btn-border)] " +
-        "bg-gradient-to-b from-[var(--btn-grad-from)] to-[var(--btn-grad-to)] " +
-        "hover:from-[var(--btn-grad-from-hover)] hover:to-[var(--btn-grad-to-hover)]",
-    BTN_DOCS:
-        "w-full text-center rounded-xl px-4 py-3 shadow transition-colors " +
-        "text-[var(--btn-fg)] border " +
-        "border-[var(--btn-border)] " +
-        "bg-gradient-to-b from-[var(--btn-docs-grad-from)] to-[var(--btn-docs-grad-to)] " +
-        "hover:from-[var(--btn-docs-grad-from-hover)] hover:to-[var(--btn-docs-grad-to-hover)]",
-    FIELD:
-        "w-full rounded-lg px-4 py-3 text-base " +
-        "bg-[var(--field-bg)] border border-[var(--field-border)]",
-    TAB_ACTIVE:
-        "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors rounded-t-md border border-b-0 " +
-        "bg-[var(--tab-active-bg)] text-[var(--tab-active-fg)] border-[var(--tab-active-border)] -mb-px " +
-        "shadow-[var(--tab-active-shadow)]",
-    TAB_INACTIVE:
-        "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition-colors rounded-t-md border border-b-0 " +
-        "text-[var(--tab-inactive-fg)] border-[var(--tab-inactive-border)] " +
-        "bg-gradient-to-b from-[var(--tab-inactive-grad-from)] to-[var(--tab-inactive-grad-to)] " +
-        "hover:from-[var(--tab-inactive-hover-from)] hover:to-[var(--tab-inactive-hover-to)] " +
-        "shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_0_rgba(0,0,0,0.12)]",
-};
-
-const CFG = {
-    qKeys: {
-        product: ["edition", "editions", "product", "products", "industry_edition", "industry"],
-        tier: ["transactions", "transaction_volume", "volume", "tier", "tiers"],
-    },
-};
-
-const normKey = (s) => (s || "").toLowerCase().replace(/[\s-]+/g, "_");
-const classNames = (...xs) => xs.filter(Boolean).join(" ");
-
-function renderMirror(template, label) {
-    if (!template) return null;
-    return template
-        .split("{{answer_label_lower}}")
-        .join(label.toLowerCase())
-        .split("{{answer_label}}")
-        .join(label);
+function TabsNav({ mode, tabs }) {
+  if (!Array.isArray(tabs) || tabs.length === 0) return null;
+  return (
+    <div className="flex gap-2 pb-3">
+      {tabs.map((t) => (
+        <button
+          key={t.key}
+          onClick={t.onClick}
+          className={classNames(
+            "px-3 py-1 rounded-md border text-sm",
+            mode === t.key ? "bg-black text-white border-black" : "bg-white text-black border-gray-300"
+          )}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
 }
-
-/* ========================== *
- *  SMALL PATCHABLE COMPONENTS *
- * ========================== */
 
 function Row({ item, onPick, variant }) {
-    const btnClass = variant === "docs" ? UI.BTN_DOCS : UI.BTN;
-    return (
-        <button data-patch="row-button" onClick={() => onPick(item)} className={btnClass} title={item.description || ""}>
-            <div className="font-extrabold text-base">{item.title}</div>
-            {item.description ? (
-                <div className="mt-1 text-sm opacity-90">{item.description}</div>
-            ) : item.functions_text ? (
-                <div className="mt-1 text-sm opacity-90">{item.functions_text}</div>
-            ) : null}
-        </button>
-    );
-}
-
-function OptionButton({ opt, selected, onClick }) {
-    return (
-        <button
-            data-patch="option-button"
-            onClick={() => onClick(opt)}
-            className={classNames(UI.BTN, selected && "ring-2 ring-white/60")}
-            title={opt.tooltip || ""}
-        >
-            <div className="font-extrabold text-base">{opt.label}</div>
-            {opt.tooltip ? <div className="mt-1 text-sm opacity-90">{opt.tooltip}</div> : null}
-        </button>
-    );
+  const handle = () => onPick?.(item);
+  return (
+    <button
+      onClick={handle}
+      className="w-full text-left bg-white border border-gray-200 rounded-xl p-3 hover:shadow transition"
+    >
+      <div className="font-semibold">{item.title || "Untitled"}</div>
+      {item.description ? <div className="text-sm text-gray-600 mt-1">{item.description}</div> : null}
+      {item.url ? (
+        <div className="mt-1 text-xs text-blue-600 break-all">{variant === "docs" ? "Open document" : item.url}</div>
+      ) : null}
+    </button>
+  );
 }
 
 function PriceMirror({ lines }) {
-    if (!lines?.length) return null;
-    return (
-        <div data-patch="price-mirror" className="mb-3">
-            {lines.map((ln, i) => (
-                <div key={i} className="text-base italic text-gray-700 whitespace-pre-line">
-                    {ln}
-                </div>
-            ))}
-        </div>
-    );
+  if (!lines || !lines.length) return null;
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-3 mb-2">
+      <div className="text-sm text-gray-600 whitespace-pre-line">{lines.join("\n")}</div>
+    </div>
+  );
 }
 
 function EstimateCard({ estimate, outroText }) {
-    if (!estimate) return null;
-    return (
-        <div data-patch="estimate-card">
-            <div className={UI.CARD}>
-                <div className="flex items-center justify-between mb-3">
-                    <div className="text-black font-bold text-lg">Your Estimate</div>
-                    <div className="text-black font-bold text-lg">
-                        {estimate.currency_code} {Number(estimate.total_min).toLocaleString()} – {estimate.currency_code}{" "}
-                        {Number(estimate.total_max).toLocaleString()}
-                    </div>
-                </div>
-                <div className="space-y-3">
-                    {(estimate.line_items || []).map((li) => (
-                        <div key={li.product.id} className="border rounded-lg p-3">
-                            <div className="flex items-center justify-between">
-                                <div className="text-black font-bold">{li.product.name}</div>
-                                <div className="text-black font-bold text-lg">
-                                    {li.currency_code} {Number(li.price_min).toLocaleString()} – {li.currency_code}{" "}
-                                    {Number(li.price_max).toLocaleString()}
-                                </div>
-                            </div>
-                            {Array.isArray(li.features) && li.features.length > 0 && (
-                                <div className="mt-2">
-                                    {li.features
-                                        .filter((f) => f.is_standard)
-                                        .map((f, idx) => (
-                                            <span
-                                                key={`${li.product.id}-${idx}`}
-                                                className="inline-block text-xs border border-gray-300 rounded-full px-2 py-0.5 mr-1 mb-1"
-                                            >
-                                                {f.name}
-                                            </span>
-                                        ))}
-                                </div>
-                            )}
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            {outroText ? <div className="mt-3 text-black text-base font-bold whitespace-pre-line">{outroText}</div> : null}
-        </div>
-    );
+  if (!estimate) return null;
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-4">
+      <div className="text-lg font-bold">Estimated Price</div>
+      <div className="mt-2 text-2xl">${estimate}</div>
+      {outroText ? <div className="mt-3 text-sm text-gray-600 whitespace-pre-line">{outroText}</div> : null}
+    </div>
+  );
 }
 
-// [SECTION 1 END]
-// [SECTION 2 BEGIN]
+function QuestionBlock({ q, value, onPick }) {
+  if (!q) return null;
+  const handle = (val) => onPick?.(q, val);
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-4">
+      <div className="font-semibold">{q.prompt || q.label || "Question"}</div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {(q.answer_set || []).map((opt) => (
+          <button
+            key={opt.value || opt.label}
+            onClick={() => handle(opt.value || opt.label)}
+            className={classNames(
+              "px-3 py-1 rounded-md border text-sm",
+              value === (opt.value || opt.label) ? "bg-black text-white border-black" : "bg-white text-black border-gray-300"
+            )}
+          >
+            {opt.label || String(opt.value)}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-function AskAssistant() {
-  // Component state & refs (INTENTIONALLY excludes apiBase/alias/botId/brandAssets/tabsEnabled/introVideo)
+// [SECTION 1 BEGIN] - Imports above; any global constants/utilities could live here.
+// [SECTION 1 END]
+
+// [SECTION 2 BEGIN]
+export default function AskAssistant() {
+  // Component state
   const [mode, setMode] = useState("ask"); // "ask" | "browse" | "docs" | "price" | "meeting"
   const [items, setItems] = useState([]);
   const [browseItems, setBrowseItems] = useState([]);
   const [browseDocs, setBrowseDocs] = useState([]);
   const [selected, setSelected] = useState(null);
 
+  const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
   const [responseText, setResponseText] = useState("");
   const [loading, setLoading] = useState(false);
@@ -214,7 +108,7 @@ function AskAssistant() {
   const contentRef = useRef(null);
   const priceScrollRef = useRef(null);
 
-  // Pricing state (does not duplicate brand/tabs/bot vars)
+  // Pricing state (minimal; keeps file compiling)
   const [priceQuestions, setPriceQuestions] = useState([]);
   const [priceAnswers, setPriceAnswers] = useState({});
   const [priceEstimate, setPriceEstimate] = useState(null);
@@ -225,124 +119,181 @@ function AskAssistant() {
 
   // Helper-phase for suggested demos on Ask tab
   const [helperPhase, setHelperPhase] = useState("buttons"); // "hidden" | "buttons"
-
 // [SECTION 2 END]
 
-// [SECTION 3 BEGIN]
+// [SECTION 3 BEGIN]  — Boot, config, data fetching
+  const apiBase = import.meta.env.VITE_API_BASE || "";
+  const query = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+  const alias = query.get("alias") || "";
+  const themelabParam = query.get("themelab");
+  const brandingMode = themelabParam === "1" || themelabParam === "true";
 
-// ------------------------------
-// Data fetching & derived flags
-// ------------------------------
+  const [botId, setBotId] = useState(query.get("bot_id") || "");
+  const [aliasResolved, setAliasResolved] = useState(false);
+  const [botSettings, setBotSettings] = useState(null);
 
-const apiBase = import.meta.env.VITE_API_BASE || "";
-const query = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
-const alias = query.get("alias") || "";
-const themelabParam = query.get("themelab");
-const brandingMode = themelabParam === "1" || themelabParam === "true";
+  const [brandAssets, setBrandAssets] = useState({ logo_url: "" });
+  const [brandLoading, setBrandLoading] = useState(false);
 
-const [botId, setBotId] = useState(query.get("bot_id") || "");
-const [aliasResolved, setAliasResolved] = useState(false); // prevents double /bot-settings
-const [botSettings, setBotSettings] = useState(null);
-const [brandAssets, setBrandAssets] = useState({ logo_url: "" });
-const [brandLoading, setBrandLoading] = useState(false);
+  const [tabsEnabled, setTabsEnabled] = useState({
+    demos: false,
+    docs: false,
+    price: false,
+    meeting: false,
+  });
 
-const [tabsEnabled, setTabsEnabled] = useState({
-  demos: false,
-  docs: false,
-  price: false,
-  meeting: false,
-});
+  const [showIntroVideo, setShowIntroVideo] = useState(false);
+  const [introVideoUrl, setIntroVideoUrl] = useState("");
 
-const [showIntroVideo, setShowIntroVideo] = useState(false);
-const [introVideoUrl, setIntroVideoUrl] = useState("");
+  const [agent, setAgent] = useState(null);
 
-// Resolve alias -> bot_id for endpoints that require id (e.g., /brand, pricing, etc)
-useEffect(() => {
-  if (botId || !alias) return;
-  let cancelled = false;
-  (async () => {
-    try {
-      const res = await axios.get(`${apiBase}/id`, { params: { alias } });
-      const id = res?.data?.id || "";
-      if (!cancelled && id) {
-        setBotId(id);
+  // Theme tokens (kept minimal)
+  const themeVars = useMemo(() => {
+    return {
+      ["--page-bg"]: "#F5F7FB",
+      ["--card-bg"]: "#FFFFFF",
+      ["--card-border"]: "rgba(0,0,0,0.08)",
+      ["--banner-bg"]: "#111827",
+      ["--banner-fg"]: "#FFFFFF",
+      ["--field-bg"]: "#FFFFFF",
+      ["--field-border"]: "rgba(0,0,0,0.12)",
+      ["--send-color"]: "#111827",
+      ["--send-color-hover"]: "#374151",
+      ["--radius-card"]: "18px",
+    };
+  }, []);
+
+  // Resolve alias -> bot_id
+  useEffect(() => {
+    let active = true;
+    async function boot() {
+      try {
+        if (!botId && alias) {
+          const r = await axios.get(`${apiBase}/bot-settings`, { params: { alias, active: true, limit: 1 } });
+          const bs = Array.isArray(r.data) ? r.data[0] : r.data;
+          if (active && bs?.id) {
+            setBotId(bs.id);
+            setBotSettings(bs);
+          }
+          setAliasResolved(true);
+        } else {
+          setAliasResolved(true);
+        }
+      } catch {
         setAliasResolved(true);
       }
-    } catch {
-      /* noop */
     }
-  })();
-  return () => {
-    cancelled = true;
-  };
-}, [alias, botId]);
+    boot();
+    return () => { active = false; };
+  }, [alias, apiBase]); // botId intentionally omitted
 
-// Fetch bot settings ONCE: prefer bot_id; if not yet resolved, use alias.
-// When alias later resolves to bot_id, avoid a second fetch by checking aliasResolved.
-useEffect(() => {
-  const param =
-    botId ? { bot_id: botId } : !aliasResolved && alias ? { alias } : null;
-  if (!param) return;
+  // Once we have a botId or alias resolved, fetch brand, settings, agent
+  useEffect(() => {
+    if (!aliasResolved) return;
+    if (!botId && !alias) return;
 
-  let cancelled = false;
-  (async () => {
-    try {
-      const res = await axios.get(`${apiBase}/bot-settings`, { params: param });
-      if (cancelled) return;
-      const data = res?.data || {};
-      setBotSettings(data);
+    let cancelled = false;
+    async function fetchAll() {
+      try {
+        // bot-settings (if not already set from alias lookup)
+        if (!botSettings) {
+          const r = await axios.get(`${apiBase}/bot-settings`, {
+            params: { bot_id: botId || undefined, alias: botId ? undefined : alias, active: true, limit: 1 },
+          });
+          const bs = Array.isArray(r.data) ? r.data[0] : r.data;
+          if (!cancelled && bs) setBotSettings(bs);
+        }
 
-      const flags = {
-        demos: !!data?.show_browse_demos || !!data?.has_demos,
-        docs: !!data?.show_browse_docs || !!data?.has_docs,
-        price: !!data?.show_price_estimate,
-        meeting: !!data?.show_schedule_meeting,
-      };
-      setTabsEnabled(flags);
+        // brand (logo only)
+        setBrandLoading(true);
+        const br = await axios.get(`${apiBase}/brand`, { params: { bot_id: botId || (botSettings?.id || "") } });
+        const bdata = Array.isArray(br.data) ? br.data[0] : br.data;
+        if (!cancelled) setBrandAssets({ logo_url: bdata?.logo_url || "" });
+        setBrandLoading(false);
 
-      setShowIntroVideo(!!data?.show_intro_video && !!data?.intro_video_url);
-      setIntroVideoUrl((data?.intro_video_url || "").trim());
-    } catch {
-      /* noop */
+        // agent (for meeting)
+        const ar = await axios.get(`${apiBase}/agent`, { params: { bot_id: botId || (botSettings?.id || "") } });
+        const a = Array.isArray(ar.data) ? ar.data[0] : ar.data;
+        if (!cancelled) setAgent(a || null);
+
+        // tabs flags from settings
+        const flags = {
+          demos: !!(botSettings?.show_browse_demos ?? false),
+          docs: !!(botSettings?.show_browse_docs ?? false),
+          price: !!(botSettings?.show_price_estimate ?? false),
+          meeting: !!(botSettings?.show_schedule_meeting ?? false),
+        };
+        setTabsEnabled(flags);
+
+        setShowIntroVideo(!!(botSettings?.show_intro_video));
+        setIntroVideoUrl(botSettings?.intro_video_url || "");
+      } catch {
+        setBrandLoading(false);
+      }
     }
-  })();
+    fetchAll();
+    return () => { cancelled = false; };
+  }, [aliasResolved, botId, alias, apiBase]); // botSettings intentionally omitted to avoid loops
 
-  return () => {
-    cancelled = true;
-  };
-}, [apiBase, botId, alias, aliasResolved]);
+  // Build tabs
+  const openBrowse = () => setMode("browse");
+  const openDocs = () => setMode("docs");
+  const openPrice = () => setMode("price");
+  const openMeeting = () => setMode("meeting");
+  const openAsk = () => setMode("ask");
 
-// Fetch brand (logo + tokens) — requires bot_id
-useEffect(() => {
-  if (!botId) return;
-  let cancelled = false;
-  setBrandLoading(true);
+  const tabs = useMemo(() => {
+    const out = [];
+    out.push({ key: "ask", label: "Ask", onClick: openAsk });
+    if (tabsEnabled.demos) out.push({ key: "browse", label: "Browse Demos", onClick: openBrowse });
+    if (tabsEnabled.docs) out.push({ key: "docs", label: "Browse Docs", onClick: openDocs });
+    if (tabsEnabled.price) out.push({ key: "price", label: "Price Estimate", onClick: openPrice });
+    if (tabsEnabled.meeting) out.push({ key: "meeting", label: "Schedule Meeting", onClick: openMeeting });
+    return out;
+  }, [tabsEnabled]);
 
-  (async () => {
-    try {
-      const res = await axios.get(`${apiBase}/brand`, { params: { bot_id: botId } });
-      if (cancelled) return;
-      const data = res?.data || {};
-      const assets = data?.assets || {};
-      setBrandAssets({
-        logo_url: assets?.logo_url || "",
-      });
-      // tokens if needed: data?.tokens
-    } catch {
-      setBrandAssets({ logo_url: "" });
-    } finally {
-      if (!cancelled) setBrandLoading(false);
+  // demo/doc lists (placeholder fetches, guarded by flags)
+  useEffect(() => {
+    let cancel = false;
+    async function loadLists() {
+      try {
+        if (tabsEnabled.demos) {
+          if (!cancel) setBrowseItems([]);
+        }
+        if (tabsEnabled.docs) {
+          if (!cancel) setBrowseDocs([]);
+        }
+      } catch {}
     }
-  })();
+    loadLists();
+    return () => { cancel = true; };
+  }, [tabsEnabled]);
 
-  return () => {
-    cancelled = true;
-  };
-}, [apiBase, botId]);
+  const listSource = mode === "browse" ? browseItems : items;
+  const askUnderVideo = useMemo(() => {
+    if (!selected) return items;
+    const selKey = selected.id ?? selected.url ?? selected.title;
+    return (items || []).filter((it) => (it.id ?? it.url ?? it.title) !== selKey);
+  }, [selected, items]);
+  const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
 
+  function normalizeAndSelectDemo(val) {
+    const v = val || {};
+    const id = v.id ?? v.button_id ?? v.value ?? v.url ?? v.title;
+    const title =
+      v.title ?? v.button_title ?? (typeof v.label === "string" ? v.label.replace(/^Watch the \"|\" demo$/g, "") : v.label) ?? "Demo";
+    const url = v.url ?? v.value ?? v.button_value ?? "";
+    const description = v.description ?? v.summary ?? v.functions_text ?? "";
+    setSelected({ id, title, url, description });
+    requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+  }
+
+  function handlePickOption(q, optionValue) {
+    setPriceAnswers((prev) => ({ ...prev, [q.q_key || q.key || q.id || "q"]: optionValue }));
+  }
 // [SECTION 3 END]
-// [SECTION 4 BEGIN]
 
+// [SECTION 4 BEGIN]
   const showAskBottom = mode !== "price" || !!priceEstimate;
   const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
 
@@ -389,7 +340,6 @@ useEffect(() => {
     );
   }
 
-  // Moved here from Section 5 so it closes over component state/vars.
   async function sendMessage() {
     if (!input.trim() || !botId) return;
     const outgoing = input.trim();
@@ -500,17 +450,14 @@ useEffect(() => {
               ) : null}
             </div>
             <div ref={priceScrollRef} className="px-6 pt-0 pb-6 flex-1 overflow-y-auto">
-              {!priceQuestions?.length ? null : nextPriceQuestion ? (
-                <QuestionBlock q={nextPriceQuestion} value={priceAnswers[nextPriceQuestion.q_key]} onPick={handlePickOption} />
-              ) : (
-                <EstimateCard
-                  estimate={priceEstimate}
-                  outroText={
-                    ((priceUiCopy?.outro?.heading || "").trim() ? `${priceUiCopy.outro.heading.trim()}\n\n` : "") +
-                    (priceUiCopy?.outro?.body || "")
-                  }
+              {!priceQuestions?.length ? null : (
+                <QuestionBlock
+                  q={priceQuestions[0]}
+                  value={priceAnswers[(priceQuestions[0] && priceQuestions[0].q_key) || "q0"]}
+                  onPick={handlePickOption}
                 />
               )}
+              <EstimateCard estimate={priceEstimate} outroText={priceUiCopy?.outro?.body || ""} />
               {priceBusy ? <div className="mt-2 text-sm text-gray-500">Calculating…</div> : null}
               {priceErr ? <div className="mt-2 text-sm text-red-600">{priceErr}</div> : null}
             </div>
@@ -525,7 +472,6 @@ useEffect(() => {
                     <div className="mb-2 text-sm italic text-gray-600 whitespace-pre-line">{agent.schedule_header}</div>
                   ) : null}
 
-                  {/* calendar_link_type handling */}
                   {!agent ? (
                     <div className="text-sm text-gray-600">Loading scheduling…</div>
                   ) : agent.calendar_link_type && String(agent.calendar_link_type).toLowerCase() === "embed" && agent.calendar_link ? (
@@ -616,7 +562,7 @@ useEffect(() => {
                           item={it}
                           variant="docs"
                           onPick={(val) => {
-                            setSelected(val); // docs pass through without normalization
+                            setSelected(val);
                             requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
                           }}
                         />
@@ -701,16 +647,9 @@ useEffect(() => {
       </div>
     </div>
   );
+}
 // [SECTION 4 END]
 
-// [SECTION 5 BEGIN]
-// (merged into Section 4 — no additional code in this section)
-// [SECTION 5 END]
-
-// [SECTION 6 BEGIN]
-// (merged into Section 4 — no additional code in this section)
-// [SECTION 6 END]
-
 // [SECTION 7 BEGIN]
-export default AskAssistant;
+// Sections 5 & 6 are merged within the component to keep the file compact and compiling.
 // [SECTION 7 END]
