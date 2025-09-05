@@ -259,7 +259,9 @@ export default function AskAssistant() {
 
     // Pull both alias and bot_id from URL; give precedence to bot_id.
     const { alias, botIdFromUrl, themeLabEnabled } = useMemo(() => {
-        const qs = new URLSearchParams(window.location.search);
+        const qs = new URLSearchParams(
+            typeof window !== "undefined" ? window.location.search : ""
+        );
         const a = (qs.get("alias") || qs.get("alais") || "").trim();
         const b = (qs.get("bot_id") || "").trim();
         const themeLabEnabled = qs.get("themelab") === "1";
@@ -442,15 +444,9 @@ const brandingMode = !!themeLabEnabled;
                     setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
                 }
                 if (data?.ok && data?.assets) {
-                    const logos = {
-                        url: data.assets.logo_url || null
-                    };
-                    setBrandAssets({
-                        logo_url: logos.url
-                    });
-                    if (!logos.url) {
-                        setFatal("Brand logo missing for this bot.");
-                    }
+                  const logos = { url: data.assets.logo_url || null };
+                  setBrandAssets({ logo_url: logos.url });
+                  // No fatal if the logo is missing — UI will render without it.
                 }
             } catch {
                 setFatal("Failed to load brand assets.");
@@ -1127,7 +1123,16 @@ if (!botId) {
                 <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)]">
                     <div className="flex items-center justify-between w-full py-3">
                         <div className="flex items-center gap-3">
-                            <img src={logoSrc} alt="Brand logo" className="h-10 object-contain" />
+                            {logoSrc ? (
+                              <img
+                                src={logoSrc}
+                                alt="Brand logo"
+                                className="h-10 object-contain"
+                                onError={() => setBrandAssets(a => ({ ...a, logo_url: "" }))}
+                              />
+                            ) : (
+                              <div className="h-10 w-10 rounded bg-white/10 border border-white/20" />
+                            )}
                         </div>
                         <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
                             {selected
