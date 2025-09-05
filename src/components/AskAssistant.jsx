@@ -28,8 +28,8 @@ const DEFAULT_THEME_VARS = {
   "--mirror-fg": "#4b5563",            // mirror.text.foreground
 
   // Tabs (inactive)
-  "--tab-bg": "#000000",               // tab.background
-  "--tab-fg": "#000000",               // tab.foreground
+  "--tab-bg": "#485260",               // tab.background
+  "--tab-fg": "#ffffff",               // tab.foreground
   // Derived at runtime from --tab-fg:
   "--tab-active-fg": "#ffffff",
 
@@ -64,18 +64,18 @@ function inverseBW(hex) {
  * ========================== */
 
 const UI = {
-  CARD: "border-2 border-black rounded-[0.75rem] p-4 bg-white [box-shadow:var(--shadow-elevation)]",
+  CARD: "rounded-[0.75rem] p-4 bg-white [box-shadow:var(--shadow-elevation)]",
   BTN_DEMO:
-    "w-full text-center rounded-[0.75rem] px-4 py-3 border-2 border-black transition " +
+    "w-full text-center rounded-[0.75rem] px-4 py-3 transition " +
     "text-[var(--demo-button-fg)] bg-[var(--demo-button-bg)] hover:brightness-110 active:brightness-95",
   BTN_DOC:
-    "w-full text-center rounded-[0.75rem] px-4 py-3 border-2 border-black transition " +
+    "w-full text-center rounded-[0.75rem] px-4 py-3 transition " +
     "text-[var(--doc-button-fg)] bg-[var(--doc-button-bg)] hover:brightness-110 active:brightness-95",
   BTN_PRICE:
-    "w-full text-center rounded-[0.75rem] px-4 py-3 border-2 border-black transition " +
+    "w-full text-center rounded-[0.75rem] px-4 py-3 transition " +
     "text-[var(--price-button-fg)] bg-[var(--price-button-bg)] hover:brightness-110 active:brightness-95",
   FIELD:
-    "w-full rounded-[0.75rem] px-4 py-3 text-base bg-[var(--card-bg)] border-2 border-black",
+    "w-full rounded-[0.75rem] px-4 py-3 text-base bg-[var(--card-bg)] border-2 border-gray",
   TAB_ACTIVE:
     "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] border-2 border-b-0 border-black " +
     "bg-[var(--card-bg)] text-[var(--tab-active-fg)] -mb-px [box-shadow:var(--shadow-elevation)]",
