@@ -349,15 +349,22 @@ const brandingMode = !!themeLabEnabled;
 
     // Agent for meeting tab
     const [agent, setAgent] = useState(null);
+    // Deduping guards to avoid double calls in StrictMode / rapid re-renders
+    const lastBotForBrandRef = useRef(null);
+    const lastBotForSettingsRef = useRef(null);
 
+    
     // Resolve bot settings first when alias is present and botId not already known
     useEffect(() => {
-        if (botId) return; // already have a bot id from URL
-        if (!alias) return; // nothing to resolve
+        if (!botId) return;
+        // Skip if we already fetched brand for this bot_id
+        if (lastBotForBrandRef.current === botId) return;
+        lastBotForBrandRef.current = botId;
+
         let cancel = false;
         (async () => {
             try {
-                const res = await fetch(`${apiBase}/bot-settings?alias=${encodeURIComponent(alias)}`);
+                const res = await fetch(`${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`);
                 const data = await res.json();
                 if (cancel) return;
                 const id = data?.ok ? data?.bot?.id : null;
@@ -433,10 +440,14 @@ const brandingMode = !!themeLabEnabled;
     // Fetch brand once we know botId (DB-driven CSS + logo)
     useEffect(() => {
         if (!botId) return;
+        // Skip if we already fetched settings for this bot_id
+        if (lastBotForSettingsRef.current === botId) return;
+        lastBotForSettingsRef.current = botId;
+    
         let cancel = false;
         (async () => {
             try {
-                const res = await fetch(`${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`);
+                const res = await fetch(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botId)}`);
                 const data = await res.json();
                 if (cancel) return;
 
@@ -1100,11 +1111,8 @@ if (!botId) {
     const showAskBottom = mode !== "price" || !!priceEstimate;
     const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
 
-    const logoSrc =
-        brandAssets.logo_url ||
-        brandAssets.logo_light_url ||
-        brandAssets.logo_dark_url ||
-        "";
+    const logoSrc = brandAssets.logo_url || "";
+
 
     return (
         <div
@@ -1128,7 +1136,7 @@ if (!botId) {
                                 src={logoSrc}
                                 alt="Brand logo"
                                 className="h-10 object-contain"
-                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                onError={() => setFatal("Brand logo missing for this bot.")}
                               />
                             ) : (
                               <div
