@@ -1128,10 +1128,15 @@ if (!botId) {
                                 src={logoSrc}
                                 alt="Brand logo"
                                 className="h-10 object-contain"
-                                onError={() => setBrandAssets(a => ({ ...a, logo_url: "" }))}
+                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
                               />
                             ) : (
-                              <div className="h-10 w-10 rounded bg-white/10 border border-white/20" />
+                              <div
+                                className="h-10 w-10 rounded-md bg-gray-200 border border-gray-300 grid place-items-center text-xs text-gray-600"
+                                title="No logo configured"
+                              >
+                                LOGO
+                              </div>
                             )}
                         </div>
                         <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
