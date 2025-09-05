@@ -1,4 +1,4 @@
- // [SECTION 1 BEGIN]
+// [SECTION 1 BEGIN]
 
 /* src/components/AskAssistant.jsx */
 
@@ -197,6 +197,7 @@ function EstimateCard({ estimate, outroText }) {
 
 // [SECTION 1 END]
 
+
 // [SECTION 1 BEGIN]
 
 /* src/components/AskAssistant.jsx */
@@ -348,51 +349,6 @@ function PriceMirror({ lines }) {
     );
 }
 
-function EstimateCard({ estimate, outroText }) {
-    if (!estimate) return null;
-    return (
-        <div data-patch="estimate-card">
-            <div className={UI.CARD}>
-                <div className="flex items-center justify-between mb-3">
-                    <div className="text-black font-bold text-lg">Your Estimate</div>
-                    <div className="text-black font-bold text-lg">
-                        {estimate.currency_code} {Number(estimate.total_min).toLocaleString()} – {estimate.currency_code}{" "}
-                        {Number(estimate.total_max).toLocaleString()}
-                    </div>
-                </div>
-                <div className="space-y-3">
-                    {(estimate.line_items || []).map((li) => (
-                        <div key={li.product.id} className="border rounded-lg p-3">
-                            <div className="flex items-center justify-between">
-                                <div className="text-black font-bold">{li.product.name}</div>
-                                <div className="text-black font-bold text-lg">
-                                    {li.currency_code} {Number(li.price_min).toLocaleString()} – {li.currency_code}{" "}
-                                    {Number(li.price_max).toLocaleString()}
-                                </div>
-                            </div>
-                            {Array.isArray(li.features) && li.features.length > 0 && (
-                                <div className="mt-2">
-                                    {li.features
-                                        .filter((f) => f.is_standard)
-                                        .map((f, idx) => (
-                                            <span
-                                                key={`${li.product.id}-${idx}`}
-                                                className="inline-block text-xs border border-gray-300 rounded-full px-2 py-0.5 mr-1 mb-1"
-                                            >
-                                                {f.name}
-                                            </span>
-                                        ))}
-                                </div>
-                            )}
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            {outroText ? <div className="mt-3 text-black text-base font-bold whitespace-pre-line">{outroText}</div> : null}
-        </div>
-    );
-}
 
 // [SECTION 1 END]
 
