@@ -1124,26 +1124,25 @@ function ColorBox({ apiBase, botId, frameRef, onVars }) {
 
   // status check then load
   async function checkStatusAndMaybeLoad() {
-    try {
-      setAuthError("");
-      setAuthState("checking");
-      const res = await fetch(`${apiBase}/themelab/status?bot_id=${encodeURIComponent(botId)}`, {
-        credentials: "include",
-      });
-      if (res.status === 200) {
-        setAuthState("ok");
-        await load();
-      } else if (res.status === 401) {
-        setAuthState("need_password");
-      } else if (res.status === 403) {
-        setAuthState("disabled");
-      } else {
-        setAuthState("error");
-      }
-    } catch {
+  try {
+    setAuthError("");
+    setAuthState("checking");
+    // NOTE: no credentials here so we can read 401/403 cross-site
+    const res = await fetch(`${apiBase}/themelab/status?bot_id=${encodeURIComponent(botId)}`);
+    if (res.status === 200) {
+      setAuthState("ok");
+      await load();
+    } else if (res.status === 401) {
+      setAuthState("need_password");   // show password modal
+    } else if (res.status === 403) {
+      setAuthState("disabled");        // themelab disabled for this bot
+    } else {
       setAuthState("error");
     }
+  } catch {
+    setAuthState("error");
   }
+}
 
   useEffect(() => {
     checkStatusAndMaybeLoad();
