@@ -41,6 +41,41 @@ const DEFAULT_THEME_VARS = {
   "--border-default": "#9ca3af",
 };
 
+// Map DB token_key → CSS var used in this app (mirror of server mapping)
+const TOKEN_TO_CSS = {
+  "banner.background": "--banner-bg",
+  "banner.foreground": "--banner-fg",
+  "page.background": "--page-bg",
+  "content.area.background": "--card-bg",
+
+  "message.text.foreground": "--message-fg",
+  "helper.text.foreground": "--helper-fg",
+  "mirror.text.foreground": "--mirror-fg",
+
+  "tab.background": "--tab-bg",
+  "tab.foreground": "--tab-fg",
+
+  "demo.button.background": "--demo-button-bg",
+  "demo.button.foreground": "--demo-button-fg",
+  "doc.button.background": "--doc-button-bg",
+  "doc.button.foreground": "--doc-button-fg",
+  "price.button.background": "--price-button-bg",
+  "price.button.foreground": "--price-button-fg",
+
+  "send.button.background": "--send-color",
+
+  "border.default": "--border-default",
+};
+
+// Hardcoded screen order/labels for grouping the 16 client-controlled tokens
+const SCREEN_ORDER = [
+  { key: "welcome",      label: "Welcome" },
+  { key: "bot_response", label: "Bot Response" },
+  { key: "browse_demos", label: "Browse Demos" },
+  { key: "browse_docs",  label: "Browse Documents" },
+  { key: "price",        label: "Price Estimate" },
+];
+
 const classNames = (...xs) => xs.filter(Boolean).join(" ");
 function inverseBW(hex) {
   const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(String(hex || "").trim());
@@ -277,12 +312,18 @@ export default function AskAssistant() {
 
   const contentRef = useRef(null);
   const inputRef = useRef(null);
+  const frameRef = useRef(null); // context card container (for ColorBox placement)
 
+  // Theme vars (DB → in-memory → derived → live with picker overrides)
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
   const derivedTheme = useMemo(() => {
     const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
     return { ...themeVars, "--tab-active-fg": activeFg };
   }, [themeVars]);
+
+  // picker overrides (live preview)
+  const [pickerVars, setPickerVars] = useState({});
+  const liveTheme = useMemo(() => ({ ...derivedTheme, ...pickerVars }), [derivedTheme, pickerVars]);
 
   const [brandAssets, setBrandAssets] = useState({
     logo_url: null,
@@ -750,7 +791,7 @@ export default function AskAssistant() {
           "w-screen min-h-[100dvh] flex items-center justify-center bg-[var(--page-bg)] p-4 transition-opacity duration-200",
           brandReady ? "opacity-100" : "opacity-0"
         )}
-        style={derivedTheme}
+        style={liveTheme}
       >
         <div className="text-gray-800 text-center space-y-2">
           <div className="text-lg font-semibold">No bot selected</div>
@@ -782,9 +823,12 @@ export default function AskAssistant() {
         "w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center transition-opacity duration-200",
         brandReady ? "opacity-100" : "opacity-0"
       )}
-      style={derivedTheme}
+      style={liveTheme}
     >
-      <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all duration-300">
+      <div
+        ref={frameRef}
+        className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all duration-300"
+      >
         {/* Header */}
         <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)]">
           <div className="flex items-center justify-between w-full py-3">
@@ -1033,13 +1077,168 @@ export default function AskAssistant() {
       </div>
 
       {/* ThemeLab (enable with ?themelab=1) */}
-      {themeLabOn && <ThemeLabPanel vars={derivedTheme} />}
+      {themeLabOn && botId ? (
+        <>
+          <ColorBox
+            apiBase={apiBase}
+            botId={botId}
+            frameRef={frameRef}
+            onVars={(vars) => setPickerVars(vars)}
+          />
+          <ThemeLabPanel vars={liveTheme} />
+        </>
+      ) : null}
     </div>
   );
 }
 
 /* =================== *
- *  ThemeLab panel
+ *  ColorBox component *
+ * =================== */
+function ColorBox({ apiBase, botId, frameRef, onVars }) {
+  const [rows, setRows] = useState([]);         // [{token_key,label,value,screen_key}]
+  const [values, setValues] = useState({});     // token_key -> value
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  // position near the left edge of the context card
+  const [pos, setPos] = useState({ left: 16, top: 16, width: 460 });
+  useEffect(() => {
+    function updatePos() {
+      const rect = frameRef.current?.getBoundingClientRect();
+      const width = 460;
+      const gap = 12;
+      if (!rect) { setPos({ left: 16, top: 16, width }); return; }
+      const left = Math.max(8, rect.left - width - gap);
+      const top = Math.max(8, rect.top + 8);
+      setPos({ left, top, width });
+    }
+    updatePos();
+    const h = () => updatePos();
+    window.addEventListener("resize", h);
+    window.addEventListener("scroll", h, { passive: true });
+    return () => { window.removeEventListener("resize", h); window.removeEventListener("scroll", h); };
+  }, [frameRef]);
+
+  // fetch the 16 client-controlled tokens
+  async function load() {
+    const res = await fetch(`${apiBase}/brand/client-tokens?bot_id=${encodeURIComponent(botId)}`);
+    const data = await res.json();
+    const toks = (data?.ok ? data.tokens : []) || [];
+    setRows(toks);
+    const v = {}; toks.forEach((t) => { v[t.token_key] = t.value || "#000000"; });
+    setValues(v);
+    // apply to live CSS vars
+    const css = {};
+    toks.forEach((t) => {
+      const cssVar = TOKEN_TO_CSS[t.token_key];
+      if (cssVar) css[cssVar] = v[t.token_key];
+    });
+    onVars(css);
+  }
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [apiBase, botId]);
+
+  function updateToken(tk, value) {
+    const v = value || "";
+    setValues((prev) => ({ ...prev, [tk]: v }));
+    const cssVar = TOKEN_TO_CSS[tk];
+    if (cssVar) onVars((prev) => ({ ...prev, [cssVar]: v }));
+  }
+
+  async function doSave() {
+    try {
+      setBusy(true);
+      const updates = Object.entries(values).map(([token_key, value]) => ({ token_key, value }));
+      const res = await fetch(`${apiBase}/brand/client-tokens/save`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bot_id: botId, updates }),
+      });
+      const data = await res.json();
+      if (!data?.ok) throw new Error(data?.error || "save_failed");
+      setMsg(`Saved ${data.updated} token(s).`);
+      setTimeout(() => setMsg(""), 1800);
+    } catch {
+      setMsg("Save failed.");
+      setTimeout(() => setMsg(""), 2000);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doReset() {
+    await load();
+    setMsg("Colors restored from database.");
+    setTimeout(() => setMsg(""), 1800);
+  }
+
+  // group by screen in the required order
+  const groups = useMemo(() => {
+    const byScreen = new Map();
+    for (const r of rows) {
+      const key = r.screen_key || "welcome";
+      if (!byScreen.has(key)) byScreen.set(key, []);
+      byScreen.get(key).push(r);
+    }
+    SCREEN_ORDER.forEach(({ key }) => {
+      if (byScreen.has(key)) {
+        byScreen.get(key).sort((a, b) => String(a.label || "").localeCompare(String(b.label || "")));
+      }
+    });
+    return byScreen;
+  }, [rows]);
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        left: pos.left,
+        top: pos.top,
+        width: pos.width,
+        background: "#fff",
+        border: "1px solid rgba(0,0,0,0.2)",  // 1px border
+        borderRadius: "0.75rem",             // .75rem radius
+        padding: 12,
+        zIndex: 50,
+      }}
+    >
+      <div className="text-2xl font-extrabold mb-2">Colors</div>
+
+      {SCREEN_ORDER.map(({ key, label }) => (
+        <div key={key} className="mb-2">
+          <div className="text-sm font-bold mb-1">{label}</div>
+          <div className="space-y-1 pl-1">
+            {(groups.get(key) || []).map((t) => (
+              <div key={t.token_key} className="flex items-center justify-between gap-3">
+                <div className="text-xs">{t.label}</div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={values[t.token_key] || "#000000"}
+                    onChange={(e) => updateToken(t.token_key, e.target.value)}
+                    style={{ width: 32, height: 24, borderRadius: 6, border: "1px solid rgba(0,0,0,0.2)" }}
+                    title={t.token_key}
+                  />
+                  <code className="text-[11px] opacity-70">{values[t.token_key] || ""}</code>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      <div className="mt-3 flex items-center justify-between">
+        <div className="text-xs text-gray-600">{msg}</div>
+        <div className="flex items-center gap-2">
+          <button onClick={doReset} disabled={busy} className="px-3 py-1 rounded-[0.75rem] border border-black/20 bg-white hover:brightness-105">Reset</button>
+          <button onClick={doSave} disabled={busy} className="px-3 py-1 rounded-[0.75rem] bg-black text-white hover:brightness-110">{busy ? "Saving…" : "Save"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =================== *
+ *  ThemeLab panel (viewer)
  * =================== */
 function ThemeLabPanel({ vars }) {
   const entries = Object.entries(vars);
