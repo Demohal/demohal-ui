@@ -16,14 +16,17 @@ const DEFAULT_THEME_VARS = {
   "--card-bg": "#ffffff",              // content.area.background
   "--shadow-elevation": "0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.10)",
 
+  // Text roles
   "--message-fg": "#000000",           // message.text.foreground
   "--helper-fg": "#4b5563",            // helper.text.foreground
   "--mirror-fg": "#4b5563",            // mirror.text.foreground
 
-  "--tab-bg": "#303030",               // tab.background (db-driven)
-  "--tab-fg": "#ffffff",               // tab.foreground (db-driven)
-  "--tab-active-fg": "#ffffff",        // derived in code
+  // Tabs (inactive)
+  "--tab-bg": "#303030",               // tab.background
+  "--tab-fg": "#ffffff",               // tab.foreground
+  "--tab-active-fg": "#ffffff",        // derived at runtime
 
+  // Buttons (explicit types)
   "--demo-button-bg": "#3a4554",       // demo.button.background
   "--demo-button-fg": "#ffffff",       // demo.button.foreground
   "--doc-button-bg": "#000000",        // doc.button.background
@@ -31,9 +34,10 @@ const DEFAULT_THEME_VARS = {
   "--price-button-bg": "#1a1a1a",      // price.button.background
   "--price-button-fg": "#ffffff",      // price.button.foreground
 
+  // Send icon
   "--send-color": "#000000",           // send.button.background
 
-  // faint gray default border
+  // Default faint gray border (used only where allowed)
   "--border-default": "#9ca3af",
 };
 
@@ -170,9 +174,8 @@ function normalizeOptions(q) {
 
 function QuestionBlock({ q, value, onPick }) {
   const opts = normalizeOptions(q);
-  const isMulti = String(q?.type || "").toLowerCase() === "multi_choice" ||
-                  String(q?.type || "").toLowerCase() === "multichoice" ||
-                  String(q?.type || "").toLowerCase() === "multi";
+  const type = String(q?.type || "").toLowerCase();
+  const isMulti = type === "multi_choice" || type === "multichoice" || type === "multi";
 
   return (
     <div data-patch="question-block" className={UI.FIELD}>
@@ -185,11 +188,7 @@ function QuestionBlock({ q, value, onPick }) {
             <OptionButton
               key={opt.id}
               opt={opt}
-              selected={
-                isMulti
-                  ? Array.isArray(value) && value.includes(opt.key)
-                  : value === opt.key
-              }
+              selected={isMulti ? Array.isArray(value) && value.includes(opt.key) : value === opt.key}
               onClick={() => onPick(q, opt)}
             />
           ))}
@@ -554,7 +553,9 @@ export default function AskAssistant() {
         if (!cancel) setPriceErr("Unable to load price estimator.");
       }
     })();
-    return () => { cancel = true; };
+    return () => {
+      cancel = true;
+    };
   }, [mode, botId, apiBase]);
 
   // Pricing: compute estimate when inputs ready
@@ -565,7 +566,8 @@ export default function AskAssistant() {
       if (!req.length) return false;
       return req.every((q) => {
         const v = priceAnswers[q.q_key];
-        return !(v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0));
+        const isMulti = String(q.type).toLowerCase().includes("multi");
+        return isMulti ? (Array.isArray(v) && v.length > 0) : !(v === undefined || v === null || v === "");
       });
     })();
 
@@ -592,23 +594,25 @@ export default function AskAssistant() {
         if (!cancel) setPriceBusy(false);
       }
     })();
-    return () => { cancel = true; };
+    return () => {
+      cancel = true;
+    };
   }, [mode, botId, apiBase, priceQuestions, priceAnswers]);
 
-  // Next unanswered (fallback to first)
+  // Next unanswered (null when all required answered → show estimate)
   const nextPriceQuestion = useMemo(() => {
     if (!priceQuestions?.length) return null;
     for (const q of priceQuestions) {
+      if ((q.group ?? "estimation") !== "estimation" || q.required === false) continue;
       const v = priceAnswers[q.q_key];
-      const empty =
-        (String(q.type).toLowerCase().includes("multi") && Array.isArray(v) && v.length === 0) ||
-        v === undefined || v === null || v === "";
-      if (empty && (q.group ?? "estimation") === "estimation" && q.required !== false) return q;
+      const isMulti = String(q.type).toLowerCase().includes("multi");
+      const empty = isMulti ? !(Array.isArray(v) && v.length > 0) : (v === undefined || v === null || v === "");
+      if (empty) return q;
     }
-    return priceQuestions[0] || null;
+    return null;
   }, [priceQuestions, priceAnswers]);
 
-  // Mirror lines
+  // Mirror lines — apply full template around {{answer_label}} / {{answer_label_lower}}
   const mirrorLines = useMemo(() => {
     if (!priceQuestions?.length) return [];
     const lines = [];
@@ -625,7 +629,15 @@ export default function AskAssistant() {
         label = o?.label || String(ans);
       }
       if (!label) continue;
-      lines.push(label);
+      const tmpl = q.mirror_template;
+      if (tmpl && typeof tmpl === "string") {
+        const replaced = tmpl
+          .replace(/\{\{\s*answer_label_lower\s*\}\}|\{\s*answer_label_lower\s*\}/gi, label.toLowerCase())
+          .replace(/\{\{\s*answer_label\s*\}\}|\{\s*answer_label\s*\}/gi, label);
+        lines.push(replaced);
+      } else {
+        lines.push(label);
+      }
     }
     return lines;
   }, [priceQuestions, priceAnswers]);
@@ -1021,9 +1033,7 @@ export default function AskAssistant() {
       </div>
 
       {/* ThemeLab (enable with ?themelab=1) */}
-      {themeLabOn && (
-        <ThemeLabPanel vars={derivedTheme} />
-      )}
+      {themeLabOn && <ThemeLabPanel vars={derivedTheme} />}
     </div>
   );
 }
