@@ -1048,7 +1048,7 @@ export default function AskAssistant() {
 
         {/* Bottom Ask Bar — divider only */}
         <div className="px-4 py-3 border-t border-[var(--border-default)]" data-patch="ask-bottom-bar">
-          {showAskBottom ? (
+          {mode !== "price" || !!priceEstimate ? (
             <div className="relative w-full">
               <textarea
                 ref={inputRef}
@@ -1076,17 +1076,14 @@ export default function AskAssistant() {
         </div>
       </div>
 
-      {/* ThemeLab (enable with ?themelab=1) */}
+      {/* ThemeLab (enable with ?themelab=1) — ColorBox only */}
       {themeLabOn && botId ? (
-        <>
-          <ColorBox
-            apiBase={apiBase}
-            botId={botId}
-            frameRef={frameRef}
-            onVars={(vars) => setPickerVars(vars)}
-          />
-          <ThemeLabPanel vars={liveTheme} />
-        </>
+        <ColorBox
+          apiBase={apiBase}
+          botId={botId}
+          frameRef={frameRef}
+          onVars={(vars) => setPickerVars(vars)}
+        />
       ) : null}
     </div>
   );
@@ -1232,52 +1229,6 @@ function ColorBox({ apiBase, botId, frameRef, onVars }) {
           <button onClick={doReset} disabled={busy} className="px-3 py-1 rounded-[0.75rem] border border-black/20 bg-white hover:brightness-105">Reset</button>
           <button onClick={doSave} disabled={busy} className="px-3 py-1 rounded-[0.75rem] bg-black text-white hover:brightness-110">{busy ? "Saving…" : "Save"}</button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-/* =================== *
- *  ThemeLab panel (viewer)
- * =================== */
-function ThemeLabPanel({ vars }) {
-  const entries = Object.entries(vars);
-
-  function isColor(v) {
-    const s = String(v).trim();
-    return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(s) || /^rgb/.test(s) || /^hsl/.test(s);
-  }
-  function handleCopy(e, name, value) {
-    const copy = e.altKey || e.metaKey ? name : String(value);
-    try { navigator.clipboard?.writeText(copy); } catch {}
-  }
-
-  return (
-    <div
-      className="fixed bottom-4 left-4 z-50 rounded-xl bg-white/95 backdrop-blur px-3 py-2 text-xs shadow"
-      style={{ border: "1px solid var(--border-default)", width: 360, maxHeight: 220, overflow: "hidden" }}
-    >
-      <div className="flex items-center justify-between mb-2">
-        <div className="font-semibold">Theme vars</div>
-        <div className="text-[10px] text-gray-500">click = copy value · alt/opt+click = copy name</div>
-      </div>
-      <div className="overflow-y-auto pr-1" style={{ maxHeight: 180 }}>
-        {entries.map(([k, v]) => (
-          <button
-            key={k}
-            onClick={(e) => handleCopy(e, k, v)}
-            className="w-full grid grid-cols-[18px,1fr,1fr] items-center gap-2 py-1 text-left hover:bg-gray-50 rounded"
-            title="Click to copy value, Alt/Option+click for variable name"
-          >
-            <span
-              aria-hidden
-              className="h-3 w-3 rounded border border-black/10"
-              style={{ background: isColor(v) ? String(v) : "transparent" }}
-            />
-            <code className="opacity-70 truncate">{k}</code>
-            <span className="truncate">{String(v)}</span>
-          </button>
-        ))}
       </div>
     </div>
   );
