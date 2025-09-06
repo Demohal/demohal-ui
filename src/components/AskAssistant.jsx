@@ -1098,6 +1098,11 @@ function ColorBox({ apiBase, botId, frameRef, onVars }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
+  // auth state for ThemeLab
+  const [authState, setAuthState] = useState("checking"); // 'checking' | 'ok' | 'need_password' | 'disabled' | 'error'
+  const [password, setPassword] = useState("");
+  const [authError, setAuthError] = useState("");
+
   // position near the left edge of the context card
   const [pos, setPos] = useState({ left: 16, top: 16, width: 460 });
   useEffect(() => {
@@ -1117,9 +1122,39 @@ function ColorBox({ apiBase, botId, frameRef, onVars }) {
     return () => { window.removeEventListener("resize", h); window.removeEventListener("scroll", h); };
   }, [frameRef]);
 
+  // status check then load
+  async function checkStatusAndMaybeLoad() {
+    try {
+      setAuthError("");
+      setAuthState("checking");
+      const res = await fetch(`${apiBase}/themelab/status?bot_id=${encodeURIComponent(botId)}`, {
+        credentials: "include",
+      });
+      if (res.status === 200) {
+        setAuthState("ok");
+        await load();
+      } else if (res.status === 401) {
+        setAuthState("need_password");
+      } else if (res.status === 403) {
+        setAuthState("disabled");
+      } else {
+        setAuthState("error");
+      }
+    } catch {
+      setAuthState("error");
+    }
+  }
+
+  useEffect(() => {
+    checkStatusAndMaybeLoad();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiBase, botId]);
+
   // fetch the 16 client-controlled tokens
   async function load() {
-    const res = await fetch(`${apiBase}/brand/client-tokens?bot_id=${encodeURIComponent(botId)}`);
+    const res = await fetch(`${apiBase}/brand/client-tokens?bot_id=${encodeURIComponent(botId)}`, {
+      credentials: "include",
+    });
     const data = await res.json();
     const toks = (data?.ok ? data.tokens : []) || [];
     setRows(toks);
@@ -1133,7 +1168,6 @@ function ColorBox({ apiBase, botId, frameRef, onVars }) {
     });
     onVars(css);
   }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [apiBase, botId]);
 
   function updateToken(tk, value) {
     const v = value || "";
@@ -1147,7 +1181,9 @@ function ColorBox({ apiBase, botId, frameRef, onVars }) {
       setBusy(true);
       const updates = Object.entries(values).map(([token_key, value]) => ({ token_key, value }));
       const res = await fetch(`${apiBase}/brand/client-tokens/save`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ bot_id: botId, updates }),
       });
       const data = await res.json();
@@ -1166,6 +1202,31 @@ function ColorBox({ apiBase, botId, frameRef, onVars }) {
     await load();
     setMsg("Colors restored from database.");
     setTimeout(() => setMsg(""), 1800);
+  }
+
+  async function doLogin(e) {
+    e?.preventDefault();
+    try {
+      setAuthError("");
+      const res = await fetch(`${apiBase}/themelab/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ bot_id: botId, password }),
+      });
+      const data = await res.json();
+      if (res.status === 200 && data?.ok) {
+        setAuthState("ok");
+        setPassword("");
+        await load();
+      } else if (res.status === 403) {
+        setAuthState("disabled");
+      } else {
+        setAuthError("Invalid password.");
+      }
+    } catch {
+      setAuthError("Login failed.");
+    }
   }
 
   // group by screen in the required order
@@ -1200,36 +1261,68 @@ function ColorBox({ apiBase, botId, frameRef, onVars }) {
     >
       <div className="text-2xl font-extrabold mb-2">Colors</div>
 
-      {SCREEN_ORDER.map(({ key, label }) => (
-        <div key={key} className="mb-2">
-          <div className="text-sm font-bold mb-1">{label}</div>
-          <div className="space-y-1 pl-1">
-            {(groups.get(key) || []).map((t) => (
-              <div key={t.token_key} className="flex items-center justify-between gap-3">
-                <div className="text-xs">{t.label}</div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={values[t.token_key] || "#000000"}
-                    onChange={(e) => updateToken(t.token_key, e.target.value)}
-                    style={{ width: 32, height: 24, borderRadius: 6, border: "1px solid rgba(0,0,0,0.2)" }}
-                    title={t.token_key}
-                  />
-                  <code className="text-[11px] opacity-70">{values[t.token_key] || ""}</code>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
+      {authState === "checking" && (
+        <div className="text-sm text-gray-600">Checking access…</div>
+      )}
 
-      <div className="mt-3 flex items-center justify-between">
-        <div className="text-xs text-gray-600">{msg}</div>
-        <div className="flex items-center gap-2">
-          <button onClick={doReset} disabled={busy} className="px-3 py-1 rounded-[0.75rem] border border-black/20 bg-white hover:brightness-105">Reset</button>
-          <button onClick={doSave} disabled={busy} className="px-3 py-1 rounded-[0.75rem] bg-black text-white hover:brightness-110">{busy ? "Saving…" : "Save"}</button>
-        </div>
-      </div>
+      {authState === "disabled" && (
+        <div className="text-sm text-gray-600">ThemeLab is disabled for this bot.</div>
+      )}
+
+      {authState === "need_password" && (
+        <form onSubmit={doLogin} className="flex items-center gap-2">
+          <input
+            type="password"
+            placeholder="Enter ThemeLab password"
+            className="flex-1 rounded-[0.75rem] border border-black/20 px-3 py-2"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <button type="submit" className="px-3 py-2 rounded-[0.75rem] bg-black text-white hover:brightness-110">
+            Unlock
+          </button>
+          {authError ? <div className="text-xs text-red-600 ml-2">{authError}</div> : null}
+        </form>
+      )}
+
+      {authState === "ok" && (
+        <>
+          {SCREEN_ORDER.map(({ key, label }) => (
+            <div key={key} className="mb-2">
+              <div className="text-sm font-bold mb-1">{label}</div>
+              <div className="space-y-1 pl-1">
+                {(groups.get(key) || []).map((t) => (
+                  <div key={t.token_key} className="flex items-center justify-between gap-3">
+                    <div className="text-xs">{t.label}</div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={values[t.token_key] || "#000000"}
+                        onChange={(e) => updateToken(t.token_key, e.target.value)}
+                        style={{ width: 32, height: 24, borderRadius: 6, border: "1px solid rgba(0,0,0,0.2)" }}
+                        title={t.token_key}
+                      />
+                      <code className="text-[11px] opacity-70">{values[t.token_key] || ""}</code>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          <div className="mt-3 flex items-center justify-between">
+            <div className="text-xs text-gray-600">{msg}</div>
+            <div className="flex items-center gap-2">
+              <button onClick={doReset} disabled={busy} className="px-3 py-1 rounded-[0.75rem] border border-black/20 bg-white hover:brightness-105">Reset</button>
+              <button onClick={doSave} disabled={busy} className="px-3 py-1 rounded-[0.75rem] bg-black text-white hover:brightness-110">{busy ? "Saving…" : "Save"}</button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {authState === "error" && (
+        <div className="text-sm text-red-600">Unable to verify access.</div>
+      )}
     </div>
   );
 }
