@@ -10,25 +10,20 @@ import fallbackLogo from "../assets/logo.png";
  * =============================== */
 
 const DEFAULT_THEME_VARS = {
-  // Page + header + content area
   "--banner-bg": "#000000",            // banner.background
   "--banner-fg": "#ffffff",            // banner.foreground
   "--page-bg": "#e6e6e6",              // page.background
   "--card-bg": "#ffffff",              // content.area.background
   "--shadow-elevation": "0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.10)",
 
-  // Text roles
   "--message-fg": "#000000",           // message.text.foreground
   "--helper-fg": "#4b5563",            // helper.text.foreground
   "--mirror-fg": "#4b5563",            // mirror.text.foreground
 
-  // Tabs (inactive)
-  "--tab-bg": "#000000",               // tab.background
-  "--tab-fg": "#000000",               // tab.foreground
-  // Derived at runtime from --tab-fg:
-  "--tab-active-fg": "#ffffff",
+  "--tab-bg": "#303030",               // tab.background (db-driven)
+  "--tab-fg": "#ffffff",               // tab.foreground (db-driven)
+  "--tab-active-fg": "#ffffff",        // derived in code
 
-  // Buttons (explicit types)
   "--demo-button-bg": "#3a4554",       // demo.button.background
   "--demo-button-fg": "#ffffff",       // demo.button.foreground
   "--doc-button-bg": "#000000",        // doc.button.background
@@ -36,16 +31,13 @@ const DEFAULT_THEME_VARS = {
   "--price-button-bg": "#1a1a1a",      // price.button.background
   "--price-button-fg": "#ffffff",      // price.button.foreground
 
-  // Send icon
   "--send-color": "#000000",           // send.button.background
 
-  // Default border color (faint gray)
+  // faint gray default border
   "--border-default": "#9ca3af",
 };
 
-const normKey = (s) => (s || "").toLowerCase().replace(/[\s-]+/g, "_");
 const classNames = (...xs) => xs.filter(Boolean).join(" ");
-
 function inverseBW(hex) {
   const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(String(hex || "").trim());
   if (!m) return "#000000";
@@ -145,20 +137,6 @@ function EstimateCard({ estimate, outroText }) {
                   {Number(li.price_max).toLocaleString()}
                 </div>
               </div>
-              {Array.isArray(li.features) && li.features.length > 0 && (
-                <div className="mt-2">
-                  {li.features
-                    .filter((f) => f.is_standard)
-                    .map((f, idx) => (
-                      <span
-                        key={`${li.product.id}-${idx}`}
-                        className="inline-block text-xs rounded-full px-2 py-0.5 mr-1 mb-1 bg-black/5"
-                      >
-                        {f.name}
-                      </span>
-                    ))}
-                </div>
-              )}
             </div>
           ))}
         </div>
@@ -169,19 +147,49 @@ function EstimateCard({ estimate, outroText }) {
   );
 }
 
+/* ---------- Options normalizer (accepts many backend shapes) ---------- */
+function normalizeOptions(q) {
+  const raw =
+    q?.options ??
+    q?.choices ??
+    q?.buttons ??
+    q?.values ??
+    [];
+
+  return (Array.isArray(raw) ? raw : []).map((o, idx) => {
+    if (o == null) return null;
+    if (typeof o === "string") {
+      return { key: o, label: o, id: String(idx) };
+    }
+    const key = o.key ?? o.value ?? o.id ?? String(idx);
+    const label = o.label ?? o.title ?? o.name ?? String(key);
+    const tooltip = o.tooltip ?? o.description ?? o.help ?? undefined;
+    return { key, label, tooltip, id: String(o.id ?? key ?? idx) };
+  }).filter(Boolean);
+}
+
 function QuestionBlock({ q, value, onPick }) {
+  const opts = normalizeOptions(q);
+  const isMulti = String(q?.type || "").toLowerCase() === "multi_choice" ||
+                  String(q?.type || "").toLowerCase() === "multichoice" ||
+                  String(q?.type || "").toLowerCase() === "multi";
+
   return (
     <div data-patch="question-block" className={UI.FIELD}>
       <div className="font-bold text-base text-[var(--message-fg)]">{q.prompt}</div>
       {q.help_text ? <div className="text-xs italic mt-1 text-[var(--helper-fg)]">{q.help_text}</div> : null}
 
-      {Array.isArray(q.options) && q.options.length > 0 ? (
+      {opts.length > 0 ? (
         <div className="mt-3 flex flex-col gap-3">
-          {q.options.map((opt) => (
+          {opts.map((opt) => (
             <OptionButton
-              key={opt.key || opt.id}
+              key={opt.id}
               opt={opt}
-              selected={q.type === "multi_choice" ? Array.isArray(value) && value.includes(opt.key) : value === opt.key}
+              selected={
+                isMulti
+                  ? Array.isArray(value) && value.includes(opt.key)
+                  : value === opt.key
+              }
               onClick={() => onPick(q, opt)}
             />
           ))}
@@ -216,7 +224,6 @@ function TabsNav({ mode, tabs }) {
               role="tab"
               aria-selected={active}
               className={active ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}
-              /* Force DB-driven colors to win */
               style={active
                 ? { background: "var(--card-bg)", color: "var(--tab-active-fg)" }
                 : { background: "var(--tab-bg)", color: "var(--tab-fg)" }}
@@ -247,13 +254,11 @@ export default function AskAssistant() {
     return { alias: a, botIdFromUrl: b, themeLabOn: th === "1" || th.toLowerCase() === "true" };
   }, []);
 
-  // Optional default alias via env
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
 
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [fatal, setFatal] = useState("");
 
-  // Modes: ask | browse | docs | price | meeting
   const [mode, setMode] = useState("ask");
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
@@ -263,9 +268,9 @@ export default function AskAssistant() {
 
   const [loading, setLoading] = useState(false);
 
-  const [items, setItems] = useState([]); // Ask suggestions (demos)
-  const [browseItems, setBrowseItems] = useState([]); // Demos
-  const [browseDocs, setBrowseDocs] = useState([]); // Docs
+  const [items, setItems] = useState([]);
+  const [browseItems, setBrowseItems] = useState([]);
+  const [browseDocs, setBrowseDocs] = useState([]);
   const [selected, setSelected] = useState(null);
 
   const [helperPhase, setHelperPhase] = useState("hidden");
@@ -274,27 +279,21 @@ export default function AskAssistant() {
   const contentRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Theme (DB-driven CSS variables)
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
-
-  // Derived theme (compute active tab fg as inverse of tab fg)
   const derivedTheme = useMemo(() => {
     const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
     return { ...themeVars, "--tab-active-fg": activeFg };
   }, [themeVars]);
 
-  // Brand assets (logo variants)
   const [brandAssets, setBrandAssets] = useState({
     logo_url: null,
     logo_light_url: null,
     logo_dark_url: null,
   });
 
-  // Prevent brand FOUC: gate UI until brand is loaded at least once
   const initialBrandReady = useMemo(() => !(botIdFromUrl || alias), [botIdFromUrl, alias]);
   const [brandReady, setBrandReady] = useState(initialBrandReady);
 
-  // NEW: Tab visibility flags
   const [tabsEnabled, setTabsEnabled] = useState({
     demos: false,
     docs: false,
@@ -310,10 +309,9 @@ export default function AskAssistant() {
   const [priceBusy, setPriceBusy] = useState(false);
   const [priceErr, setPriceErr] = useState("");
 
-  // Agent for meeting tab
   const [agent, setAgent] = useState(null);
 
-  // Resolve bot settings (alias → id)
+  // Resolve bot by alias
   useEffect(() => {
     if (botId) return;
     if (!alias) return;
@@ -350,7 +348,7 @@ export default function AskAssistant() {
     return () => { cancel = true; };
   }, [alias, apiBase, botId]);
 
-  // Default alias path
+  // Try default alias if needed
   useEffect(() => {
     if (botId || alias || !defaultAlias) return;
     let cancel = false;
@@ -374,9 +372,7 @@ export default function AskAssistant() {
           setShowIntroVideo(!!b.show_intro_video);
         }
         if (id) setBotId(id);
-      } catch {
-        // ignore
-      }
+      } catch {}
     })();
     return () => { cancel = true; };
   }, [botId, alias, defaultAlias, apiBase]);
@@ -385,7 +381,7 @@ export default function AskAssistant() {
     if (!botId && !alias && !brandReady) setBrandReady(true);
   }, [botId, alias, brandReady]);
 
-  // Fetch brand theme + assets
+  // Brand: css vars + assets
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
@@ -406,17 +402,14 @@ export default function AskAssistant() {
           });
         }
       } catch {
-        // keep defaults
       } finally {
         if (!cancel) setBrandReady(true);
       }
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => { cancel = true; };
   }, [botId, apiBase]);
 
-  // Fetch tab flags when botId known
+  // Tab flags (by bot_id)
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
@@ -437,9 +430,7 @@ export default function AskAssistant() {
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
         }
-      } catch {
-        // silent
-      }
+      } catch {}
     })();
     return () => { cancel = true; };
   }, [botId, apiBase]);
@@ -452,13 +443,11 @@ export default function AskAssistant() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  // Release video/doc sticky when scrolling
+  // release sticky when scrolling
   useEffect(() => {
     const el = contentRef.current;
     if (!el || !selected) return;
-    const onScroll = () => {
-      if (el.scrollTop > 8 && isAnchored) setIsAnchored(false);
-    };
+    const onScroll = () => { if (el.scrollTop > 8 && isAnchored) setIsAnchored(false); };
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
   }, [selected, isAnchored]);
@@ -490,7 +479,7 @@ export default function AskAssistant() {
       const ag = data?.ok ? data.agent : null;
       setAgent(ag);
       if (ag && ag.calendar_link_type && String(ag.calendar_link_type).toLowerCase() === "external" && ag.calendar_link) {
-        try { window.open(ag.calendar_link, "_blank", "noopener,noreferrer"); } catch (_) {}
+        try { window.open(ag.calendar_link, "_blank", "noopener,noreferrer"); } catch {}
       }
       requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
     } catch {
@@ -565,16 +554,14 @@ export default function AskAssistant() {
         if (!cancel) setPriceErr("Unable to load price estimator.");
       }
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => { cancel = true; };
   }, [mode, botId, apiBase]);
 
   // Pricing: compute estimate when inputs ready
   useEffect(() => {
     const haveAll = (() => {
       if (!priceQuestions?.length) return false;
-      const req = priceQuestions.filter((q) => q.group === "estimation" && q.required !== false);
+      const req = priceQuestions.filter((q) => (q.group ?? "estimation") === "estimation" && q.required !== false);
       if (!req.length) return false;
       return req.every((q) => {
         const v = priceAnswers[q.q_key];
@@ -605,67 +592,48 @@ export default function AskAssistant() {
         if (!cancel) setPriceBusy(false);
       }
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => { cancel = true; };
   }, [mode, botId, apiBase, priceQuestions, priceAnswers]);
 
-  // Next unanswered question (fallback to first question to guarantee visibility)
+  // Next unanswered (fallback to first)
   const nextPriceQuestion = useMemo(() => {
     if (!priceQuestions?.length) return null;
     for (const q of priceQuestions) {
       const v = priceAnswers[q.q_key];
       const empty =
-        (q.type === "multi_choice" && Array.isArray(v) && v.length === 0) ||
+        (String(q.type).toLowerCase().includes("multi") && Array.isArray(v) && v.length === 0) ||
         v === undefined || v === null || v === "";
-      if (empty && q.group === "estimation" && q.required !== false) return q;
+      if (empty && (q.group ?? "estimation") === "estimation" && q.required !== false) return q;
     }
     return priceQuestions[0] || null;
   }, [priceQuestions, priceAnswers]);
 
-  // Mirror lines (for PriceTop)
-  const CFG = {
-    qKeys: {
-      product: ["edition", "editions", "product", "products", "industry_edition", "industry"],
-      tier: ["transactions", "transaction_volume", "volume", "tier", "tiers"],
-    },
-  };
+  // Mirror lines
   const mirrorLines = useMemo(() => {
     if (!priceQuestions?.length) return [];
     const lines = [];
     for (const q of priceQuestions) {
       const ans = priceAnswers[q.q_key];
       if (ans === undefined || ans === null || ans === "" || (Array.isArray(ans) && ans.length === 0)) continue;
-      const opts = q.options || [];
+      const opts = normalizeOptions(q);
       let label = "";
-      if (q.type === "choice") {
-        const o = opts.find((o) => o.key === ans);
-        label = o?.label || String(ans);
-      } else if (q.type === "multi_choice") {
+      if (String(q.type).toLowerCase().includes("multi")) {
         const picked = Array.isArray(ans) ? ans : [];
         label = opts.filter((o) => picked.includes(o.key)).map((o) => o.label).join(", ");
       } else {
-        label = String(ans);
+        const o = opts.find((o) => o.key === ans);
+        label = o?.label || String(ans);
       }
       if (!label) continue;
-
-      const key = normKey(q.q_key);
-      let line = null;
-      if (q.mirror_template) {
-        line = q.mirror_template.split("{{answer_label_lower}}").join(label.toLowerCase()).split("{{answer_label}}").join(label);
-      } else if (CFG.qKeys.product.includes(key)) {
-        line = `You have selected ${label}.`;
-      } else if (CFG.qKeys.tier.includes(key)) {
-        line = `You stated that you execute ${label.toLowerCase()} commercial transactions per month.`;
-      }
-      if (line) lines.push(line);
+      lines.push(label);
     }
     return lines;
   }, [priceQuestions, priceAnswers]);
 
   function handlePickOption(q, opt) {
+    const isMulti = String(q?.type || "").toLowerCase().includes("multi");
     setPriceAnswers((prev) => {
-      if (q.type === "multi_choice") {
+      if (isMulti) {
         const curr = Array.isArray(prev[q.q_key]) ? prev[q.q_key] : [];
         const exists = curr.includes(opt.key);
         const next = exists ? curr.filter((k) => k !== opt.key) : [...curr, opt.key];
@@ -918,7 +886,6 @@ export default function AskAssistant() {
                   <>
                     <div className="flex items-center justify-between mt-1 mb-3">
                       <p className="italic text-[var(--helper-fg)]">Recommended demos</p>
-                      <span />
                     </div>
                     <div className="flex flex-col gap-3">
                       {visibleUnderVideo.map((it) => (
@@ -938,7 +905,6 @@ export default function AskAssistant() {
                   <>
                     <div className="flex items-center justify-between mt-2 mb-3">
                       <p className="italic text-[var(--helper-fg)]">Select a demo to view it</p>
-                      <span />
                     </div>
                     <div className="flex flex-col gap-3">
                       {browseItems.map((it) => (
@@ -958,7 +924,6 @@ export default function AskAssistant() {
                   <>
                     <div className="flex items-center justify-between mt-2 mb-3">
                       <p className="italic text-[var(--helper-fg)]">Select a document to view it</p>
-                      <span />
                     </div>
                     <div className="flex flex-col gap-3">
                       {browseDocs.map((it) => (
@@ -1007,7 +972,6 @@ export default function AskAssistant() {
                 {helperPhase !== "hidden" && (
                   <div className="flex items-center justify-between mt-3 mb-2">
                     <p className="italic text-[var(--helper-fg)]">Recommended demos</p>
-                    <span />
                   </div>
                 )}
                 {helperPhase === "buttons" && (items || []).length > 0 && (
@@ -1026,7 +990,7 @@ export default function AskAssistant() {
           </div>
         )}
 
-        {/* Bottom Ask Bar — keep only this divider */}
+        {/* Bottom Ask Bar — divider only */}
         <div className="px-4 py-3 border-t border-[var(--border-default)]" data-patch="ask-bottom-bar">
           {showAskBottom ? (
             <div className="relative w-full">
@@ -1058,19 +1022,54 @@ export default function AskAssistant() {
 
       {/* ThemeLab (enable with ?themelab=1) */}
       {themeLabOn && (
-        <div className="fixed bottom-3 left-3 z-50 rounded-lg bg-white/90 backdrop-blur px-3 py-2 text-xs shadow"
-             style={{ border: "1px solid var(--border-default)" }}>
-          <div className="font-semibold mb-1">Theme vars</div>
-          <div style={{maxHeight: 180, overflowY: "auto"}}>
-            {Object.entries(derivedTheme).map(([k, v]) => (
-              <div key={k} className="grid grid-cols-2 gap-2 mb-0.5">
-                <code className="opacity-70">{k}</code>
-                <span className="truncate">{String(v)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <ThemeLabPanel vars={derivedTheme} />
       )}
+    </div>
+  );
+}
+
+/* =================== *
+ *  ThemeLab panel
+ * =================== */
+function ThemeLabPanel({ vars }) {
+  const entries = Object.entries(vars);
+
+  function isColor(v) {
+    const s = String(v).trim();
+    return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(s) || /^rgb/.test(s) || /^hsl/.test(s);
+  }
+  function handleCopy(e, name, value) {
+    const copy = e.altKey || e.metaKey ? name : String(value);
+    try { navigator.clipboard?.writeText(copy); } catch {}
+  }
+
+  return (
+    <div
+      className="fixed bottom-4 left-4 z-50 rounded-xl bg-white/95 backdrop-blur px-3 py-2 text-xs shadow"
+      style={{ border: "1px solid var(--border-default)", width: 360, maxHeight: 220, overflow: "hidden" }}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <div className="font-semibold">Theme vars</div>
+        <div className="text-[10px] text-gray-500">click = copy value · alt/opt+click = copy name</div>
+      </div>
+      <div className="overflow-y-auto pr-1" style={{ maxHeight: 180 }}>
+        {entries.map(([k, v]) => (
+          <button
+            key={k}
+            onClick={(e) => handleCopy(e, k, v)}
+            className="w-full grid grid-cols-[18px,1fr,1fr] items-center gap-2 py-1 text-left hover:bg-gray-50 rounded"
+            title="Click to copy value, Alt/Option+click for variable name"
+          >
+            <span
+              aria-hidden
+              className="h-3 w-3 rounded border border-black/10"
+              style={{ background: isColor(v) ? String(v) : "transparent" }}
+            />
+            <code className="opacity-70 truncate">{k}</code>
+            <span className="truncate">{String(v)}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
