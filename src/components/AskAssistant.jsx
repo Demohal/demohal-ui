@@ -7,12 +7,7 @@ import fallbackLogo from "../assets/logo.png";
 
 /* =============================== *
  *  CLIENT-CONTROLLED CSS TOKENS   *
- * =============================== *
- * Matches the tokens from your table. The backend should map those
- * token_keys → the CSS variables used below (see list in the chat).
- * Borders are fixed: 2px solid black. Radius fixed: 0.75rem.
- * All hovers use a lightening effect (brightness), no hover tokens.
- */
+ * =============================== */
 
 const DEFAULT_THEME_VARS = {
   // Page + header + content area
@@ -28,8 +23,8 @@ const DEFAULT_THEME_VARS = {
   "--mirror-fg": "#4b5563",            // mirror.text.foreground
 
   // Tabs (inactive)
-  "--tab-bg": "#485260",               // tab.background
-  "--tab-fg": "#ffffff",               // tab.foreground
+  "--tab-bg": "#000000",               // tab.background
+  "--tab-fg": "#000000",               // tab.foreground
   // Derived at runtime from --tab-fg:
   "--tab-active-fg": "#ffffff",
 
@@ -43,24 +38,24 @@ const DEFAULT_THEME_VARS = {
 
   // Send icon
   "--send-color": "#000000",           // send.button.background
+
+  // Default border color (faint gray)
+  "--border-default": "#9ca3af",
 };
 
-// Utility: normalize keys and classes
 const normKey = (s) => (s || "").toLowerCase().replace(/[\s-]+/g, "_");
 const classNames = (...xs) => xs.filter(Boolean).join(" ");
 
-/** inverse color (black/white) for readability */
 function inverseBW(hex) {
   const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(String(hex || "").trim());
   if (!m) return "#000000";
   const r = parseInt(m[1], 16), g = parseInt(m[2], 16), b = parseInt(m[3], 16);
-  // perceived luminance
   const L = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   return L > 0.5 ? "#000000" : "#ffffff";
 }
 
 /* ========================== *
- *  SMALL PATCHABLE COMPONENTS
+ *  UI PRIMITIVES
  * ========================== */
 
 const UI = {
@@ -75,12 +70,13 @@ const UI = {
     "w-full text-center rounded-[0.75rem] px-4 py-3 transition " +
     "text-[var(--price-button-fg)] bg-[var(--price-button-bg)] hover:brightness-110 active:brightness-95",
   FIELD:
-    "w-full rounded-[0.75rem] px-4 py-3 text-base bg-[var(--card-bg)] border-2 border-gray",
+    "w-full rounded-[0.75rem] px-4 py-3 text-base bg-[var(--card-bg)] " +
+    "border border-[var(--border-default)]",
   TAB_ACTIVE:
-    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] border-2 border-b-0 border-black " +
-    "bg-[var(--card-bg)] text-[var(--tab-active-fg)] -mb-px [box-shadow:var(--shadow-elevation)]",
+    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] " +
+    "bg-[var(--card-bg)] text-[var(--tab-active-fg)] [box-shadow:var(--shadow-elevation)]",
   TAB_INACTIVE:
-    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] border-2 border-b-0 border-black " +
+    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] " +
     "bg-[var(--tab-bg)] text-[var(--tab-fg)] hover:brightness-110",
 };
 
@@ -88,7 +84,7 @@ function Row({ item, onPick, kind = "demo" }) {
   const btnClass =
     kind === "doc" ? UI.BTN_DOC :
     kind === "price" ? UI.BTN_PRICE :
-    UI.BTN_DEMO; // default/demo
+    UI.BTN_DEMO;
   return (
     <button data-patch="row-button" onClick={() => onPick(item)} className={btnClass} title={item.description || ""}>
       <div className="font-extrabold text-xs sm:text-sm">{item.title}</div>
@@ -106,7 +102,7 @@ function OptionButton({ opt, selected, onClick }) {
     <button
       data-patch="option-button"
       onClick={() => onClick(opt)}
-      className={classNames(UI.BTN_PRICE, selected && "ring-2 ring-white/60")}
+      className={classNames(UI.BTN_PRICE, selected && "ring-2 ring-black/20")}
       title={opt.tooltip || ""}
     >
       <div className="font-extrabold text-xs sm:text-sm">{opt.label}</div>
@@ -142,7 +138,7 @@ function EstimateCard({ estimate, outroText }) {
         </div>
         <div className="space-y-3">
           {(estimate.line_items || []).map((li) => (
-            <div key={li.product.id} className="border-2 border-black rounded-[0.75rem] p-3">
+            <div key={li.product.id} className="rounded-[0.75rem] p-3 bg-white">
               <div className="flex items-center justify-between">
                 <div className="font-bold">{li.product.name}</div>
                 <div className="font-bold text-lg">
@@ -157,7 +153,7 @@ function EstimateCard({ estimate, outroText }) {
                     .map((f, idx) => (
                       <span
                         key={`${li.product.id}-${idx}`}
-                        className="inline-block text-xs border-2 border-black rounded-full px-2 py-0.5 mr-1 mb-1"
+                        className="inline-block text-xs rounded-full px-2 py-0.5 mr-1 mb-1 bg-black/5"
                       >
                         {f.name}
                       </span>
@@ -177,7 +173,7 @@ function EstimateCard({ estimate, outroText }) {
 function QuestionBlock({ q, value, onPick }) {
   return (
     <div data-patch="question-block" className={UI.FIELD}>
-      <div className="font-bold text-base text-[var(--message-fg)]">{q.prompt}</div>
+    <div className="font-bold text-base text-[var(--message-fg)]">{q.prompt}</div>
       {q.help_text ? <div className="text-xs italic mt-1 text-[var(--helper-fg)]">{q.help_text}</div> : null}
 
       {Array.isArray(q.options) && q.options.length > 0 ? (
@@ -201,7 +197,7 @@ function QuestionBlock({ q, value, onPick }) {
 function TabsNav({ mode, tabs }) {
   return (
     <div
-      className="w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden border-b-2 border-black [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       data-patch="tabs-nav"
     >
       <nav
@@ -312,7 +308,7 @@ export default function AskAssistant() {
   // Agent for meeting tab
   const [agent, setAgent] = useState(null);
 
-  // Resolve bot settings (alias → id):contentReference[oaicite:4]{index=4}
+  // Resolve bot settings (alias → id)
   useEffect(() => {
     if (botId) return;
     if (!alias) return;
@@ -349,7 +345,7 @@ export default function AskAssistant() {
     return () => { cancel = true; };
   }, [alias, apiBase, botId]);
 
-  // Default alias path:contentReference[oaicite:5]{index=5}
+  // Default alias path
   useEffect(() => {
     if (botId || alias || !defaultAlias) return;
     let cancel = false;
@@ -384,7 +380,7 @@ export default function AskAssistant() {
     if (!botId && !alias && !brandReady) setBrandReady(true);
   }, [botId, alias, brandReady]);
 
-  // Fetch brand theme + assets:contentReference[oaicite:6]{index=6}
+  // Fetch brand theme + assets
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
@@ -415,7 +411,7 @@ export default function AskAssistant() {
     };
   }, [botId, apiBase]);
 
-  // Fetch tab flags when botId known:contentReference[oaicite:7]{index=7}
+  // Fetch tab flags when botId known
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
@@ -462,7 +458,6 @@ export default function AskAssistant() {
     return () => el.removeEventListener("scroll", onScroll);
   }, [selected, isAnchored]);
 
-  // Helpers
   async function normalizeAndSelectDemo(item) {
     try {
       const r = await fetch(`${apiBase}/render-video-iframe`, {
@@ -610,16 +605,17 @@ export default function AskAssistant() {
     };
   }, [mode, botId, apiBase, priceQuestions, priceAnswers]);
 
-  // Next unanswered (required) question
+  // Next unanswered question (fallback to first question to guarantee visibility)
   const nextPriceQuestion = useMemo(() => {
     if (!priceQuestions?.length) return null;
     for (const q of priceQuestions) {
       const v = priceAnswers[q.q_key];
       const empty =
-        (q.type === "multi_choice" && Array.isArray(v) && v.length === 0) || v === undefined || v === null || v === "";
+        (q.type === "multi_choice" && Array.isArray(v) && v.length === 0) ||
+        v === undefined || v === null || v === "";
       if (empty && q.group === "estimation" && q.required !== false) return q;
     }
-    return null;
+    return priceQuestions[0] || null;
   }, [priceQuestions, priceAnswers]);
 
   // Mirror lines (for PriceTop)
@@ -662,7 +658,6 @@ export default function AskAssistant() {
     return lines;
   }, [priceQuestions, priceAnswers]);
 
-  // Actions used in multiple panes
   function handlePickOption(q, opt) {
     setPriceAnswers((prev) => {
       if (q.type === "multi_choice") {
@@ -747,7 +742,6 @@ export default function AskAssistant() {
   }, [selected, items]);
   const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
 
-  // NEW: dynamically build tabs from bot flags
   const tabs = useMemo(() => {
     const out = [];
     if (tabsEnabled.demos) out.push({ key: "demos", label: "Browse Demos", onClick: openBrowse });
@@ -805,7 +799,7 @@ export default function AskAssistant() {
       )}
       style={derivedTheme}
     >
-      <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] border-2 border-black rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all duration-300">
+      <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all duration-300">
         {/* Header */}
         <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)]">
           <div className="flex items-center justify-between w-full py-3">
@@ -843,7 +837,9 @@ export default function AskAssistant() {
               ) : null}
             </div>
             <div ref={priceScrollRef} className="px-6 pt-0 pb-6 flex-1 overflow-y-auto">
-              {!priceQuestions?.length ? null : nextPriceQuestion ? (
+              {!priceQuestions?.length ? (
+                <div className="text-sm text-[var(--helper-fg)]">Loading questions…</div>
+              ) : nextPriceQuestion ? (
                 <QuestionBlock q={nextPriceQuestion} value={priceAnswers[nextPriceQuestion.q_key]} onPick={handlePickOption} />
               ) : (
                 <EstimateCard
@@ -868,7 +864,6 @@ export default function AskAssistant() {
                     <div className="mb-2 text-sm italic whitespace-pre-line text-[var(--helper-fg)]">{agent.schedule_header}</div>
                   ) : null}
 
-                  {/* calendar_link_type handling */}
                   {!agent ? (
                     <div className="text-sm text-[var(--helper-fg)]">Loading scheduling…</div>
                   ) : agent.calendar_link_type && String(agent.calendar_link_type).toLowerCase() === "embed" && agent.calendar_link ? (
@@ -876,7 +871,7 @@ export default function AskAssistant() {
                       title="Schedule a Meeting"
                       src={`${agent.calendar_link}?embed_domain=${embedDomain}&embed_type=Inline`}
                       style={{ width: "100%", height: "60vh", maxHeight: "640px" }}
-                      className="rounded-[0.75rem] border-2 border-black [box-shadow:var(--shadow-elevation)]"
+                      className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
                     />
                   ) : agent.calendar_link_type && String(agent.calendar_link_type).toLowerCase() === "external" && agent.calendar_link ? (
                     <div className="text-sm text-gray-700">
@@ -895,7 +890,7 @@ export default function AskAssistant() {
                 {mode === "docs" ? (
                   <div className="bg-white pt-2 pb-2">
                     <iframe
-                      className="w-full h-[65vh] md:h-[78vh] rounded-[0.75rem] border-2 border-black [box-shadow:var(--shadow-elevation)]"
+                      className="w-full h-[65vh] md:h-[78vh] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
                       src={selected.url}
                       title={selected.title}
                       loading="lazy"
@@ -908,7 +903,7 @@ export default function AskAssistant() {
                       style={{ width: "100%", aspectRatio: "471 / 272" }}
                       src={selected.url}
                       title={selected.title}
-                      className="rounded-[0.75rem] border-2 border-black [box-shadow:var(--shadow-elevation)]"
+                      className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                       allowFullScreen
                     />
@@ -990,7 +985,7 @@ export default function AskAssistant() {
                           allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
                           referrerPolicy="strict-origin-when-cross-origin"
                           style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
-                          className="rounded-[0.75rem] border-2 border-black [box-shadow:var(--shadow-elevation)]"
+                          className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
                         />
                       </div>
                     ) : null}
@@ -1026,14 +1021,14 @@ export default function AskAssistant() {
           </div>
         )}
 
-        {/* Bottom Ask Bar */}
-        <div className="px-4 py-3 border-t-2 border-black" data-patch="ask-bottom-bar">
+        {/* Bottom Ask Bar (only remaining divider line) */}
+        <div className="px-4 py-3 border-t border-[var(--border-default)]" data-patch="ask-bottom-bar">
           {showAskBottom ? (
             <div className="relative w-full">
               <textarea
                 ref={inputRef}
                 rows={1}
-                className="w-full border-2 border-black rounded-[0.75rem] px-4 py-2 pr-14 text-base placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px] bg-[var(--card-bg)]"
+                className="w-full rounded-[0.75rem] px-4 py-2 pr-14 text-base placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px] bg-[var(--card-bg)]"
                 placeholder="Ask your question here"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
