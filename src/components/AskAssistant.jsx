@@ -34,7 +34,7 @@ const DEFAULT_THEME_VARS = {
   "--doc-button-bg": "#000000",        // doc.button.background
   "--doc-button-fg": "#ffffff",        // doc.button.foreground
   "--price-button-bg": "#1a1a1a",      // price.button.background
-  "--price-button-fg": "#000000",      // price.button.foreground
+  "--price-button-fg": "#ffffff",      // price.button.foreground
 
   // Send icon
   "--send-color": "#000000",           // send.button.background
@@ -74,10 +74,9 @@ const UI = {
     "border border-[var(--border-default)]",
   TAB_ACTIVE:
     "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] " +
-    "bg-[var(--card-bg)] text-[var(--tab-active-fg)] [box-shadow:var(--shadow-elevation)]",
+    "[box-shadow:var(--shadow-elevation)]",
   TAB_INACTIVE:
-    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] " +
-    "bg-[var(--tab-bg)] text-[var(--tab-fg)] hover:brightness-110",
+    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] hover:brightness-110",
 };
 
 function Row({ item, onPick, kind = "demo" }) {
@@ -173,7 +172,7 @@ function EstimateCard({ estimate, outroText }) {
 function QuestionBlock({ q, value, onPick }) {
   return (
     <div data-patch="question-block" className={UI.FIELD}>
-    <div className="font-bold text-base text-[var(--message-fg)]">{q.prompt}</div>
+      <div className="font-bold text-base text-[var(--message-fg)]">{q.prompt}</div>
       {q.help_text ? <div className="text-xs italic mt-1 text-[var(--helper-fg)]">{q.help_text}</div> : null}
 
       {Array.isArray(q.options) && q.options.length > 0 ? (
@@ -217,6 +216,11 @@ function TabsNav({ mode, tabs }) {
               role="tab"
               aria-selected={active}
               className={active ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}
+              /* Force DB-driven colors to win */
+              style={active
+                ? { background: "var(--card-bg)", color: "var(--tab-active-fg)" }
+                : { background: "var(--tab-bg)", color: "var(--tab-fg)" }}
+              type="button"
             >
               {t.label}
             </button>
@@ -234,12 +238,13 @@ function TabsNav({ mode, tabs }) {
 export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-  // URL → alias / bot_id
-  const { alias, botIdFromUrl } = useMemo(() => {
+  // URL → alias / bot_id / themelab
+  const { alias, botIdFromUrl, themeLabOn } = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     const a = (qs.get("alias") || qs.get("alais") || "").trim();
     const b = (qs.get("bot_id") || "").trim();
-    return { alias: a, botIdFromUrl: b };
+    const th = (qs.get("themelab") || "").trim();
+    return { alias: a, botIdFromUrl: b, themeLabOn: th === "1" || th.toLowerCase() === "true" };
   }, []);
 
   // Optional default alias via env
@@ -859,7 +864,7 @@ export default function AskAssistant() {
           <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
             {mode === "meeting" ? (
               <div className="w-full flex-1 flex flex-col" data-patch="meeting-pane">
-                <div className="bg-white pt-2 pb-2">
+                <div className="bg-[var(--card-bg)] pt-2 pb-2">
                   {agent?.schedule_header ? (
                     <div className="mb-2 text-sm italic whitespace-pre-line text-[var(--helper-fg)]">{agent.schedule_header}</div>
                   ) : null}
@@ -870,7 +875,7 @@ export default function AskAssistant() {
                     <iframe
                       title="Schedule a Meeting"
                       src={`${agent.calendar_link}?embed_domain=${embedDomain}&embed_type=Inline`}
-                      style={{ width: "100%", height: "60vh", maxHeight: "640px" }}
+                      style={{ width: "100%", height: "60vh", maxHeight: "640px", background: "var(--card-bg)" }}
                       className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
                     />
                   ) : agent.calendar_link_type && String(agent.calendar_link_type).toLowerCase() === "external" && agent.calendar_link ? (
@@ -888,7 +893,7 @@ export default function AskAssistant() {
             ) : selected ? (
               <div className="w-full flex-1 flex flex-col">
                 {mode === "docs" ? (
-                  <div className="bg-white pt-2 pb-2">
+                  <div className="bg-[var(--card-bg)] pt-2 pb-2">
                     <iframe
                       className="w-full h-[65vh] md:h-[78vh] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
                       src={selected.url}
@@ -898,7 +903,7 @@ export default function AskAssistant() {
                     />
                   </div>
                 ) : (
-                  <div className="bg-white pt-2 pb-2">
+                  <div className="bg-[var(--card-bg)] pt-2 pb-2">
                     <iframe
                       style={{ width: "100%", aspectRatio: "471 / 272" }}
                       src={selected.url}
@@ -1021,14 +1026,14 @@ export default function AskAssistant() {
           </div>
         )}
 
-        {/* Bottom Ask Bar (only remaining divider line) */}
+        {/* Bottom Ask Bar — keep only this divider */}
         <div className="px-4 py-3 border-t border-[var(--border-default)]" data-patch="ask-bottom-bar">
           {showAskBottom ? (
             <div className="relative w-full">
               <textarea
                 ref={inputRef}
                 rows={1}
-                className="w-full rounded-[0.75rem] px-4 py-2 pr-14 text-base placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px] bg-[var(--card-bg)]"
+                className="w-full rounded-[0.75rem] px-4 py-2 pr-14 text-base placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px] bg-[var(--card-bg)] border border-[var(--border-default)] focus:border-[var(--border-default)] focus:ring-1 focus:ring-[var(--border-default)] outline-none"
                 placeholder="Ask your question here"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -1050,6 +1055,22 @@ export default function AskAssistant() {
           ) : null}
         </div>
       </div>
+
+      {/* ThemeLab (enable with ?themelab=1) */}
+      {themeLabOn && (
+        <div className="fixed bottom-3 left-3 z-50 rounded-lg bg-white/90 backdrop-blur px-3 py-2 text-xs shadow"
+             style={{ border: "1px solid var(--border-default)" }}>
+          <div className="font-semibold mb-1">Theme vars</div>
+          <div style={{maxHeight: 180, overflowY: "auto"}}>
+            {Object.entries(derivedTheme).map(([k, v]) => (
+              <div key={k} className="grid grid-cols-2 gap-2 mb-0.5">
+                <code className="opacity-70">{k}</code>
+                <span className="truncate">{String(v)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
