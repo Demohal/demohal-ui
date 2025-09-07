@@ -29,6 +29,7 @@ const DEFAULT_THEME_VARS = {
   // Buttons (explicit types)
   "--demo-button-bg": "#3a4554",       // demo.button.background
   "--demo-button-fg": "#ffffff",       // demo.button.foreground
+  "--doc.button.background": "#000000",// legacy mapping guard (no-op)
   "--doc-button-bg": "#000000",        // doc.button.background
   "--doc-button-fg": "#ffffff",        // doc.button.foreground
   "--price-button-bg": "#1a1a1a",      // price.button.background
