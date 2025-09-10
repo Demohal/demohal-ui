@@ -757,33 +757,41 @@ export default function AskAssistant() {
     }
   }
 
-// Calendly booking listener — logs immediately when a meeting is scheduled inside the embed
+// Calendly booking listener — fetch full Invitee JSON and forward to backend
 useEffect(() => {
   if (mode !== "meeting" || !botId) return;
 
-  function onCalendlyMessage(e) {
+  async function onCalendlyMessage(e) {
     try {
       const d = e?.data;
       if (!d || typeof d !== "object") return;
-      if (d.event === "calendly.event_scheduled") {
-        const payload = d.payload || {};
-        fetch(`${apiBase}/calendly/js-event`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            bot_id: botId,
-            session_id: sessionId || "",
-            visitor_id: visitorId || "",
-            payload,
-          }),
-        }).catch(() => {});
-      }
-    } catch {}
+      if (d.event !== "calendly.event_scheduled") return;
+
+      const payload = d.payload || {};
+      const inviteeUri = payload?.invitee?.uri;
+
+      if (!inviteeUri) return;
+
+      // 1) Fetch the full Invitee JSON (same as you see in DevTools)
+      const inviteeRes = await fetch(inviteeUri, { method: "GET" });
+      if (!inviteeRes.ok) return;
+      const invitee = await inviteeRes.json();
+
+      // 2) Forward that raw Invitee object to the server webhook.
+      //    Your /calendly/webhook route accepts raw Invitee and logs meeting_scheduled with Q&A.
+      await fetch(`${apiBase}/calendly/webhook`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(invitee),
+      });
+    } catch {
+      // swallow errors (non-blocking telemetry)
+    }
   }
 
   window.addEventListener("message", onCalendlyMessage);
   return () => window.removeEventListener("message", onCalendlyMessage);
-}, [mode, botId, sessionId, visitorId, apiBase]);
+}, [mode, botId, apiBase]);
   
   // Pricing loader
   const priceScrollRef = useRef(null);
