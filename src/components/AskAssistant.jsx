@@ -10,65 +10,48 @@ import fallbackLogo from "../assets/logo.png";
  * =============================== */
 
 const DEFAULT_THEME_VARS = {
-  "--banner-bg": "#000000",            // banner.background
-  "--banner-fg": "#ffffff",            // banner.foreground
-  "--page-bg": "#e6e6e6",              // page.background
-  "--card-bg": "#ffffff",              // content.area.background
+  "--banner-bg": "#000000",
+  "--banner-fg": "#ffffff",
+  "--page-bg": "#e6e6e6",
+  "--card-bg": "#ffffff",
   "--shadow-elevation": "0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.10)",
-
-  // Text roles
-  "--message-fg": "#000000",           // message.text.foreground
-  "--helper-fg": "#4b5563",            // helper.text.foreground
-  "--mirror-fg": "#4b5563",            // mirror.text.foreground
-
-  // Tabs (inactive)
-  "--tab-bg": "#303030",               // tab.background
-  "--tab-fg": "#ffffff",               // tab.foreground
-  "--tab-active-fg": "#ffffff",        // derived at runtime
-
-  // Buttons (explicit types)
-  "--demo-button-bg": "#3a4554",       // demo.button.background
-  "--demo-button-fg": "#ffffff",       // demo.button.foreground
-  "--doc.button.background": "#000000",// legacy mapping guard (no-op)
-  "--doc-button-bg": "#000000",        // doc.button.background
-  "--doc-button-fg": "#ffffff",        // doc.button.foreground
-  "--price-button-bg": "#1a1a1a",      // price.button.background
-  "--price-button-fg": "#ffffff",      // price.button.foreground
-
-  // Send icon
-  "--send-color": "#000000",           // send.button.background
-
-  // Default faint gray border (used only where allowed)
+  "--message-fg": "#000000",
+  "--helper-fg": "#4b5563",
+  "--mirror-fg": "#4b5563",
+  "--tab-bg": "#303030",
+  "--tab-fg": "#ffffff",
+  "--tab-active-fg": "#ffffff",
+  "--demo-button-bg": "#3a4554",
+  "--demo-button-fg": "#ffffff",
+  "--doc.button.background": "#000000",
+  "--doc-button-bg": "#000000",
+  "--doc-button-fg": "#ffffff",
+  "--price-button-bg": "#1a1a1a",
+  "--price-button-fg": "#ffffff",
+  "--send-color": "#000000",
   "--border-default": "#9ca3af",
 };
 
-// Map DB token_key → CSS var used in this app (mirror of server mapping)
 const TOKEN_TO_CSS = {
   "banner.background": "--banner-bg",
   "banner.foreground": "--banner-fg",
   "page.background": "--page-bg",
   "content.area.background": "--card-bg",
-
   "message.text.foreground": "--message-fg",
   "helper.text.foreground": "--helper-fg",
   "mirror.text.foreground": "--mirror-fg",
-
   "tab.background": "--tab-bg",
   "tab.foreground": "--tab-fg",
-
   "demo.button.background": "--demo-button-bg",
   "demo.button.foreground": "--demo-button-fg",
   "doc.button.background": "--doc-button-bg",
   "doc.button.foreground": "--doc-button-fg",
   "price.button.background": "--price-button-bg",
   "price.button.foreground": "--price-button-fg",
-
   "send.button.background": "--send-color",
-
   "border.default": "--border-default",
 };
 
-// Hardcoded screen order/labels for grouping the 16 client-controlled tokens
 const SCREEN_ORDER = [
   { key: "welcome",      label: "Welcome" },
   { key: "bot_response", label: "Bot Response" },
@@ -187,20 +170,12 @@ function EstimateCard({ estimate, outroText }) {
   );
 }
 
-/* ---------- Options normalizer (accepts many backend shapes) ---------- */
+/* ---------- Options normalizer ---------- */
 function normalizeOptions(q) {
-  const raw =
-    q?.options ??
-    q?.choices ??
-    q?.buttons ??
-    q?.values ??
-    [];
-
+  const raw = q?.options ?? q?.choices ?? q?.buttons ?? q?.values ?? [];
   return (Array.isArray(raw) ? raw : []).map((o, idx) => {
     if (o == null) return null;
-    if (typeof o === "string") {
-      return { key: o, label: o, id: String(idx) };
-    }
+    if (typeof o === "string") return { key: o, label: o, id: String(idx) };
     const key = o.key ?? o.value ?? o.id ?? String(idx);
     const label = o.label ?? o.title ?? o.name ?? String(key);
     const tooltip = o.tooltip ?? o.description ?? o.help ?? undefined;
@@ -238,14 +213,8 @@ function QuestionBlock({ q, value, onPick }) {
 
 function TabsNav({ mode, tabs }) {
   return (
-    <div
-      className="w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      data-patch="tabs-nav"
-    >
-      <nav
-        className="inline-flex min-w-max items-center gap-0.5 overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        role="tablist"
-      >
+    <div className="w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" data-patch="tabs-nav">
+      <nav className="inline-flex min-w-max items-center gap-0.5 overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
         {tabs.map((t) => {
           const active =
             (mode === "browse" && t.key === "demos") ||
@@ -294,6 +263,10 @@ export default function AskAssistant() {
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [fatal, setFatal] = useState("");
 
+  // ✨ NEW: carry server-issued identifiers for logging
+  const [visitorId, setVisitorId] = useState("");
+  const [sessionId, setSessionId] = useState("");
+
   const [mode, setMode] = useState("ask");
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
@@ -313,16 +286,13 @@ export default function AskAssistant() {
 
   const contentRef = useRef(null);
   const inputRef = useRef(null);
-  const frameRef = useRef(null); // context card container (for ColorBox placement)
+  const frameRef = useRef(null);
 
-  // Theme vars (DB → in-memory → derived → live with picker overrides)
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
   const derivedTheme = useMemo(() => {
     const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
     return { ...themeVars, "--tab-active-fg": activeFg };
   }, [themeVars]);
-
-  // picker overrides (live preview)
   const [pickerVars, setPickerVars] = useState({});
   const liveTheme = useMemo(() => ({ ...derivedTheme, ...pickerVars }), [derivedTheme, pickerVars]);
 
@@ -352,7 +322,7 @@ export default function AskAssistant() {
 
   const [agent, setAgent] = useState(null);
 
-  // Resolve bot by alias
+  // Resolve bot by alias — store visitor/session
   useEffect(() => {
     if (botId) return;
     if (!alias) return;
@@ -376,6 +346,10 @@ export default function AskAssistant() {
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
         }
+        // ✨ capture visitor/session for all subsequent calls
+        if (data?.visitor_id) setVisitorId(String(data.visitor_id));
+        if (data?.session_id) setSessionId(String(data.session_id));
+
         if (id) {
           setBotId(id);
           setFatal("");
@@ -389,7 +363,7 @@ export default function AskAssistant() {
     return () => { cancel = true; };
   }, [alias, apiBase, botId]);
 
-  // Try default alias if needed
+  // Try default alias if needed — also capture visitor/session
   useEffect(() => {
     if (botId || alias || !defaultAlias) return;
     let cancel = false;
@@ -412,6 +386,9 @@ export default function AskAssistant() {
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
         }
+        if (data?.visitor_id) setVisitorId(String(data.visitor_id));
+        if (data?.session_id) setSessionId(String(data.session_id));
+
         if (id) setBotId(id);
       } catch {}
     })();
@@ -422,7 +399,7 @@ export default function AskAssistant() {
     if (!botId && !alias && !brandReady) setBrandReady(true);
   }, [botId, alias, brandReady]);
 
-  // Brand: css vars + assets
+  // Brand
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
@@ -450,7 +427,7 @@ export default function AskAssistant() {
     return () => { cancel = true; };
   }, [botId, apiBase]);
 
-  // Tab flags (by bot_id)
+  // Tab flags (by bot_id) — also capture visitor/session (init can run here too)
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
@@ -471,6 +448,8 @@ export default function AskAssistant() {
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
         }
+        if (data?.visitor_id) setVisitorId(String(data.visitor_id));
+        if (data?.session_id) setSessionId(String(data.session_id));
       } catch {}
     })();
     return () => { cancel = true; };
@@ -493,12 +472,20 @@ export default function AskAssistant() {
     return () => el.removeEventListener("scroll", onScroll);
   }, [selected, isAnchored]);
 
+  // ✨ Normalize+open a demo — now logs with bot/session/visitor
   async function normalizeAndSelectDemo(item) {
     try {
       const r = await fetch(`${apiBase}/render-video-iframe`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ video_url: item.url }),
+        body: JSON.stringify({
+          bot_id: botId,
+          session_id: sessionId,
+          visitor_id: visitorId,
+          demo_id: item.id || "",
+          title: item.title || "",
+          video_url: item.url,
+        }),
       });
       const j = await r.json();
       const embed = j?.video_url || item.url;
@@ -528,12 +515,18 @@ export default function AskAssistant() {
     }
   }
 
+  // ✨ Browse — include session/visitor so server logs 'browse_*'
   async function openBrowse() {
     if (!botId) return;
     setMode("browse");
     setSelected(null);
     try {
-      const res = await fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`);
+      const url = new URL(`${apiBase}/browse-demos`);
+      url.searchParams.set("bot_id", botId);
+      if (sessionId) url.searchParams.set("session_id", sessionId);
+      if (visitorId) url.searchParams.set("visitor_id", visitorId);
+
+      const res = await fetch(url.toString());
       const data = await res.json();
       const src = Array.isArray(data?.items) ? data.items : [];
       setBrowseItems(
@@ -556,7 +549,12 @@ export default function AskAssistant() {
     setMode("docs");
     setSelected(null);
     try {
-      const res = await fetch(`${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`);
+      const url = new URL(`${apiBase}/browse-docs`);
+      url.searchParams.set("bot_id", botId);
+      if (sessionId) url.searchParams.set("session_id", sessionId);
+      if (visitorId) url.searchParams.set("visitor_id", visitorId);
+
+      const res = await fetch(url.toString());
       const data = await res.json();
       const src = Array.isArray(data?.items) ? data.items : [];
       setBrowseDocs(
@@ -600,7 +598,7 @@ export default function AskAssistant() {
     };
   }, [mode, botId, apiBase]);
 
-  // Pricing: compute estimate when inputs ready
+  // Pricing: compute estimate when inputs ready — ✨ send session/visitor along
   useEffect(() => {
     const haveAll = (() => {
       if (!priceQuestions?.length) return false;
@@ -624,7 +622,12 @@ export default function AskAssistant() {
         const res = await fetch(`${apiBase}/pricing/estimate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ bot_id: botId, answers: priceAnswers }),
+          body: JSON.stringify({
+            bot_id: botId,
+            session_id: sessionId || undefined,
+            visitor_id: visitorId || undefined,
+            answers: priceAnswers,
+          }),
         });
         const data = await res.json();
         if (cancel) return;
@@ -639,9 +642,9 @@ export default function AskAssistant() {
     return () => {
       cancel = true;
     };
-  }, [mode, botId, apiBase, priceQuestions, priceAnswers]);
+  }, [mode, botId, apiBase, priceQuestions, priceAnswers, sessionId, visitorId]);
 
-  // Next unanswered (null when all required answered → show estimate)
+  // Next unanswered
   const nextPriceQuestion = useMemo(() => {
     if (!priceQuestions?.length) return null;
     for (const q of priceQuestions) {
@@ -654,7 +657,7 @@ export default function AskAssistant() {
     return null;
   }, [priceQuestions, priceAnswers]);
 
-  // Mirror lines — apply full template around {{answer_label}} / {{answer_label_lower}}
+  // Mirror (client-side preview)
   const mirrorLines = useMemo(() => {
     if (!priceQuestions?.length) return [];
     const lines = [];
@@ -697,6 +700,7 @@ export default function AskAssistant() {
     });
   }
 
+  // ✨ Ask — include session/visitor so server logs 'ask'
   async function sendMessage() {
     if (!input.trim() || !botId) return;
     const outgoing = input.trim();
@@ -711,7 +715,12 @@ export default function AskAssistant() {
     try {
       const res = await axios.post(
         `${apiBase}/demo-hal`,
-        { bot_id: botId, user_question: outgoing },
+        {
+          bot_id: botId,
+          user_question: outgoing,
+          session_id: sessionId || undefined,
+          visitor_id: visitorId || undefined,
+        },
         { timeout: 30000 }
       );
       const data = res?.data || {};
@@ -1047,9 +1056,9 @@ export default function AskAssistant() {
           </div>
         )}
 
-        {/* Bottom Ask Bar — divider only */}
+        {/* Bottom Ask Bar */}
         <div className="px-4 py-3 border-t border-[var(--border-default)]" data-patch="ask-bottom-bar">
-          {mode !== "price" || !!priceEstimate ? (
+          {showAskBottom ? (
             <div className="relative w-full">
               <textarea
                 ref={inputRef}
@@ -1077,7 +1086,7 @@ export default function AskAssistant() {
         </div>
       </div>
 
-      {/* ThemeLab (enable with ?themelab=1) — ColorBox only */}
+      {/* ThemeLab */}
       {themeLabOn && botId ? (
         <ColorBox
           apiBase={apiBase}
@@ -1094,17 +1103,15 @@ export default function AskAssistant() {
  *  ColorBox component *
  * =================== */
 function ColorBox({ apiBase, botId, frameRef, onVars }) {
-  const [rows, setRows] = useState([]);         // [{token_key,label,value,screen_key}]
-  const [values, setValues] = useState({});     // token_key -> value
+  const [rows, setRows] = useState([]);
+  const [values, setValues] = useState({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
-  // auth state for ThemeLab
-  const [authState, setAuthState] = useState("checking"); // 'checking' | 'ok' | 'need_password' | 'disabled' | 'error'
+  const [authState, setAuthState] = useState("checking");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
 
-  // position near the left edge of the context card
   const [pos, setPos] = useState({ left: 16, top: 16, width: 460 });
   useEffect(() => {
     function updatePos() {
@@ -1123,34 +1130,31 @@ function ColorBox({ apiBase, botId, frameRef, onVars }) {
     return () => { window.removeEventListener("resize", h); window.removeEventListener("scroll", h); };
   }, [frameRef]);
 
-  // status check then load
   async function checkStatusAndMaybeLoad() {
-  try {
-    setAuthError("");
-    setAuthState("checking");
-    // NOTE: no credentials here so we can read 401/403 cross-site
-    const res = await fetch(`${apiBase}/themelab/status?bot_id=${encodeURIComponent(botId)}`);
-    if (res.status === 200) {
-      setAuthState("ok");
-      await load();
-    } else if (res.status === 401) {
-      setAuthState("need_password");   // show password modal
-    } else if (res.status === 403) {
-      setAuthState("disabled");        // themelab disabled for this bot
-    } else {
+    try {
+      setAuthError("");
+      setAuthState("checking");
+      const res = await fetch(`${apiBase}/themelab/status?bot_id=${encodeURIComponent(botId)}`);
+      if (res.status === 200) {
+        setAuthState("ok");
+        await load();
+      } else if (res.status === 401) {
+        setAuthState("need_password");
+      } else if (res.status === 403) {
+        setAuthState("disabled");
+      } else {
+        setAuthState("error");
+      }
+    } catch {
       setAuthState("error");
     }
-  } catch {
-    setAuthState("error");
   }
-}
 
   useEffect(() => {
     checkStatusAndMaybeLoad();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiBase, botId]);
 
-  // fetch the 16 client-controlled tokens
   async function load() {
     const res = await fetch(`${apiBase}/brand/client-tokens?bot_id=${encodeURIComponent(botId)}`, {
       credentials: "include",
@@ -1160,7 +1164,6 @@ function ColorBox({ apiBase, botId, frameRef, onVars }) {
     setRows(toks);
     const v = {}; toks.forEach((t) => { v[t.token_key] = t.value || "#000000"; });
     setValues(v);
-    // apply to live CSS vars
     const css = {};
     toks.forEach((t) => {
       const cssVar = TOKEN_TO_CSS[t.token_key];
@@ -1229,7 +1232,6 @@ function ColorBox({ apiBase, botId, frameRef, onVars }) {
     }
   }
 
-  // group by screen in the required order
   const groups = useMemo(() => {
     const byScreen = new Map();
     for (const r of rows) {
@@ -1253,8 +1255,8 @@ function ColorBox({ apiBase, botId, frameRef, onVars }) {
         top: pos.top,
         width: pos.width,
         background: "#fff",
-        border: "1px solid rgba(0,0,0,0.2)",  // 1px border
-        borderRadius: "0.75rem",             // .75rem radius
+        border: "1px solid rgba(0,0,0,0.2)",
+        borderRadius: "0.75rem",
         padding: 12,
         zIndex: 50,
       }}
