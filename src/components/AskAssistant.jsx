@@ -687,8 +687,9 @@ export default function AskAssistant() {
         try {
           {
             const base = ag.calendar_link || "";
-            const withQS = `${base}${base.includes('?') ? '&' : '?'}session_id=${encodeURIComponent(sessionId || '')}&visitor_id=${encodeURIComponent(visitorId || '')}&bot_id=${encodeURIComponent(botId || '')}`;
-            try { window.open(withQS, "_blank", "noopener,noreferrer"); } catch {}
+            const withQS = `${base}${base.includes('?') ? '&' : '?'}session_id=${encodeURIComponent(sessionId||'')}&visitor_id=${encodeURIComponent(visitorId||'')}&bot_id=${encodeURIComponent(botId||'')}&utm_source=${encodeURIComponent(botId||'')}&utm_medium=${encodeURIComponent(sessionId||'')}&utm_campaign=${encodeURIComponent(visitorId||'')}`;
+            window.open(withQS, "_blank", "noopener,noreferrer");
+
           }
         } catch {}
       }
@@ -1235,7 +1236,7 @@ useEffect(() => {
                     agent.calendar_link ? (
                     <iframe
                       title="Schedule a Meeting"
-                      src={`${agent.calendar_link}${agent.calendar_link.includes('?') ? '&' : '?'}embed_domain=${embedDomain}&embed_type=Inline&session_id=${encodeURIComponent(sessionId || '')}&visitor_id=${encodeURIComponent(visitorId || '')}&bot_id=${encodeURIComponent(botId || '')}`}
+                      src={`${agent.calendar_link}${agent.calendar_link.includes('?') ? '&' : '?'}embed_domain=${embedDomain}&embed_type=Inline&session_id=${encodeURIComponent(sessionId||'')}&visitor_id=${encodeURIComponent(visitorId||'')}&bot_id=${encodeURIComponent(botId||'')}&utm_source=${encodeURIComponent(botId||'')}&utm_medium=${encodeURIComponent(sessionId||'')}&utm_campaign=${encodeURIComponent(visitorId||'')}`}
                       style={{
                         width: "100%",
                         height: "60vh",
