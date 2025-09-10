@@ -636,6 +636,43 @@ export default function AskAssistant() {
     return () => el.removeEventListener("scroll", onScroll);
   }, [selected, isAnchored]);
 
+  // Calendly -> backend event forwarder
+useEffect(() => {
+  if (mode !== "meeting" || !botId || !sessionId || !visitorId) return;
+
+  const handler = (e) => {
+    const d = e?.data;
+    if (!d || typeof d !== "object") return;
+
+    // Expect Calendly embed postMessage shape:
+    // { event: "calendly.event_scheduled", payload: { invitee, scheduled_event, ... } }
+    const ev = (d.event || "").toLowerCase();
+    if (ev !== "calendly.event_scheduled" && ev !== "calendly.event_canceled") return;
+
+    // Forward to backend (no Calendly auth needed)
+    fetch(`${apiBase}/calendly/js-event`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        bot_id: botId,
+        session_id: sessionId,
+        visitor_id: visitorId,
+        // keep it light but useful; backend accepts any JSON in payload
+        payload: {
+          event: d.event,
+          invitee: d.payload?.invitee,
+          scheduled_event: d.payload?.scheduled_event,
+          tracking: d.payload?.tracking,
+        },
+      }),
+    }).catch(() => {});
+  };
+
+  window.addEventListener("message", handler);
+  return () => window.removeEventListener("message", handler);
+}, [mode, botId, sessionId, visitorId, apiBase]);
+
+
   async function normalizeAndSelectDemo(item) {
     try {
       const r = await fetch(`${apiBase}/render-video-iframe`, {
