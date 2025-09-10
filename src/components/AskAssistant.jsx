@@ -759,9 +759,8 @@ export default function AskAssistant() {
 
 // Calendly booking listener — webhook handles logging server-side; no client calls
 useEffect(() => {
-  function onCalendlyMessage(_e) {
-    // Intentionally no-op. The server-side /calendly/webhook receives the full
-    // Invitee payload (including Q&A) and logs meeting_scheduled/canceled.
+  function onCalendlyMessage(e) {
+    // Intentionally do nothing; server receives full invitee via Calendly webhook
   }
   window.addEventListener("message", onCalendlyMessage);
   return () => window.removeEventListener("message", onCalendlyMessage);
