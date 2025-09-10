@@ -757,41 +757,15 @@ export default function AskAssistant() {
     }
   }
 
-// Calendly booking listener — fetch full Invitee JSON and forward to backend
+// Calendly booking listener — webhook handles logging server-side; no client calls
 useEffect(() => {
-  if (mode !== "meeting" || !botId) return;
-
-  async function onCalendlyMessage(e) {
-    try {
-      const d = e?.data;
-      if (!d || typeof d !== "object") return;
-      if (d.event !== "calendly.event_scheduled") return;
-
-      const payload = d.payload || {};
-      const inviteeUri = payload?.invitee?.uri;
-
-      if (!inviteeUri) return;
-
-      // 1) Fetch the full Invitee JSON (same as you see in DevTools)
-      const inviteeRes = await fetch(inviteeUri, { method: "GET" });
-      if (!inviteeRes.ok) return;
-      const invitee = await inviteeRes.json();
-
-      // 2) Forward that raw Invitee object to the server webhook.
-      //    Your /calendly/webhook route accepts raw Invitee and logs meeting_scheduled with Q&A.
-      await fetch(`${apiBase}/calendly/webhook`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(invitee),
-      });
-    } catch {
-      // swallow errors (non-blocking telemetry)
-    }
+  function onCalendlyMessage(_e) {
+    // Intentionally no-op. The server-side /calendly/webhook receives the full
+    // Invitee payload (including Q&A) and logs meeting_scheduled/canceled.
   }
-
   window.addEventListener("message", onCalendlyMessage);
   return () => window.removeEventListener("message", onCalendlyMessage);
-}, [mode, botId, apiBase]);
+}, []);
   
   // Pricing loader
   const priceScrollRef = useRef(null);
