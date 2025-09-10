@@ -685,7 +685,11 @@ export default function AskAssistant() {
         ag.calendar_link
       ) {
         try {
-          window.open(ag.calendar_link, "_blank", "noopener,noreferrer");
+          {
+            const base = ag.calendar_link || "";
+            const withQS = `${base}${base.includes('?') ? '&' : '?'}session_id=${encodeURIComponent(sessionId || '')}&visitor_id=${encodeURIComponent(visitorId || '')}&bot_id=${encodeURIComponent(botId || '')}`;
+            try { window.open(withQS, "_blank", "noopener,noreferrer"); } catch {}
+          }
         } catch {}
       }
       requestAnimationFrame(() =>
@@ -752,6 +756,34 @@ export default function AskAssistant() {
     }
   }
 
+// Calendly booking listener — logs immediately when a meeting is scheduled inside the embed
+useEffect(() => {
+  if (mode !== "meeting" || !botId) return;
+
+  function onCalendlyMessage(e) {
+    try {
+      const d = e?.data;
+      if (!d || typeof d !== "object") return;
+      if (d.event === "calendly.event_scheduled") {
+        const payload = d.payload || {};
+        fetch(`${apiBase}/calendly/js-event`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            bot_id: botId,
+            session_id: sessionId || "",
+            visitor_id: visitorId || "",
+            payload,
+          }),
+        }).catch(() => {});
+      }
+    } catch {}
+  }
+
+  window.addEventListener("message", onCalendlyMessage);
+  return () => window.removeEventListener("message", onCalendlyMessage);
+}, [mode, botId, sessionId, visitorId, apiBase]);
+  
   // Pricing loader
   const priceScrollRef = useRef(null);
   useEffect(() => {
@@ -1203,7 +1235,7 @@ export default function AskAssistant() {
                     agent.calendar_link ? (
                     <iframe
                       title="Schedule a Meeting"
-                      src={`${agent.calendar_link}?embed_domain=${embedDomain}&embed_type=Inline`}
+                      src={`${agent.calendar_link}${agent.calendar_link.includes('?') ? '&' : '?'}embed_domain=${embedDomain}&embed_type=Inline&session_id=${encodeURIComponent(sessionId || '')}&visitor_id=${encodeURIComponent(visitorId || '')}&bot_id=${encodeURIComponent(botId || '')}`}
                       style={{
                         width: "100%",
                         height: "60vh",
