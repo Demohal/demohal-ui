@@ -733,7 +733,6 @@ useEffect(() => {
 
   async function openMeeting() {
     if (!botId) return;
-    setSelected(null);
     setMode("meeting");
     try {
       const res = await fetch(
@@ -1003,6 +1002,20 @@ useEffect(() => {
   async function sendMessage() {
     if (!input.trim() || !botId) return;
     const outgoing = input.trim();
+    
+    // Capture screen-scoped context synchronously at submit time
+    const commitScope = (() => {
+      let scope = "standard";
+      let demo_id, doc_id;
+      if (selected && selected.id && mode === "docs") {
+        scope = "doc";
+        doc_id = String(selected.id);
+      } else if (selected && selected.id && mode !== "docs") {
+        scope = "demo";
+        demo_id = String(selected.id);
+      }
+      return { scope, ...(demo_id ? { demo_id } : {}), ...(doc_id ? { doc_id } : {}) };
+    })();
     setMode("ask");
     setLastQuestion(outgoing);
     setInput("");
@@ -1014,7 +1027,7 @@ useEffect(() => {
     try {
       const res = await axios.post(
         `${apiBase}/demo-hal`,
-        withIdsBody({ bot_id: botId, user_question: outgoing, ...scopePayload }),
+        withIdsBody({ bot_id: botId, user_question: outgoing, ...commitScope }),
         { timeout: 30000, headers: withIdsHeaders() }
       );
       const data = res?.data || {};
