@@ -817,14 +817,55 @@ export default function AskAssistant() {
     }
   }
 
-// Calendly booking listener — webhook handles logging server-side; no client calls
+// Calendly booking listener — capture full invitee info
 useEffect(() => {
+  if (mode !== "meeting" || !botId || !sessionId || !visitorId) return;
+
   function onCalendlyMessage(e) {
-    // Intentionally do nothing; server receives full invitee via Calendly webhook
+    const d = e?.data;
+    if (!d || typeof d !== "object") return;
+
+    // Expect { event: "calendly.event_scheduled", payload: { invitee, scheduled_event, ... } }
+    if (d.event !== "calendly.event_scheduled" && d.event !== "calendly.event_canceled") return;
+
+    const payload = d.payload || {};
+    const invitee = payload.invitee || {};
+    const scheduledEvent = payload.scheduled_event || payload.event || {};
+    const tracking = payload.tracking || {};
+
+    // Build a full payload for backend
+    const fullPayload = {
+      event: d.event,
+      invitee: {
+        uri: invitee.uri,
+        email: invitee.email,
+        full_name: invitee.full_name,
+        questions_and_answers: invitee.questions_and_answers || []
+      },
+      scheduled_event: {
+        uri: scheduledEvent.uri,
+        start_time: scheduledEvent.start_time,
+        end_time: scheduledEvent.end_time,
+        name: scheduledEvent.name
+      },
+      tracking
+    };
+
+    fetch(`${apiBase}/calendly/js-event`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        bot_id: botId,
+        session_id: sessionId,
+        visitor_id: visitorId,
+        payload: fullPayload
+      }),
+    }).catch(() => {});
   }
+
   window.addEventListener("message", onCalendlyMessage);
   return () => window.removeEventListener("message", onCalendlyMessage);
-}, []);
+}, [mode, botId, sessionId, visitorId, apiBase]);
   
   // Pricing loader
   const priceScrollRef = useRef(null);
