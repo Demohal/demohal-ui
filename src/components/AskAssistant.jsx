@@ -636,65 +636,55 @@ export default function AskAssistant() {
     return () => el.removeEventListener("scroll", onScroll);
   }, [selected, isAnchored]);
 
-  // Calendly -> fetch full Invitee via public Booking API, then forward to backend
-  useEffect(() => {
-    if (mode !== "meeting" || !botId || !sessionId || !visitorId) return;
-  
-    async function onCalendlyMessage(e) {
-      try {
-        const d = e?.data;
-        if (!d || typeof d !== "object") return;
-  
-        // Expect: { event: "calendly.event_scheduled", payload: { invitee: { uri }, scheduled_event, tracking } }
-        const ev = String(d.event || "").toLowerCase();
-        if (ev !== "calendly.event_scheduled" && ev !== "calendly.event_canceled") return;
-  
-        const inviteeUri = d?.payload?.invitee?.uri;
-        if (!inviteeUri) return;
-  
-        // Calendly's public Booking API returns the FULL invitee (no access token required)
-        // We POST a small JSON with the 'uri' we received from postMessage.
-        let fullInvitee = null;
-        try {
-          const calRes = await fetch("https://calendly.com/api/booking/invitees", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ uri: inviteeUri }),
-          });
-          if (calRes.ok) {
-            fullInvitee = await calRes.json(); // includes email, full_name, questions_and_answers, tracking, event, etc.
-          }
-        } catch {
-          // ignore; we'll still send the lightweight payload if Booking API fails
-        }
-  
-        // Build payload we forward to backend. Prefer the fully-hydrated invitee if we have it.
-        const payload = {
-          event: d.event,
-          invitee: fullInvitee || d.payload?.invitee || { uri: inviteeUri },
-          scheduled_event: d.payload?.scheduled_event,
-          tracking: d.payload?.tracking,
-        };
-  
-        // Forward to your JS logging endpoint (no Calendly auth required)
-        await fetch(`${apiBase}/calendly/js-event`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            bot_id: botId,
-            session_id: sessionId,
-            visitor_id: visitorId,
-            payload,
-          }),
-        });
-      } catch {
-        // telemetry is best-effort; swallow errors
-      }
+// Calendly booking listener — send rich payload to backend (no Calendly fetch)
+useEffect(() => {
+  if (mode !== "meeting" || !botId || !sessionId || !visitorId) return;
+
+  function onCalendlyMessage(e) {
+    try {
+      const m = e?.data;
+      if (!m || typeof m !== "object") return;
+
+      // We only care about these two events
+      if (m.event !== "calendly.event_scheduled" && m.event !== "calendly.event_canceled") return;
+
+      const p = m.payload || {};
+
+      // Build a rich, self-contained payload from the postMessage
+      const payloadOut = {
+        event: m.event, // e.g., "calendly.event_scheduled"
+        scheduled_event: p.event || p.scheduled_event || null, // mirrors what Calendly sends
+        invitee: {
+          uri: p.invitee?.uri ?? null,
+          email: p.invitee?.email ?? null,
+          name: p.invitee?.full_name ?? p.invitee?.name ?? null,
+        },
+        questions_and_answers:
+          p.questions_and_answers ??
+          p.invitee?.questions_and_answers ??
+          [],
+        tracking: p.tracking || {}, // utm_* fields if present
+      };
+
+      // Forward to backend (no Calendly API calls in the browser)
+      fetch(`${apiBase}/calendly/js-event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bot_id: botId,
+          session_id: sessionId,
+          visitor_id: visitorId,
+          payload: payloadOut,
+        }),
+      }).catch(() => {});
+    } catch {
+      // swallow — non-blocking telemetry
     }
-  
-    window.addEventListener("message", onCalendlyMessage);
-    return () => window.removeEventListener("message", onCalendlyMessage);
-  }, [mode, botId, sessionId, visitorId, apiBase]);
+  }
+
+  window.addEventListener("message", onCalendlyMessage);
+  return () => window.removeEventListener("message", onCalendlyMessage);
+}, [mode, botId, sessionId, visitorId, apiBase]);
 
   async function normalizeAndSelectDemo(item) {
     try {
@@ -817,42 +807,7 @@ export default function AskAssistant() {
     }
   }
 
-// Calendly booking listener — forward to backend only (no Calendly API calls from browser)
-useEffect(() => {
-  if (mode !== "meeting" || !botId || !sessionId || !visitorId) return;
 
-  function onCalendlyMessage(e) {
-    try {
-      const d = e?.data;
-      if (!d || typeof d !== "object") return;
-
-      const ev = String(d.event || "").toLowerCase();
-      if (ev !== "calendly.event_scheduled" && ev !== "calendly.event_canceled") return;
-
-      // Forward minimal payload to backend (no CORS issues, no tokens needed)
-      fetch(`${apiBase}/calendly/js-event`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bot_id: botId,
-          session_id: sessionId,
-          visitor_id: visitorId,
-          payload: {
-            event: d.event,
-            invitee: d.payload?.invitee,            // contains .uri
-            scheduled_event: d.payload?.scheduled_event,
-            tracking: d.payload?.tracking
-          }
-        })
-      }).catch(() => {});
-    } catch {
-      // ignore
-    }
-  }
-
-  window.addEventListener("message", onCalendlyMessage);
-  return () => window.removeEventListener("message", onCalendlyMessage);
-}, [mode, botId, sessionId, visitorId, apiBase]);
   
   // Pricing loader
   const priceScrollRef = useRef(null);
