@@ -1531,23 +1531,26 @@ useEffect(() => {
  *  Doc iframe wrapper *
  * =================== */
 function DocIframe({ apiBase, botId, doc, sessionId, visitorId }) {
-  // If we have server-rendered HTML, use it; else fall back to raw URL
-  if (doc?._iframe_html) {
-    return (
-      <div
-        className="bg-[var(--card-bg)] pt-2 pb-2"
-        dangerouslySetInnerHTML={{ __html: doc._iframe_html }}
-      />
-    );
-  }
+  // Prefer a stable <iframe src=...> so React doesn't remount on re-renders.
+  // If server provided HTML, extract the first src="..." and use it.
+  const iframeSrc = React.useMemo(() => {
+    const html = doc?._iframe_html || "";
+    if (!html) return null;
+    const m = html.match(/src="([^"]+)"/i) || html.match(/src='([^']+)'/i);
+    return m ? m[1] : null;
+  }, [doc?._iframe_html]);
+
+  const src = iframeSrc || doc?.url || "";
+
   return (
     <div className="bg-[var(--card-bg)] pt-2 pb-2">
       <iframe
         className="w-full h-[65vh] md:h-[78vh] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
-        src={doc.url}
-        title={doc.title}
+        src={src}
+        title={doc?.title || "Document"}
         loading="lazy"
         referrerPolicy="strict-origin-when-cross-origin"
+        allow="fullscreen"
       />
     </div>
   );
