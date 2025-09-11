@@ -405,6 +405,9 @@ export default function AskAssistant() {
   const [priceErr, setPriceErr] = useState("");
 
   const [agent, setAgent] = useState(null);
+  // Screen-scoped chat context (reset after each answer)
+  const [scopePayload, setScopePayload] = useState({ scope: "standard" });
+
 
   // Small helpers to always attach identity in requests
   const withIdsQS = (url) => {
@@ -422,6 +425,17 @@ export default function AskAssistant() {
     ...(sessionId ? { "X-Session-Id": sessionId } : {}),
     ...(visitorId ? { "X-Visitor-Id": visitorId } : {}),
   });
+  // Update scope when entering Demo/Doc views
+  useEffect(() => {
+    if (selected && selected.id && mode === "docs") {
+      setScopePayload({ scope: "doc", doc_id: String(selected.id) });
+    } else if (selected && selected.id && mode !== "docs") {
+      setScopePayload({ scope: "demo", demo_id: String(selected.id) });
+    } else {
+      setScopePayload({ scope: "standard" });
+    }
+  }, [selected, mode]);
+
 
   // Resolve bot by alias
   useEffect(() => {
@@ -1000,7 +1014,7 @@ useEffect(() => {
     try {
       const res = await axios.post(
         `${apiBase}/demo-hal`,
-        withIdsBody({ bot_id: botId, user_question: outgoing }),
+        withIdsBody({ bot_id: botId, user_question: outgoing, ...scopePayload }),
         { timeout: 30000, headers: withIdsHeaders() }
       );
       const data = res?.data || {};
@@ -1048,6 +1062,8 @@ useEffect(() => {
 
       setResponseText(text);
       setLoading(false);
+      // Reset scope to standard after completing the response
+      setScopePayload({ scope: "standard" });
 
       if (recs.length > 0) {
         setHelperPhase("header");
@@ -1065,6 +1081,7 @@ useEffect(() => {
       );
     } catch {
       setLoading(false);
+      setScopePayload({ scope: "standard" });
       setResponseText("Sorry—something went wrong.");
       setHelperPhase("hidden");
       setItems([]);
