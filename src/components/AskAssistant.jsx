@@ -817,50 +817,37 @@ export default function AskAssistant() {
     }
   }
 
-// Calendly booking listener — capture full invitee info
+// Calendly booking listener — forward to backend only (no Calendly API calls from browser)
 useEffect(() => {
   if (mode !== "meeting" || !botId || !sessionId || !visitorId) return;
 
   function onCalendlyMessage(e) {
-    const d = e?.data;
-    if (!d || typeof d !== "object") return;
+    try {
+      const d = e?.data;
+      if (!d || typeof d !== "object") return;
 
-    // Expect { event: "calendly.event_scheduled", payload: { invitee, scheduled_event, ... } }
-    if (d.event !== "calendly.event_scheduled" && d.event !== "calendly.event_canceled") return;
+      const ev = String(d.event || "").toLowerCase();
+      if (ev !== "calendly.event_scheduled" && ev !== "calendly.event_canceled") return;
 
-    const payload = d.payload || {};
-    const invitee = payload.invitee || {};
-    const scheduledEvent = payload.scheduled_event || payload.event || {};
-    const tracking = payload.tracking || {};
-
-    // Build a full payload for backend
-    const fullPayload = {
-      event: d.event,
-      invitee: {
-        uri: invitee.uri,
-        email: invitee.email,
-        full_name: invitee.full_name,
-        questions_and_answers: invitee.questions_and_answers || []
-      },
-      scheduled_event: {
-        uri: scheduledEvent.uri,
-        start_time: scheduledEvent.start_time,
-        end_time: scheduledEvent.end_time,
-        name: scheduledEvent.name
-      },
-      tracking
-    };
-
-    fetch(`${apiBase}/calendly/js-event`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        bot_id: botId,
-        session_id: sessionId,
-        visitor_id: visitorId,
-        payload: fullPayload
-      }),
-    }).catch(() => {});
+      // Forward minimal payload to backend (no CORS issues, no tokens needed)
+      fetch(`${apiBase}/calendly/js-event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bot_id: botId,
+          session_id: sessionId,
+          visitor_id: visitorId,
+          payload: {
+            event: d.event,
+            invitee: d.payload?.invitee,            // contains .uri
+            scheduled_event: d.payload?.scheduled_event,
+            tracking: d.payload?.tracking
+          }
+        })
+      }).catch(() => {});
+    } catch {
+      // ignore
+    }
   }
 
   window.addEventListener("message", onCalendlyMessage);
