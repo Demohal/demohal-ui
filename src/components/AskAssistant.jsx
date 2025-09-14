@@ -1248,7 +1248,7 @@ useEffect(() => {
                   value={priceAnswers[nextPriceQuestion.q_key]}
                   onPick={handlePickOption}
                 />
-              ) : (
+             ) : (
                 (priceEstimate && priceEstimate.custom) ? (
                   <div className="text-base font-bold whitespace-pre-line">
                     {priceUiCopy?.custom_notice ||
