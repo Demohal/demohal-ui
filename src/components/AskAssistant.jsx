@@ -1249,15 +1249,21 @@ useEffect(() => {
                   onPick={handlePickOption}
                 />
               ) : (
-                <EstimateCard
-                  estimate={priceEstimate}
-                  outroText={
-                    ((priceUiCopy?.outro?.heading || "").trim()
-                      ? `${priceUiCopy.outro.heading.trim()}\n\n`
-                      : "") + (priceUiCopy?.outro?.body || "")
-                  }
-                />
-              )}
+                {priceEstimate?.custom ? (
+                  <div className="text-base font-bold whitespace-pre-line">
+                    {priceUiCopy?.custom_notice ||
+                      "We’ll follow up with a custom quote tailored to your selection."}
+                  </div>
+                ) : (
+                  <EstimateCard
+                    estimate={priceEstimate}
+                    outroText={
+                      ((priceUiCopy?.outro?.heading || "").trim()
+                        ? `${priceUiCopy.outro.heading.trim()}\n\n`
+                        : "") + (priceUiCopy?.outro?.body || "")
+                    }
+                  />
+                )}
               {priceBusy ? (
                 <div className="mt-2 text-sm text-[var(--helper-fg)]">
                   Calculating…
