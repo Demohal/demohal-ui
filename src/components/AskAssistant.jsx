@@ -1249,7 +1249,7 @@ useEffect(() => {
                   onPick={handlePickOption}
                 />
               ) : (
-                {priceEstimate?.custom ? (
+                (priceEstimate && priceEstimate.custom) ? (
                   <div className="text-base font-bold whitespace-pre-line">
                     {priceUiCopy?.custom_notice ||
                       "We’ll follow up with a custom quote tailored to your selection."}
