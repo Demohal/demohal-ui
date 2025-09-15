@@ -1257,9 +1257,13 @@ useEffect(() => {
                 <EstimateCard
                   estimate={priceEstimate}
                   outroText={
-                    ((priceUiCopy?.outro?.heading || "").trim()
-                      ? `${priceUiCopy.outro.heading.trim()}\n\n`
-                      : "") + (priceUiCopy?.outro?.body || "")
+                    priceEstimate?.custom
+                      ? (priceUiCopy?.custom_notice || "")
+                      : (
+                          ((priceUiCopy?.outro?.heading || "").trim()
+                            ? `${priceUiCopy.outro.heading.trim()}\n\n`
+                            : "") + (priceUiCopy?.outro?.body || "")
+                        )
                   }
                 />
               )}
