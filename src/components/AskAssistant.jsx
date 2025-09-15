@@ -1197,7 +1197,7 @@ useEffect(() => {
         className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all duration-300"
       >
         {/* Header */}
-        <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)]">
+        <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)]"> 
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
               <img src={logoSrc} alt="Brand logo" className="h-10 object-contain" />
