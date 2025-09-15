@@ -1259,11 +1259,13 @@ useEffect(() => {
                   outroText={
                     priceEstimate?.custom
                       ? (priceUiCopy?.custom_notice || "")
-                      : (
-                          ((priceUiCopy?.outro?.heading || "").trim()
-                            ? `${priceUiCopy.outro.heading.trim()}\n\n`
-                            : "") + (priceUiCopy?.outro?.body || "")
-                        )
+                      : (() => {
+                          const base =
+                            ((priceUiCopy?.outro?.heading || "").trim()
+                              ? `${priceUiCopy.outro.heading.trim()}\n\n`
+                              : "") + (priceUiCopy?.outro?.body || "");
+                          return (base || priceUiCopy?.custom_notice || "");
+                        })()
                   }
                 />
               )}
