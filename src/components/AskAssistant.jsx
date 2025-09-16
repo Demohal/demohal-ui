@@ -1079,7 +1079,7 @@ useEffect(() => {
    * END SECTION 3                                                                     *
    * ================================================================================= */
   
-    /* ================================================================================= *
+  /* ================================================================================= *
    *  BEGIN SECTION 4                                                                  *
    * ================================================================================= */
   
@@ -1322,7 +1322,7 @@ useEffect(() => {
             <div className="px-6 pt-3 pb-2" data-patch="price-intro">
               <PriceMirror lines={mirrorLines.length ? mirrorLines : [""]} />
               {!mirrorLines.length ? (
-                <div className="text-base font-bold whitespace-pre-line">
+                <div className="text-base font-bold whitespace-pre-line text-[var(--message-fg)]">
                   {pricingCopy?.intro ||
                     "This tool provides a quick estimate based on your selections. Final pricing may vary by configuration, usage, and implementation."}
                 </div>
@@ -1343,7 +1343,7 @@ useEffect(() => {
                   onPick={handlePickOption}
                 />
               ) : priceEstimate && priceEstimate.custom ? (
-                <div className="text-base font-bold whitespace-pre-line">
+                <div className="text-base font-bold whitespace-pre-line text-[var(--message-fg)]">
                   {pricingCopy?.custom_notice ||
                     "We’ll follow up with a custom quote tailored to your selection."}
                 </div>
@@ -1369,303 +1369,123 @@ useEffect(() => {
 * END SECTION 4                                                                     *
 * ================================================================================= */
 
-/* ================================================================================= *
-*  BEGIN SECTION 5                                                                  *
-* ================================================================================= */          
+  /* ================================================================================= *
+   *  BEGIN SECTION 5                                                                  *
+   * ================================================================================= */
         
-          /* OTHER MODES */
-          <div
-            ref={contentRef}
-            className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto"
-          >
-            {mode === "meeting" ? (
-              <div className="w-full flex-1 flex flex-col" data-patch="meeting-pane">
-                <div className="bg-[var(--card-bg)] pt-2 pb-2">
-                  {agent?.schedule_header ? (
-                    <div className="mb-2 text-sm italic whitespace-pre-line text-[var(--helper-fg)]">
-                      {agent.schedule_header}
-                    </div>
-                  ) : null}
-
-                  {!agent ? (
-                    <div className="text-sm text-[var(--helper-fg)]">
-                      Loading scheduling…
-                    </div>
-                  ) : agent.calendar_link_type &&
-                    String(agent.calendar_link_type).toLowerCase() === "embed" &&
-                    agent.calendar_link ? (
-                    <iframe
-                      title="Schedule a Meeting"
-                      src={`${agent.calendar_link}${agent.calendar_link.includes('?') ? '&' : '?'}embed_domain=${embedDomain}&embed_type=Inline&session_id=${encodeURIComponent(sessionId||'')}&visitor_id=${encodeURIComponent(visitorId||'')}&bot_id=${encodeURIComponent(botId||'')}&utm_source=${encodeURIComponent(botId||'')}&utm_medium=${encodeURIComponent(sessionId||'')}&utm_campaign=${encodeURIComponent(visitorId||'')}`}
-                      style={{
-                        width: "100%",
-                        height: "60vh",
-                        maxHeight: "640px",
-                        background: "var(--card-bg)",
-                      }}
-                      className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
-                    />
-                  ) : agent.calendar_link_type &&
-                    String(agent.calendar_link_type).toLowerCase() ===
-                      "external" &&
-                    agent.calendar_link ? (
-                    <div className="text-sm text-gray-700">
-                      We opened the scheduling page in a new tab. If it didn’t
-                      open,&nbsp;
-                      <a
-                        href={agent.calendar_link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 underline"
-                      >
-                        click here to open it
-                      </a>
-                      .
-                    </div>
-                  ) : (
-                    <div className="text-sm text-[var(--helper-fg)]">
-                      No scheduling link is configured.
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : selected ? (
-              <div className="w-full flex-1 flex flex-col">
-                {mode === "docs" ? (
-                  <DocIframe
-                    apiBase={apiBase}
-                    botId={botId}
-                    doc={selected}
-                    sessionId={sessionId}
-                    visitorId={visitorId}
+        /* Content */
+        <div
+          ref={contentRef}
+          className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-4"
+        >
+          {/* Selected demo/doc */}
+          {selected ? (
+            <div className="space-y-3">
+              <div className="rounded-xl overflow-hidden border border-[var(--border-default)]">
+                {String(selected.url || "").includes("player.vimeo.com") ||
+                String(selected.url || "").includes("youtube.com/embed/") ? (
+                  <iframe
+                    src={selected.url}
+                    title={selected.title || "Selected content"}
+                    className="w-full aspect-video"
+                    allow="autoplay; fullscreen; picture-in-picture"
+                    allowFullScreen
                   />
                 ) : (
-                  <div className="bg-[var(--card-bg)] pt-2 pb-2">
-                    <iframe
-                      style={{ width: "100%", aspectRatio: "471 / 272" }}
-                      src={selected.url}
-                      title={selected.title}
-                      className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                    />
+                  <div className="p-4 text-sm text-[var(--helper-fg)]">
+                    This demo is not embeddable. Open in a new tab:
+                    <div>
+                      <a
+                        className="underline"
+                        href={selected.url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {selected.url}
+                      </a>
+                    </div>
                   </div>
                 )}
-                {mode === "ask" && (visibleUnderVideo || []).length > 0 && (
-                  <>
-                    <div className="flex items-center justify-between mt-1 mb-3">
-                      <p className="italic text-[var(--helper-fg)]">
-                        Recommended demos
-                      </p>
-                    </div>
-                    <div className="flex flex-col gap-3">
-                      {visibleUnderVideo.map((it) => (
-                        <Row
-                          key={it.id || it.url || it.title}
-                          item={it}
-                          onPick={(val) => normalizeAndSelectDemo(val)}
-                        />
-                      ))}
-                    </div>
-                  </>
-                )}
               </div>
-            ) : mode === "browse" ? (
-              <div className="w-full flex-1 flex flex-col">
-                {(browseItems || []).length > 0 && (
-                  <>
-                    <div className="flex items-center justify-between mt-2 mb-3">
-                      <p className="italic text-[var(--helper-fg)]">
-                        Select a demo to view it
-                      </p>
-                    </div>
-                    <div className="flex flex-col gap-3">
-                      {browseItems.map((it) => (
-                        <Row
-                          key={it.id || it.url || it.title}
-                          item={it}
-                          onPick={(val) => normalizeAndSelectDemo(val)}
-                        />
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            ) : mode === "docs" ? (
-              <div className="w-full flex-1 flex flex-col">
-                {(browseDocs || []).length > 0 && (
-                  <>
-                    <div className="flex items-center justify-between mt-2 mb-3">
-                      <p className="italic text-[var(--helper-fg)]">
-                        Select a document to view it
-                      </p>
-                    </div>
-                    <div className="flex flex-col gap-3">
-                      {browseDocs.map((it) => (
-                        <Row
-                          key={it.id || it.url || it.title}
-                          item={it}
-                          kind="doc"
-                          onPick={async (val) => {
-                            // Call /render-doc-iframe so server can log doc_open
-                            try {
-                              const r = await fetch(
-                                `${apiBase}/render-doc-iframe`,
-                                {
-                                  method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify(
-                                    withIdsBody({
-                                      bot_id: botId,
-                                      doc_id: val.id || "",
-                                      title: val.title || "",
-                                      url: val.url || "", // fallback if server needs it
-                                    })
-                                  ),
-                                }
-                              );
-                              const j = await r.json();
-                              setSelected({
-                                ...val,
-                                _iframe_html: j?.iframe_html || null,
-                              });
-                            } catch {
-                              // Fallback: still show the doc URL
-                              setSelected(val);
-                            }
-                            requestAnimationFrame(() =>
-                              contentRef.current?.scrollTo({
-                                top: 0,
-                                behavior: "auto",
-                              })
-                            );
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            ) : (
-              <div className="w-full flex-1 flex flex-col">
-                {!lastQuestion && !loading && (
-                  <div className="space-y-3">
-                    <div className="text-base font-bold whitespace-pre-line">
-                      {responseText}
-                    </div>
-                    <DebugPanel debug={debugInfo} />
-                    {showIntroVideo && introVideoUrl ? (
-                      <div style={{ position: "relative", paddingTop: "56.25%" }}>
-                        <iframe
-                          src={introVideoUrl}
-                          title="Intro Video"
-                          frameBorder="0"
-                          allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
-                          referrerPolicy="strict-origin-when-cross-origin"
-                          style={{
-                            position: "absolute",
-                            top: 0,
-                            left: 0,
-                            width: "100%",
-                            height: "100%",
-                          }}
-                          className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
-                        />
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-                {lastQuestion ? (
-                  <p className="text-base italic text-center mb-2 text-[var(--helper-fg)]">
-                    "{lastQuestion}"
-                  </p>
-                ) : null}
-                <div className="text-left mt-2">
-                  {loading ? (
-                    <p className="font-semibold animate-pulse text-[var(--helper-fg)]">
-                      Thinking…
-                    </p>
-                  ) : lastQuestion ? (
-                    <p className="text-base font-bold whitespace-pre-line">
-                      {responseText}
-                    </p>
-                  ) : null}
+              {visibleUnderVideo?.length ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {visibleUnderVideo.map((b) => (
+                    <RecCard key={b.id} item={b} onPick={normalizeAndSelectDemo} />
+                  ))}
                 </div>
-                {helperPhase !== "hidden" && (
-                  <div className="flex items-center justify-between mt-3 mb-2">
-                    <p className="italic text-[var(--helper-fg)]">
-                      Recommended demos
-                    </p>
-                  </div>
-                )}
-                {helperPhase === "buttons" && (items || []).length > 0 && (
-                  <div className="flex flex-col gap-3">
-                    {items.map((it) => (
-                      <Row
-                        key={it.id || it.url || it.title}
-                        item={it}
-                        onPick={(val) => normalizeAndSelectDemo(val)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Bottom Ask Bar — divider only */}
-        <div
-          className="px-4 py-3 border-t border-[var(--border-default)]"
-          data-patch="ask-bottom-bar"
-        >
-          {showAskBottom ? (
-            <div className="relative w-full">
-              <textarea
-                ref={inputRef}
-                rows={1}
-                className="w-full rounded-[0.75rem] px-4 py-2 pr-14 text-base placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px] bg-[var(--card-bg)] border border-[var(--border-default)] focus:border-[var(--border-default)] focus:ring-1 focus:ring-[var(--border-default)] outline-none"
-                placeholder="Ask your question here"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onInput={(e) => {
-                  e.currentTarget.style.height = "auto";
-                  e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    sendMessage();
-                  }
-                }}
-              />
-              <button
-                aria-label="Send"
-                onClick={sendMessage}
-                className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
-              >
-                <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:brightness-110" />
-              </button>
+              ) : null}
             </div>
-          ) : null}
-        </div>
-      </div>
+          ) : (
+            <div className="space-y-3">
+              {/* Primary response / welcome message */}
+              <div className="text-base font-bold whitespace-pre-line text-[var(--message-fg)]">
+                {responseText}
+              </div>
 
-      {/* ThemeLab (enable with ?themelab=1) — ColorBox only */}
-      {themeLabOn && botId ? (
-        <ColorBox
-          apiBase={apiBase}
-          botId={botId}
-          frameRef={frameRef}
-          onVars={(vars) => setPickerVars(vars)}
-        />
-      ) : null}
+              {/* Helper header + buttons */}
+              {helperPhase === "header" ? (
+                <div className="text-sm text-[var(--helper-fg)]">
+                  Try one of these:
+                </div>
+              ) : null}
+              {helperPhase === "buttons" && items?.length ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {items.map((b) => (
+                    <RecCard key={b.id} item={b} onPick={normalizeAndSelectDemo} />
+                  ))}
+                </div>
+              ) : null}
+
+              {/* Loading */}
+              {loading ? (
+                <div className="text-sm text-[var(--helper-fg)]">Thinking…</div>
+              ) : null}
+
+              {/* Last question + bot response */}
+              {lastQuestion ? (
+                <div className="pt-2">
+                  <p className="text-base italic text-center mb-2 text-[var(--helper-fg)]">
+                    “{lastQuestion}”
+                  </p>
+                  <p className="text-base font-bold whitespace-pre-line text-[var(--message-fg)]">
+                    {responseText}
+                  </p>
+                </div>
+              ) : null}
+
+              {/* Browse cards when not anchored to a selected item */}
+              {!selected && listSource?.length ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {listSource.map((b) => (
+                    <RecCard key={b.id} item={b} onPick={normalizeAndSelectDemo} />
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        {/* Ask Footer */}
+        {showAskBottom ? (
+          <div className="border-t border-[var(--border-default)] bg-[var(--card-bg)]">
+            <AskFooter
+              input={input}
+              setInput={setInput}
+              onSend={sendMessage}
+              inputRef={inputRef}
+              mode={mode}
+              setMode={setMode}
+              tabsEnabled={tabsEnabled}
+            />
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
 
 /* ================================================================================= *
- * END SECTION 5                                                                     *
+ *  END SECTION 5                                                                    *
  * ================================================================================= */
 
 /* ================================================================================= *
