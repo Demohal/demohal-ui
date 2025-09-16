@@ -180,6 +180,7 @@ function PriceMirror({ lines }) {
 
 function EstimateCard({ estimate, outroText }) {
   if (!estimate) return null;
+  const items = Array.isArray(estimate.line_items) ? estimate.line_items : [];
   return (
     <div data-patch="estimate-card">
       <div className={UI.CARD}>
@@ -193,17 +194,21 @@ function EstimateCard({ estimate, outroText }) {
           </div>
         </div>
         <div className="space-y-3">
-          {(estimate.line_items || []).map((li) => (
-            <div key={li.product.id} className="rounded-[0.75rem] p-3 bg-white">
-              <div className="flex items-center justify-between">
-                <div className="font-bold">{li.product.name}</div>
-                <div className="font-bold text-lg">
-                  {li.currency_code} {Number(li.price_min).toLocaleString()} –{" "}
-                  {li.currency_code} {Number(li.price_max).toLocaleString()}
+          {items.map((li, idx) => {
+            const name = li?.product?.name ?? li?.label ?? "Item";
+            const key = li?.product?.id ?? `${name}-${idx}`;
+            return (
+              <div key={key} className="rounded-[0.75rem] p-3 bg-white">
+                <div className="flex items-center justify-between">
+                  <div className="font-bold">{name}</div>
+                  <div className="font-bold text-lg">
+                    {li.currency_code} {Number(li.price_min).toLocaleString()} –{" "}
+                    {li.currency_code} {Number(li.price_max).toLocaleString()}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
