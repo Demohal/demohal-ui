@@ -417,7 +417,6 @@ export default function AskAssistant() {
   const [priceEstimate, setPriceEstimate] = useState(null);
   const [priceBusy, setPriceBusy] = useState(false);
   const [priceErr, setPriceErr] = useState("");
-
   const [agent, setAgent] = useState(null);
   // Screen-scoped chat context (reset after each answer)
   const [scopePayload, setScopePayload] = useState({ scope: "standard" });
@@ -619,6 +618,7 @@ export default function AskAssistant() {
           `${apiBase}/bot-settings?bot_id=${encodeURIComponent(botId)}`
         );
         const data = await res.json();
+
         if (cancel) return;
 
         if (data?.ok) {
