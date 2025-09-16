@@ -695,7 +695,7 @@ export default function AskAssistant() {
  *  END SECTION 2                                                                  *
  * ================================================================================= */
   
-  /* ================================================================================= *
+/* ================================================================================= *
  *  BEGIN SECTION 3                                                                  *
  * ================================================================================= */
   // release sticky when scrolling
@@ -999,11 +999,45 @@ useEffect(() => {
     return null;
   }, [priceQuestions, priceAnswers]);
 
-  // Mirror lines — prefer estimate.mirror_text; fallback to per-question templates
+  // Mirror lines — prefer estimate.mirror_text; handle arrays with {q_key,text}
   const mirrorLines = useMemo(() => {
-    const estText = String(priceEstimate?.mirror_text || "").trim();
-    if (estText) return [estText];
+    // Helper: get chosen label for a given q_key
+    const labelFor = (q_key) => {
+      const q = (priceQuestions || []).find((qq) => qq.q_key === q_key);
+      if (!q) return "";
+      const ans = priceAnswers[q.q_key];
+      if (ans == null || ans === "" || (Array.isArray(ans) && ans.length === 0)) return "";
+      const opts = normalizeOptions(q);
+      if (String(q.type).toLowerCase().includes("multi")) {
+        const picked = Array.isArray(ans) ? ans : [];
+        return opts.filter((o) => picked.includes(o.key)).map((o) => o.label).join(", ");
+      }
+      const o = opts.find((o) => o.key === ans);
+      return o?.label || String(ans);
+    };
 
+    // 1) String mirror from server
+    if (typeof priceEstimate?.mirror_text === "string") {
+      const t = priceEstimate.mirror_text.trim();
+      if (t) return [t];
+    }
+
+    // 2) Array of { q_key, text }
+    if (Array.isArray(priceEstimate?.mirror_text)) {
+      const out = [];
+      for (const m of priceEstimate.mirror_text) {
+        const raw = String(m?.text || "").trim();
+        if (!raw) continue;
+        const lbl = labelFor(m?.q_key);
+        const replaced = raw
+          .replace(/\{\{\s*answer_label_lower\s*\}\}/gi, lbl.toLowerCase())
+          .replace(/\{\{\s*answer_label\s*\}\}/gi, lbl);
+        out.push(replaced);
+      }
+      return out.filter(Boolean);
+    }
+
+    // 3) Derive from questions/answers as fallback
     if (!priceQuestions?.length) return [];
     const lines = [];
     for (const q of priceQuestions) {
