@@ -1,7 +1,7 @@
-/* src/components/AskAssistant.jsx — full file */
 /* ================================================================================= *
  *  BEGIN SECTION 1                                                                  *
  * ================================================================================= */
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
