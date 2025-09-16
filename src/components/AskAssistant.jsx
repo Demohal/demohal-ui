@@ -421,7 +421,11 @@ export default function AskAssistant() {
   });
 
   // Pricing state
-  const [priceUiCopy, setPriceUiCopy] = useState({});
+  const [pricingCopy, setPricingCopy] = useState({
+    intro: "",
+    outro: "",
+    custom_notice: "",
+  });
   const [priceQuestions, setPriceQuestions] = useState([]);
   const [priceAnswers, setPriceAnswers] = useState({});
   const [priceEstimate, setPriceEstimate] = useState(null);
@@ -491,6 +495,12 @@ export default function AskAssistant() {
           setResponseText(b.welcome_message || "");
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
+          // PRICING COPY from /bot-settings
+          setPricingCopy({
+            intro: b.pricing_intro || "",
+            outro: b.pricing_outro || "",
+            custom_notice: b.pricing_custom_notice || "",
+          });
         }
         if (id) {
           setBotId(id);
@@ -536,6 +546,12 @@ export default function AskAssistant() {
           setResponseText(b.welcome_message || "");
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
+          // PRICING COPY from /bot-settings
+          setPricingCopy({
+            intro: b.pricing_intro || "",
+            outro: b.pricing_outro || "",
+            custom_notice: b.pricing_custom_notice || "",
+          });
         }
         if (id) setBotId(id);
       } catch {}
@@ -573,6 +589,12 @@ export default function AskAssistant() {
           setResponseText(b.welcome_message || "");
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
+          // PRICING COPY from /bot-settings
+          setPricingCopy({
+            intro: b.pricing_intro || "",
+            outro: b.pricing_outro || "",
+            custom_notice: b.pricing_custom_notice || "",
+          });
         }
         if (data?.ok && data?.bot?.id) setBotId(data.bot.id);
       } catch {}
@@ -647,6 +669,12 @@ export default function AskAssistant() {
           setResponseText(b.welcome_message || "");
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
+          // PRICING COPY from /bot-settings
+          setPricingCopy({
+            intro: b.pricing_intro || "",
+            outro: b.pricing_outro || "",
+            custom_notice: b.pricing_custom_notice || "",
+          });
         }
       } catch {}
     })();
@@ -870,7 +898,7 @@ useEffect(() => {
         if (cancel) return;
         if (!data?.ok)
           throw new Error(data?.error || "Failed to load pricing questions");
-        setPriceUiCopy(data.ui_copy || {});
+        // only questions now; copy comes from /bot-settings
         setPriceQuestions(Array.isArray(data.questions) ? data.questions : []);
         requestAnimationFrame(() =>
           priceScrollRef.current?.scrollTo({ top: 0, behavior: "auto" })
@@ -971,8 +999,11 @@ useEffect(() => {
     return null;
   }, [priceQuestions, priceAnswers]);
 
-  // Mirror lines — apply full template around {{answer_label}} / {{answer_label_lower}}
+  // Mirror lines — prefer estimate.mirror_text; otherwise derive from questions/answers
   const mirrorLines = useMemo(() => {
+    const estText = String(priceEstimate?.mirror_text || "").trim();
+    if (estText) return [estText];
+
     if (!priceQuestions?.length) return [];
     const lines = [];
     for (const q of priceQuestions) {
@@ -1014,13 +1045,13 @@ useEffect(() => {
       }
     }
     return lines;
-  }, [priceQuestions, priceAnswers]);
+  }, [priceEstimate, priceQuestions, priceAnswers]);
 
   /* ================================================================================= *
    * END SECTION 3                                                                     *
    * ================================================================================= */
   
-  /* ================================================================================= *
+    /* ================================================================================= *
    *  BEGIN SECTION 4                                                                  *
    * ================================================================================= */
   
@@ -1195,7 +1226,7 @@ useEffect(() => {
           <div className="text-lg font-semibold">No bot selected</div>
           {alias ? (
             <div className="text-sm text-gray-600">
-              Resolving alias “{alias}”...
+              Resolving alias “{alias}”…
             </div>
           ) : (
             <div className="text-sm text-gray-600">
@@ -1261,14 +1292,11 @@ useEffect(() => {
         {mode === "price" ? (
           <>
             <div className="px-6 pt-3 pb-2" data-patch="price-intro">
-              <PriceMirror lines={mirrorLines.length ? mirrorLines : null} />
+              <PriceMirror lines={mirrorLines.length ? mirrorLines : [""]} />
               {!mirrorLines.length ? (
                 <div className="text-base font-bold whitespace-pre-line">
-                  {((priceUiCopy?.intro?.heading || "").trim()
-                    ? `${priceUiCopy.intro.heading.trim()}\n\n`
-                    : "") +
-                    (priceUiCopy?.intro?.body ||
-                      "This tool provides a quick estimate based on your selections. Final pricing may vary by configuration, usage, and implementation.")}
+                  {pricingCopy?.intro ||
+                    "This tool provides a quick estimate based on your selections. Final pricing may vary by configuration, usage, and implementation."}
                 </div>
               ) : null}
             </div>
@@ -1286,25 +1314,15 @@ useEffect(() => {
                   value={priceAnswers[nextPriceQuestion.q_key]}
                   onPick={handlePickOption}
                 />
-              ) : (priceEstimate && priceEstimate.custom) ? (
+              ) : priceEstimate && priceEstimate.custom ? (
                 <div className="text-base font-bold whitespace-pre-line">
-                  {priceUiCopy?.custom_notice ||
+                  {pricingCopy?.custom_notice ||
                     "We’ll follow up with a custom quote tailored to your selection."}
                 </div>
               ) : (
                 <EstimateCard
                   estimate={priceEstimate}
-                  outroText={
-                    priceEstimate?.custom
-                      ? (priceUiCopy?.custom_notice || "")
-                      : (() => {
-                          const base =
-                            ((priceUiCopy?.outro?.heading || "").trim()
-                              ? `${priceUiCopy.outro.heading.trim()}\n\n`
-                              : "") + (priceUiCopy?.outro?.body || "");
-                          return (base || priceUiCopy?.custom_notice || "");
-                        })()
-                  }
+                  outroText={pricingCopy?.outro || ""}
                 />
               )}
               {priceBusy ? (
