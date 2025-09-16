@@ -180,30 +180,38 @@ function PriceMirror({ lines }) {
 
 function EstimateCard({ estimate, outroText }) {
   if (!estimate) return null;
+
   const items = Array.isArray(estimate.line_items) ? estimate.line_items : [];
+
+  const fmtAmount = (ccy, v) => `${ccy} ${Number(v).toLocaleString()}`;
+  const fmtRange = (ccy, min, max) =>
+    Number(min) === Number(max) ? fmtAmount(ccy, max) : `${fmtAmount(ccy, min)} – ${fmtAmount(ccy, max)}`;
+
+  const totalText = fmtRange(estimate.currency_code, estimate.total_min, estimate.total_max);
+
   return (
     <div data-patch="estimate-card">
       <div className={UI.CARD}>
         <div className="flex items-center justify-between mb-3">
           <div className="font-bold text-lg">Your Estimate</div>
-          <div className="font-bold text-lg">
-            {estimate.currency_code}{" "}
-            {Number(estimate.total_min).toLocaleString()} –{" "}
-            {estimate.currency_code}{" "}
-            {Number(estimate.total_max).toLocaleString()}
+          <div className="font-bold text-lg text-right [font-variant-numeric:tabular-nums]">
+            {totalText}
           </div>
         </div>
+
         <div className="space-y-3">
           {items.map((li, idx) => {
             const name = li?.product?.name ?? li?.label ?? "Item";
             const key = li?.product?.id ?? `${name}-${idx}`;
+            const ccy = li?.currency_code || estimate.currency_code || "";
+            const lineText = fmtRange(ccy, li?.price_min, li?.price_max);
+
             return (
               <div key={key} className="rounded-[0.75rem] p-3 bg-white">
-                <div className="flex items-center justify-between">
+                <div className="grid grid-cols-[1fr_auto] items-center gap-3">
                   <div className="font-bold">{name}</div>
-                  <div className="font-bold text-lg">
-                    {li.currency_code} {Number(li.price_min).toLocaleString()} –{" "}
-                    {li.currency_code} {Number(li.price_max).toLocaleString()}
+                  <div className="font-bold text-lg text-right [font-variant-numeric:tabular-nums]">
+                    {lineText}
                   </div>
                 </div>
               </div>
