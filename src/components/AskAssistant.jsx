@@ -1649,6 +1649,19 @@ useEffect(() => {
             </div>
           ) : null}
         </div>
+      </div>
+      {/* ThemeLab (enable with ?themelab=1) — ColorBox only */}
+      {themeLabOn && botId ? (
+        <ColorBox
+          apiBase={apiBase}
+          botId={botId}
+          frameRef={frameRef}
+          onVars={(vars) => setPickerVars(vars)}
+        />
+      ) : null}
+    </div>
+  );
+}    
 
 /* ================================================================================= *
 * END SECTION 5                                                                     *
