@@ -999,7 +999,7 @@ useEffect(() => {
     return null;
   }, [priceQuestions, priceAnswers]);
 
-  // Mirror lines — prefer estimate.mirror_text; otherwise derive from questions/answers
+  // Mirror lines — prefer estimate.mirror_text; fallback to per-question templates
   const mirrorLines = useMemo(() => {
     const estText = String(priceEstimate?.mirror_text || "").trim();
     if (estText) return [estText];
@@ -1031,14 +1031,8 @@ useEffect(() => {
       const tmpl = q.mirror_template;
       if (tmpl && typeof tmpl === "string") {
         const replaced = tmpl
-          .replace(
-            /\{\{\s*answer_label_lower\s*\}\}|\{\s*answer_label_lower\s*\}/gi,
-            label.toLowerCase()
-          )
-          .replace(
-            /\{\{\s*answer_label\s*\}\}|\{\s*answer_label\s*\}/gi,
-            label
-          );
+          .replace(/\{\{\s*answer_label_lower\s*\}\}/gi, label.toLowerCase())
+          .replace(/\{\{\s*answer_label\s*\}\}/gi, label);
         lines.push(replaced);
       } else {
         lines.push(label);
