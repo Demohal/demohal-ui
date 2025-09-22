@@ -2,105 +2,330 @@
  *  BEGIN SECTION 1                                                                  *
  * ================================================================================= */
 
-// --- SECTION 1/4: URL prefill on init (helpers, state, effects)
-// Place these additions near the top of AskAssistant.jsx (after existing imports)
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import axios from "axios";
+import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
+import fallbackLogo from "../assets/logo.png";
 
-// 1) NEW: tiny helper to read query params safely
-function getQueryParams() {
-  try {
-    return new URLSearchParams(window.location.search);
-  } catch (_) {
-    return new URLSearchParams();
-  }
+/* =============================== *
+ *  CLIENT-CONTROLLED CSS TOKENS   *
+ * =============================== */
+
+const DEFAULT_THEME_VARS = {
+  "--banner-bg": "#000000",
+  "--banner-fg": "#ffffff",
+  "--page-bg": "#e6e6e6",
+  "--card-bg": "#ffffff",
+  "--shadow-elevation":
+    "0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.10)",
+
+  // Text roles
+  "--message-fg": "#000000",
+  "--helper-fg": "#4b5563",
+  "--mirror-fg": "#4b5563",
+
+  // Tabs (inactive)
+  "--tab-bg": "#303030",
+  "--tab-fg": "#ffffff",
+  "--tab-active-fg": "#ffffff", // derived at runtime
+
+  // Buttons (explicit types)
+  "--demo-button-bg": "#3a4554",
+  "--demo-button-fg": "#ffffff",
+  "--doc.button.background": "#000000", // legacy mapping guard (no-op)
+  "--doc-button-bg": "#000000",
+  "--doc-button-fg": "#ffffff",
+  "--price-button-bg": "#1a1a1a",
+  "--price-button-fg": "#ffffff",
+
+  // Send icon
+  "--send-color": "#000000",
+
+  // Default faint gray border (used only where allowed)
+  "--border-default": "#9ca3af",
+};
+
+// Map DB token_key → CSS var used in this app (mirror of server mapping)
+const TOKEN_TO_CSS = {
+  "banner.background": "--banner-bg",
+  "banner.foreground": "--banner-fg",
+  "page.background": "--page-bg",
+  "content.area.background": "--card-bg",
+
+  "message.text.foreground": "--message-fg",
+  "helper.text.foreground": "--helper-fg",
+  "mirror.text.foreground": "--mirror-fg",
+
+  "tab.background": "--tab-bg",
+  "tab.foreground": "--tab-fg",
+
+  "demo.button.background": "--demo-button-bg",
+  "demo.button.foreground": "--demo-button-fg",
+  "doc.button.background": "--doc-button-bg",
+  "doc.button.foreground": "--doc-button-fg",
+  "price.button.background": "--price-button-bg",
+  "price.button.foreground": "--price-button-fg",
+
+  "send.button.background": "--send-color",
+
+  "border.default": "--border-default",
+};
+
+// Hardcoded screen order/labels for grouping the 16 client-controlled tokens
+const SCREEN_ORDER = [
+  { key: "welcome", label: "Welcome" },
+  { key: "bot_response", label: "Bot Response" },
+  { key: "browse_demos", label: "Browse Demos" },
+  { key: "browse_docs", label: "Browse Documents" },
+  { key: "price", label: "Price Estimate" },
+];
+
+const classNames = (...xs) => xs.filter(Boolean).join(" ");
+function inverseBW(hex) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(
+    String(hex || "").trim()
+  );
+  if (!m) return "#000000";
+  const r = parseInt(m[1], 16),
+    g = parseInt(m[2], 16),
+    b = parseInt(m[3], 16);
+  const L = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return L > 0.5 ? "#000000" : "#ffffff";
 }
 
-// 2) Inside the AskAssistant component: NEW state & refs
-//    (merge with existing useState/useRef declarations)
-const [formFillConfig, setFormFillConfig] = useState(null); // server-driven field catalog for this bot
-const prefillRanRef = useRef(false); // ensure we only prefill once per mount
+/* ========================== *
+ *  UI PRIMITIVES
+ * ========================== */
 
-// 3) After you resolve botId (from /bot-settings) add a fetch for form-fill config
-//    Call this effect once bot.id is known.
-useEffect(() => {
-  if (!bot?.id) return;
-  let isActive = true;
-  (async () => {
-    try {
-      const res = await fetch(`/form-fill/config?bot_id=${encodeURIComponent(bot.id)}`, {
-        method: 'GET',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Session-Id': sessionId || '',
-          'X-Visitor-Id': visitorId || ''
-        }
-      });
-      const json = await res.json();
-      if (isActive && json?.ok) {
-        setFormFillConfig(json.config || null);
+const UI = {
+  CARD: "rounded-[0.75rem] p-4 bg-white [box-shadow:var(--shadow-elevation)]",
+  BTN_DEMO:
+    "w-full text-center rounded-[0.75rem] px-4 py-3 transition " +
+    "text-[var(--demo-button-fg)] bg-[var(--demo-button-bg)] hover:brightness-110 active:brightness-95",
+  BTN_DOC:
+    "w-full text-center rounded-[0.75rem] px-4 py-3 transition " +
+    "text-[var(--doc-button-fg)] bg-[var(--doc-button-bg)] hover:brightness-110 active:brightness-95",
+  BTN_PRICE:
+    "w-full text-center rounded-[0.75rem] px-4 py-3 transition " +
+    "text-[var(--price-button-fg)] bg-[var(--price-button-bg)] hover:brightness-110 active:brightness-95",
+  FIELD:
+    "w-full rounded-[0.75rem] px-4 py-3 text-base bg-[var(--card-bg)] " +
+    "border border-[var(--border-default)]",
+  TAB_ACTIVE:
+    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] " +
+    "[box-shadow:var(--shadow-elevation)]",
+  TAB_INACTIVE:
+    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] hover:brightness-110",
+};
+
+function Row({ item, onPick, kind = "demo" }) {
+  const btnClass =
+    kind === "doc"
+      ? UI.BTN_DOC
+      : kind === "price"
+      ? UI.BTN_PRICE
+      : UI.BTN_DEMO;
+  return (
+    <button
+      data-patch="row-button"
+      onClick={() => onPick(item)}
+      className={btnClass}
+      title={item.description || ""}
+    >
+      <div className="font-extrabold text-xs sm:text-sm">{item.title}</div>
+      {item.description ? (
+        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">
+          {item.description}
+        </div>
+      ) : item.functions_text ? (
+        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">
+          {item.functions_text}
+        </div>
+      ) : null}
+    </button>
+  );
+}
+
+function OptionButton({ opt, selected, onClick }) {
+  return (
+    <button
+      data-patch="option-button"
+      onClick={() => onClick(opt)}
+      className={classNames(UI.BTN_PRICE, selected && "ring-2 ring-black/20")}
+      title={opt.tooltip || ""}
+    >
+      <div className="font-extrabold text-xs sm:text-sm">{opt.label}</div>
+      {opt.tooltip ? (
+        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">
+          {opt.tooltip}
+        </div>
+      ) : null}
+    </button>
+  );
+}
+
+function PriceMirror({ lines }) {
+  if (!lines?.length) return null;
+  return (
+    <div data-patch="price-mirror" className="mb-3">
+      {lines.map((ln, i) => (
+        <div
+          key={i}
+          className="text-base italic whitespace-pre-line text-[var(--mirror-fg)]"
+        >
+          {ln}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EstimateCard({ estimate, outroText }) {
+  if (!estimate) return null;
+
+  const items = Array.isArray(estimate.line_items) ? estimate.line_items : [];
+
+  const fmtAmount = (ccy, v) => `${ccy} ${Number(v).toLocaleString()}`;
+  const fmtRange = (ccy, min, max) =>
+    Number(min) === Number(max) ? fmtAmount(ccy, max) : `${fmtAmount(ccy, min)} – ${fmtAmount(ccy, max)}`;
+
+  const totalText = fmtRange(estimate.currency_code, estimate.total_min, estimate.total_max);
+
+  return (
+    <div data-patch="estimate-card">
+      <div className={UI.CARD}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="font-bold text-lg">Your Estimate</div>
+          <div className="font-bold text-lg text-right [font-variant-numeric:tabular-nums]">
+            {totalText}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {items.map((li, idx) => {
+            const name = li?.product?.name ?? li?.label ?? "Item";
+            const key = li?.product?.id ?? `${name}-${idx}`;
+            const ccy = li?.currency_code || estimate.currency_code || "";
+            const lineText = fmtRange(ccy, li?.price_min, li?.price_max);
+
+            return (
+              <div key={key} className="rounded-[0.75rem] p-3 bg-white">
+                <div className="grid grid-cols-[1fr_auto] items-center gap-3">
+                  <div className="font-bold">{name}</div>
+                  <div className="font-bold text-lg text-right [font-variant-numeric:tabular-nums]">
+                    {lineText}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {outroText ? (
+        <div className="mt-3 text-base font-bold whitespace-pre-line">
+          {outroText}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* ---------- Options normalizer (accepts many backend shapes) ---------- */
+function normalizeOptions(q) {
+  const raw = q?.options ?? q?.choices ?? q?.buttons ?? q?.values ?? [];
+
+  return (Array.isArray(raw) ? raw : [])
+    .map((o, idx) => {
+      if (o == null) return null;
+      if (typeof o === "string") {
+        return { key: o, label: o, id: String(idx) };
       }
-    } catch (e) {
-      console.warn('[form-fill/config] load failed', e);
-    }
-  })();
-  return () => { isActive = false; };
-}, [bot?.id, sessionId, visitorId]);
+      const key = o.key ?? o.value ?? o.id ?? String(idx);
+      const label = o.label ?? o.title ?? o.name ?? String(key);
+      const tooltip = o.tooltip ?? o.description ?? o.help ?? undefined;
+      return { key, label, tooltip, id: String(o.id ?? key ?? idx) };
+    })
+    .filter(Boolean);
+}
 
-// 4) Prefill from URL on init: runs once when we have config + visitor/session ids
-useEffect(() => {
-  if (!bot?.id || !formFillConfig || prefillRanRef.current) return;
-  if (!sessionId || !visitorId) return; // wait for identifiers
+function QuestionBlock({ q, value, onPick }) {
+  const opts = normalizeOptions(q);
+  const type = String(q?.type || "").toLowerCase();
+  const isMulti =
+    type === "multi_choice" || type === "multichoice" || type === "multi";
 
-  const qp = getQueryParams();
-  const allowed = (formFillConfig.fields || []).filter(f => f?.allowed_from_url);
-  if (!allowed.length) {
-    prefillRanRef.current = true; // nothing to do
-    return;
-  }
+  return (
+    <div data-patch="question-block" className={UI.FIELD}>
+      <div className="font-bold text-base">{q.prompt}</div>
+      {q.help_text ? (
+        <div className="text-xs italic mt-1 text-[var(--helper-fg)]">
+          {q.help_text}
+        </div>
+      ) : null}
 
-  // Build a payload of only allowed fields that are present in the URL
-  const values = {};
-  for (const f of allowed) {
-    const alias = (f.alias || '').trim();
-    if (!alias) continue;
-    const v = qp.get(alias);
-    if (v != null && v !== '') {
-      values[alias] = v;
-    }
-  }
+      {opts.length > 0 ? (
+        <div className="mt-3 flex flex-col gap-3">
+          {opts.map((opt) => (
+            <OptionButton
+              key={opt.id}
+              opt={opt}
+              selected={
+                isMulti
+                  ? Array.isArray(value) && value.includes(opt.key)
+                  : value === opt.key
+              }
+              onClick={() => onPick(q, opt)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 text-xs text-[var(--helper-fg)]">
+          No options available.
+        </div>
+      )}
+    </div>
+  );
+}
 
-  if (Object.keys(values).length === 0) {
-    prefillRanRef.current = true;
-    return;
-  }
-
-  // POST to submit endpoint with a special source so backend logs `form_fill_prefill_from_url`
-  (async () => {
-    try {
-      const res = await fetch('/form-fill/submit', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Session-Id': sessionId,
-          'X-Visitor-Id': visitorId
-        },
-        body: JSON.stringify({
-          bot_id: bot.id,
-          source: 'url_prefill',
-          values
-        })
-      });
-      // We don’t block UI on this; best-effort fire-and-forget.
-      // Optionally handle json.ok for debug.
-    } catch (e) {
-      console.warn('[form-fill/submit url_prefill] failed', e);
-    } finally {
-      prefillRanRef.current = true;
-    }
-  })();
-}, [bot?.id, formFillConfig, sessionId, visitorId]);
-
+function TabsNav({ mode, tabs }) {
+  return (
+    <div
+      className="w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      data-patch="tabs-nav"
+    >
+      <nav
+        className="inline-flex min-w-max items-center gap-0.5 overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        role="tablist"
+      >
+        {tabs.map((t) => {
+          const active =
+            (mode === "browse" && t.key === "demos") ||
+            (mode === "docs" && t.key === "docs") ||
+            (mode === "price" && t.key === "price") ||
+            (mode === "meeting" && t.key === "meeting");
+          return (
+            <button
+              key={t.key}
+              onClick={t.onClick}
+              role="tab"
+              aria-selected={active}
+              className={active ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}
+              style={
+                active
+                  ? { background: "var(--card-bg)", color: "var(--tab-active-fg)" }
+                  : { background: "var(--tab-bg)", color: "var(--tab-fg)" }
+              }
+              type="button"
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}
 
 /* ================================================================================= *
  *  END SECTION 1                                                                    *
@@ -158,38 +383,12 @@ export default function AskAssistant() {
   const inputRef = useRef(null);
   const frameRef = useRef(null); // context card container (for ColorBox placement)
 
-    // NEW: visitor/session identity
+  // NEW: visitor/session identity
   const [visitorId, setVisitorId] = useState("");
   const [sessionId, setSessionId] = useState("");
-  const didPrefillRef = useRef(false);
 
   // Theme vars (DB → in-memory → derived → live with picker overrides)
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
-
-  // URL Prefill: once we have bot/session/visitor, send URL params for backend prefill
-  useEffect(() => {
-    if (didPrefillRef.current) return;
-    if (!botId || !sessionId || !visitorId) return;
-    didPrefillRef.current = true;
-    try {
-      const qs = new URLSearchParams(window.location.search);
-      const params = {};
-      qs.forEach((v, k) => {
-        if (typeof v === "string" && k) params[k] = v;
-      });
-      if (!Object.keys(params).length) return;
-      fetch(`${apiBase}/form-fill/prefill-from-url`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...withIdsHeaders() },
-        body: JSON.stringify(
-          withIdsBody({ bot_id: botId, params })
-        ),
-      }).catch(() => {});
-    } catch {
-      // ignore
-    }
-  }, [botId, sessionId, visitorId, apiBase]);
-
   const derivedTheme = useMemo(() => {
     const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
     return { ...themeVars, "--tab-active-fg": activeFg };
