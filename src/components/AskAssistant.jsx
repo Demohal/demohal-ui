@@ -433,11 +433,8 @@ export default function AskAssistant() {
     logo_dark_url: null,
   });
 
-  const initialBrandReady = useMemo(
-    () => !(botIdFromUrl || alias),
-    [botIdFromUrl, alias]
-  );
-  const [brandReady, setBrandReady] = useState(initialBrandReady);
+  // Render the UI by default; will re-theme when settings load
+  const [brandReady, setBrandReady] = useState(true);
 
   const [tabsEnabled, setTabsEnabled] = useState({
     demos: false,
