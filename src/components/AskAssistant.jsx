@@ -694,22 +694,18 @@ export default function AskAssistant() {
   }, [input]);
 
 /* ================================================================================= *
- *  END SECTION 2                                                                  *
- * ================================================================================= */
-  
-/* ================================================================================= *
  *  BEGIN SECTION 3                                                                  *
  * ================================================================================= */
-  // release sticky when scrolling
-  useEffect(() => {
-    const el = contentRef.current;
-    if (!el || !selected) return;
-    const onScroll = () => {
-      if (el.scrollTop > 8 && isAnchored) setIsAnchored(false);
-    };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-  }, [selected, isAnchored]);
+// release sticky when scrolling
+useEffect(() => {
+  const el = contentRef.current;
+  if (!el || !selected) return;
+  const onScroll = () => {
+    if (el.scrollTop > 8 && isAnchored) setIsAnchored(false);
+  };
+  el.addEventListener("scroll", onScroll, { passive: true });
+  return () => el.removeEventListener("scroll", onScroll);
+}, [selected, isAnchored]);
 
 // Calendly booking listener — send rich payload to backend (no Calendly fetch)
 useEffect(() => {
@@ -761,321 +757,36 @@ useEffect(() => {
   return () => window.removeEventListener("message", onCalendlyMessage);
 }, [mode, botId, sessionId, visitorId, apiBase]);
 
-  async function normalizeAndSelectDemo(item) {
-    try {
-      const r = await fetch(`${apiBase}/render-video-iframe`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...withIdsHeaders(),
-        },
-        body: JSON.stringify(
-          withIdsBody({
-            bot_id: botId,
-            demo_id: item.id || "",
-            title: item.title || "",
-            video_url: item.url || "",
-          })
-        ),
-      });
-      const j = await r.json();
-      const embed = j?.video_url || item.url;
-      setSelected({ ...item, url: embed });
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
-    } catch {
-      setSelected(item);
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
-    }
-  }
-
-  async function openMeeting() {
-    if (!botId) return;
-    setMode("meeting");
-    try {
-      const res = await fetch(
-        `${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`
-      );
-      const data = await res.json();
-      const ag = data?.ok ? data.agent : null;
-      setAgent(ag);
-      if (
-        ag &&
-        ag.calendar_link_type &&
-        String(ag.calendar_link_type).toLowerCase() === "external" &&
-        ag.calendar_link
-      ) {
-        try {
-          {
-            const base = ag.calendar_link || "";
-            const withQS = `${base}${base.includes('?') ? '&' : '?'}session_id=${encodeURIComponent(sessionId||'')}&visitor_id=${encodeURIComponent(visitorId||'')}&bot_id=${encodeURIComponent(botId||'')}&utm_source=${encodeURIComponent(botId||'')}&utm_medium=${encodeURIComponent(sessionId||'')}&utm_campaign=${encodeURIComponent(visitorId||'')}`;
-            window.open(withQS, "_blank", "noopener,noreferrer");
-
-          }
-        } catch {}
-      }
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
-    } catch {
-      setAgent(null);
-    }
-  }
-
-  async function openBrowse() {
-    if (!botId) return;
-    setMode("browse");
-    setSelected(null);
-    try {
-      const url = withIdsQS(
-        `${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`
-      );
-      const res = await fetch(url, { headers: withIdsHeaders() });
-      const data = await res.json();
-      const src = Array.isArray(data?.items) ? data.items : [];
-      setBrowseItems(
-        src.map((it) => ({
-          id: it.id ?? it.value ?? it.url ?? it.title,
-          title: it.title ?? it.button_title ?? it.label ?? "",
-          url: it.url ?? it.value ?? it.button_value ?? "",
-          description: it.description ?? it.summary ?? it.functions_text ?? "",
-          functions_text: it.functions_text ?? it.description ?? "",
-        }))
-      );
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
-    } catch {
-      setBrowseItems([]);
-    }
-  }
-
-  async function openBrowseDocs() {
-    if (!botId) return;
-    setMode("docs");
-    setSelected(null);
-    try {
-      const url = withIdsQS(
-        `${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`
-      );
-      const res = await fetch(url, { headers: withIdsHeaders() });
-      const data = await res.json();
-      const src = Array.isArray(data?.items) ? data.items : [];
-      setBrowseDocs(
-        src.map((it) => ({
-          id: it.id ?? it.value ?? it.url ?? it.title,
-          title: it.title ?? it.button_title ?? it.label ?? "",
-          url: it.url ?? it.value ?? it.button_value ?? "",
-          description: it.description ?? it.summary ?? it.functions_text ?? "",
-          functions_text: it.functions_text ?? it.description ?? "",
-        }))
-      );
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
-    } catch {
-      setBrowseDocs([]);
-    }
-  }
-
-
-  
-  // Pricing loader
-  const priceScrollRef = useRef(null);
-  useEffect(() => {
-    if (mode !== "price" || !botId) return;
-    let cancel = false;
-    (async () => {
-      try {
-        setPriceErr("");
-        setPriceEstimate(null);
-        setPriceAnswers({});
-        const res = await fetch(
-          `${apiBase}/pricing/questions?bot_id=${encodeURIComponent(botId)}`
-        );
-        const data = await res.json();
-        if (cancel) return;
-        if (!data?.ok)
-          throw new Error(data?.error || "Failed to load pricing questions");
-        // only questions now; copy comes from /bot-settings
-        setPriceQuestions(Array.isArray(data.questions) ? data.questions : []);
-        requestAnimationFrame(() =>
-          priceScrollRef.current?.scrollTo({ top: 0, behavior: "auto" })
-        );
-      } catch {
-        if (!cancel) setPriceErr("Unable to load price estimator.");
-      }
-    })();
-    return () => {
-      cancel = true;
-    };
-  }, [mode, botId, apiBase]);
-
-  // Pricing: compute estimate when inputs ready
-  useEffect(() => {
-    const haveAll = (() => {
-      if (!priceQuestions?.length) return false;
-      const req = priceQuestions.filter(
-        (q) => (q.group ?? "estimation") === "estimation" && q.required !== false
-      );
-      if (!req.length) return false;
-      return req.every((q) => {
-        const v = priceAnswers[q.q_key];
-        const isMulti = String(q.type).toLowerCase().includes("multi");
-        return isMulti
-          ? Array.isArray(v) && v.length > 0
-          : !(v === undefined || v === null || v === "");
-      });
-    })();
-
-    if (mode !== "price" || !botId || !haveAll) {
-      setPriceEstimate(null);
-      return;
-    }
-    let cancel = false;
-    (async () => {
-      try {
-        setPriceBusy(true);
-        const body = {
+async function normalizeAndSelectDemo(item) {
+  try {
+    const r = await fetch(`${apiBase}/render-video-iframe`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...withIdsHeaders(),
+      },
+      body: JSON.stringify(
+        withIdsBody({
           bot_id: botId,
-          answers: {
-            product_id:
-              priceAnswers?.product ||
-              priceAnswers?.edition ||
-              priceAnswers?.product_id ||
-              "",
-            tier_id:
-              priceAnswers?.tier ||
-              priceAnswers?.transactions ||
-              priceAnswers?.tier_id ||
-              "",
-          },
-          session_id: sessionId || undefined,
-          visitor_id: visitorId || undefined,
-        };
-        const res = await fetch(`${apiBase}/pricing/estimate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const data = await res.json();
-        if (cancel) return;
-        if (!data?.ok)
-          throw new Error(data?.error || "Failed to compute estimate");
-        setPriceEstimate(data);
-      } catch {
-        if (!cancel) setPriceErr("Unable to compute estimate.");
-      } finally {
-        if (!cancel) setPriceBusy(false);
-      }
-    })();
-    return () => {
-      cancel = true;
-    };
-  }, [
-    mode,
-    botId,
-    apiBase,
-    priceQuestions,
-    priceAnswers,
-    sessionId,
-    visitorId,
-  ]);
-
-  // Next unanswered (null when all required answered → show estimate)
-  const nextPriceQuestion = useMemo(() => {
-    if (!priceQuestions?.length) return null;
-    for (const q of priceQuestions) {
-      if ((q.group ?? "estimation") !== "estimation" || q.required === false)
-        continue;
-      const v = priceAnswers[q.q_key];
-      const isMulti = String(q.type).toLowerCase().includes("multi");
-      const empty = isMulti
-        ? !(Array.isArray(v) && v.length > 0)
-        : v === undefined || v === null || v === "";
-      if (empty) return q;
-    }
-    return null;
-  }, [priceQuestions, priceAnswers]);
-
-  // Mirror lines — prefer estimate.mirror_text; handle arrays with {q_key,text}
-  const mirrorLines = useMemo(() => {
-    // Helper: get chosen label for a given q_key
-    const labelFor = (q_key) => {
-      const q = (priceQuestions || []).find((qq) => qq.q_key === q_key);
-      if (!q) return "";
-      const ans = priceAnswers[q.q_key];
-      if (ans == null || ans === "" || (Array.isArray(ans) && ans.length === 0)) return "";
-      const opts = normalizeOptions(q);
-      if (String(q.type).toLowerCase().includes("multi")) {
-        const picked = Array.isArray(ans) ? ans : [];
-        return opts.filter((o) => picked.includes(o.key)).map((o) => o.label).join(", ");
-      }
-      const o = opts.find((o) => o.key === ans);
-      return o?.label || String(ans);
-    };
-
-    // 1) String mirror from server
-    if (typeof priceEstimate?.mirror_text === "string") {
-      const t = priceEstimate.mirror_text.trim();
-      if (t) return [t];
-    }
-
-    // 2) Array of { q_key, text }
-    if (Array.isArray(priceEstimate?.mirror_text)) {
-      const out = [];
-      for (const m of priceEstimate.mirror_text) {
-        const raw = String(m?.text || "").trim();
-        if (!raw) continue;
-        const lbl = labelFor(m?.q_key);
-        const replaced = raw
-          .replace(/\{\{\s*answer_label_lower\s*\}\}/gi, lbl.toLowerCase())
-          .replace(/\{\{\s*answer_label\s*\}\}/gi, lbl);
-        out.push(replaced);
-      }
-      return out.filter(Boolean);
-    }
-
-    // 3) Derive from questions/answers as fallback
-    if (!priceQuestions?.length) return [];
-    const lines = [];
-    for (const q of priceQuestions) {
-      const ans = priceAnswers[q.q_key];
-      if (
-        ans === undefined ||
-        ans === null ||
-        ans === "" ||
-        (Array.isArray(ans) && ans.length === 0)
-      )
-        continue;
-      const opts = normalizeOptions(q);
-      let label = "";
-      if (String(q.type).toLowerCase().includes("multi")) {
-        const picked = Array.isArray(ans) ? ans : [];
-        label = opts
-          .filter((o) => picked.includes(o.key))
-          .map((o) => o.label)
-          .join(", ");
-      } else {
-        const o = opts.find((o) => o.key === ans);
-        label = o?.label || String(ans);
-      }
-      if (!label) continue;
-      const tmpl = q.mirror_template;
-      if (tmpl && typeof tmpl === "string") {
-        const replaced = tmpl
-          .replace(/\{\{\s*answer_label_lower\s*\}\}/gi, label.toLowerCase())
-          .replace(/\{\{\s*answer_label\s*\}\}/gi, label);
-        lines.push(replaced);
-      } else {
-        lines.push(label);
-      }
-    }
-    return lines;
-  }, [priceEstimate, priceQuestions, priceAnswers]);
+          demo_id: item.id || "",
+          title: item.title || "",
+          video_url: item.url || "",
+        })
+      ),
+    });
+    const j = await r.json();
+    const embed = j?.video_url || item.url;
+    setSelected({ ...item, url: embed });
+    requestAnimationFrame(() =>
+      contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+    );
+  } catch {
+    setSelected(item);
+    requestAnimationFrame(() =>
+      contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+    );
+  }
+}
 
   /* ================================================================================= *
    * END SECTION 3                                                                     *
