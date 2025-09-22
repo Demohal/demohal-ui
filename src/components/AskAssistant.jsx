@@ -1,3 +1,4 @@
+
 /* ================================================================================= *
  *  BEGIN SECTION 1                                                                  *
  * ================================================================================= */
@@ -331,6 +332,7 @@ function TabsNav({ mode, tabs }) {
  *  END SECTION 1                                                                    *
  * ================================================================================= */
 
+
 /* ================================================================================= *
  *  BEGIN SECTION 2                                                                  *
  * ================================================================================= */
@@ -383,38 +385,12 @@ export default function AskAssistant() {
   const inputRef = useRef(null);
   const frameRef = useRef(null); // context card container (for ColorBox placement)
 
-    // NEW: visitor/session identity
+  // NEW: visitor/session identity
   const [visitorId, setVisitorId] = useState("");
   const [sessionId, setSessionId] = useState("");
-  const didPrefillRef = useRef(false);
 
   // Theme vars (DB → in-memory → derived → live with picker overrides)
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
-
-  // URL Prefill: once we have bot/session/visitor, send URL params for backend prefill
-  useEffect(() => {
-    if (didPrefillRef.current) return;
-    if (!botId || !sessionId || !visitorId) return;
-    didPrefillRef.current = true;
-    try {
-      const qs = new URLSearchParams(window.location.search);
-      const params = {};
-      qs.forEach((v, k) => {
-        if (typeof v === "string" && k) params[k] = v;
-      });
-      if (!Object.keys(params).length) return;
-      fetch(`${apiBase}/form-fill/prefill-from-url`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...withIdsHeaders() },
-        body: JSON.stringify(
-          withIdsBody({ bot_id: botId, params })
-        ),
-      }).catch(() => {});
-    } catch {
-      // ignore
-    }
-  }, [botId, sessionId, visitorId, apiBase]);
-
   const derivedTheme = useMemo(() => {
     const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
     return { ...themeVars, "--tab-active-fg": activeFg };
@@ -433,8 +409,11 @@ export default function AskAssistant() {
     logo_dark_url: null,
   });
 
-  // Render the UI by default; will re-theme when settings load
-  const [brandReady, setBrandReady] = useState(true);
+  const initialBrandReady = useMemo(
+    () => !(botIdFromUrl || alias),
+    [botIdFromUrl, alias]
+  );
+  const [brandReady, setBrandReady] = useState(initialBrandReady);
 
   const [tabsEnabled, setTabsEnabled] = useState({
     demos: false,
@@ -715,22 +694,18 @@ export default function AskAssistant() {
   }, [input]);
 
 /* ================================================================================= *
- *  END SECTION 2                                                                  *
- * ================================================================================= */
-  
-/* ================================================================================= *
  *  BEGIN SECTION 3                                                                  *
  * ================================================================================= */
-  // release sticky when scrolling
-  useEffect(() => {
-    const el = contentRef.current;
-    if (!el || !selected) return;
-    const onScroll = () => {
-      if (el.scrollTop > 8 && isAnchored) setIsAnchored(false);
-    };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-  }, [selected, isAnchored]);
+// release sticky when scrolling
+useEffect(() => {
+  const el = contentRef.current;
+  if (!el || !selected) return;
+  const onScroll = () => {
+    if (el.scrollTop > 8 && isAnchored) setIsAnchored(false);
+  };
+  el.addEventListener("scroll", onScroll, { passive: true });
+  return () => el.removeEventListener("scroll", onScroll);
+}, [selected, isAnchored]);
 
 // Calendly booking listener — send rich payload to backend (no Calendly fetch)
 useEffect(() => {
@@ -782,321 +757,36 @@ useEffect(() => {
   return () => window.removeEventListener("message", onCalendlyMessage);
 }, [mode, botId, sessionId, visitorId, apiBase]);
 
-  async function normalizeAndSelectDemo(item) {
-    try {
-      const r = await fetch(`${apiBase}/render-video-iframe`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...withIdsHeaders(),
-        },
-        body: JSON.stringify(
-          withIdsBody({
-            bot_id: botId,
-            demo_id: item.id || "",
-            title: item.title || "",
-            video_url: item.url || "",
-          })
-        ),
-      });
-      const j = await r.json();
-      const embed = j?.video_url || item.url;
-      setSelected({ ...item, url: embed });
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
-    } catch {
-      setSelected(item);
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
-    }
-  }
-
-  async function openMeeting() {
-    if (!botId) return;
-    setMode("meeting");
-    try {
-      const res = await fetch(
-        `${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`
-      );
-      const data = await res.json();
-      const ag = data?.ok ? data.agent : null;
-      setAgent(ag);
-      if (
-        ag &&
-        ag.calendar_link_type &&
-        String(ag.calendar_link_type).toLowerCase() === "external" &&
-        ag.calendar_link
-      ) {
-        try {
-          {
-            const base = ag.calendar_link || "";
-            const withQS = `${base}${base.includes('?') ? '&' : '?'}session_id=${encodeURIComponent(sessionId||'')}&visitor_id=${encodeURIComponent(visitorId||'')}&bot_id=${encodeURIComponent(botId||'')}&utm_source=${encodeURIComponent(botId||'')}&utm_medium=${encodeURIComponent(sessionId||'')}&utm_campaign=${encodeURIComponent(visitorId||'')}`;
-            window.open(withQS, "_blank", "noopener,noreferrer");
-
-          }
-        } catch {}
-      }
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
-    } catch {
-      setAgent(null);
-    }
-  }
-
-  async function openBrowse() {
-    if (!botId) return;
-    setMode("browse");
-    setSelected(null);
-    try {
-      const url = withIdsQS(
-        `${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`
-      );
-      const res = await fetch(url, { headers: withIdsHeaders() });
-      const data = await res.json();
-      const src = Array.isArray(data?.items) ? data.items : [];
-      setBrowseItems(
-        src.map((it) => ({
-          id: it.id ?? it.value ?? it.url ?? it.title,
-          title: it.title ?? it.button_title ?? it.label ?? "",
-          url: it.url ?? it.value ?? it.button_value ?? "",
-          description: it.description ?? it.summary ?? it.functions_text ?? "",
-          functions_text: it.functions_text ?? it.description ?? "",
-        }))
-      );
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
-    } catch {
-      setBrowseItems([]);
-    }
-  }
-
-  async function openBrowseDocs() {
-    if (!botId) return;
-    setMode("docs");
-    setSelected(null);
-    try {
-      const url = withIdsQS(
-        `${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`
-      );
-      const res = await fetch(url, { headers: withIdsHeaders() });
-      const data = await res.json();
-      const src = Array.isArray(data?.items) ? data.items : [];
-      setBrowseDocs(
-        src.map((it) => ({
-          id: it.id ?? it.value ?? it.url ?? it.title,
-          title: it.title ?? it.button_title ?? it.label ?? "",
-          url: it.url ?? it.value ?? it.button_value ?? "",
-          description: it.description ?? it.summary ?? it.functions_text ?? "",
-          functions_text: it.functions_text ?? it.description ?? "",
-        }))
-      );
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
-    } catch {
-      setBrowseDocs([]);
-    }
-  }
-
-
-  
-  // Pricing loader
-  const priceScrollRef = useRef(null);
-  useEffect(() => {
-    if (mode !== "price" || !botId) return;
-    let cancel = false;
-    (async () => {
-      try {
-        setPriceErr("");
-        setPriceEstimate(null);
-        setPriceAnswers({});
-        const res = await fetch(
-          `${apiBase}/pricing/questions?bot_id=${encodeURIComponent(botId)}`
-        );
-        const data = await res.json();
-        if (cancel) return;
-        if (!data?.ok)
-          throw new Error(data?.error || "Failed to load pricing questions");
-        // only questions now; copy comes from /bot-settings
-        setPriceQuestions(Array.isArray(data.questions) ? data.questions : []);
-        requestAnimationFrame(() =>
-          priceScrollRef.current?.scrollTo({ top: 0, behavior: "auto" })
-        );
-      } catch {
-        if (!cancel) setPriceErr("Unable to load price estimator.");
-      }
-    })();
-    return () => {
-      cancel = true;
-    };
-  }, [mode, botId, apiBase]);
-
-  // Pricing: compute estimate when inputs ready
-  useEffect(() => {
-    const haveAll = (() => {
-      if (!priceQuestions?.length) return false;
-      const req = priceQuestions.filter(
-        (q) => (q.group ?? "estimation") === "estimation" && q.required !== false
-      );
-      if (!req.length) return false;
-      return req.every((q) => {
-        const v = priceAnswers[q.q_key];
-        const isMulti = String(q.type).toLowerCase().includes("multi");
-        return isMulti
-          ? Array.isArray(v) && v.length > 0
-          : !(v === undefined || v === null || v === "");
-      });
-    })();
-
-    if (mode !== "price" || !botId || !haveAll) {
-      setPriceEstimate(null);
-      return;
-    }
-    let cancel = false;
-    (async () => {
-      try {
-        setPriceBusy(true);
-        const body = {
+async function normalizeAndSelectDemo(item) {
+  try {
+    const r = await fetch(`${apiBase}/render-video-iframe`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...withIdsHeaders(),
+      },
+      body: JSON.stringify(
+        withIdsBody({
           bot_id: botId,
-          answers: {
-            product_id:
-              priceAnswers?.product ||
-              priceAnswers?.edition ||
-              priceAnswers?.product_id ||
-              "",
-            tier_id:
-              priceAnswers?.tier ||
-              priceAnswers?.transactions ||
-              priceAnswers?.tier_id ||
-              "",
-          },
-          session_id: sessionId || undefined,
-          visitor_id: visitorId || undefined,
-        };
-        const res = await fetch(`${apiBase}/pricing/estimate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const data = await res.json();
-        if (cancel) return;
-        if (!data?.ok)
-          throw new Error(data?.error || "Failed to compute estimate");
-        setPriceEstimate(data);
-      } catch {
-        if (!cancel) setPriceErr("Unable to compute estimate.");
-      } finally {
-        if (!cancel) setPriceBusy(false);
-      }
-    })();
-    return () => {
-      cancel = true;
-    };
-  }, [
-    mode,
-    botId,
-    apiBase,
-    priceQuestions,
-    priceAnswers,
-    sessionId,
-    visitorId,
-  ]);
-
-  // Next unanswered (null when all required answered → show estimate)
-  const nextPriceQuestion = useMemo(() => {
-    if (!priceQuestions?.length) return null;
-    for (const q of priceQuestions) {
-      if ((q.group ?? "estimation") !== "estimation" || q.required === false)
-        continue;
-      const v = priceAnswers[q.q_key];
-      const isMulti = String(q.type).toLowerCase().includes("multi");
-      const empty = isMulti
-        ? !(Array.isArray(v) && v.length > 0)
-        : v === undefined || v === null || v === "";
-      if (empty) return q;
-    }
-    return null;
-  }, [priceQuestions, priceAnswers]);
-
-  // Mirror lines — prefer estimate.mirror_text; handle arrays with {q_key,text}
-  const mirrorLines = useMemo(() => {
-    // Helper: get chosen label for a given q_key
-    const labelFor = (q_key) => {
-      const q = (priceQuestions || []).find((qq) => qq.q_key === q_key);
-      if (!q) return "";
-      const ans = priceAnswers[q.q_key];
-      if (ans == null || ans === "" || (Array.isArray(ans) && ans.length === 0)) return "";
-      const opts = normalizeOptions(q);
-      if (String(q.type).toLowerCase().includes("multi")) {
-        const picked = Array.isArray(ans) ? ans : [];
-        return opts.filter((o) => picked.includes(o.key)).map((o) => o.label).join(", ");
-      }
-      const o = opts.find((o) => o.key === ans);
-      return o?.label || String(ans);
-    };
-
-    // 1) String mirror from server
-    if (typeof priceEstimate?.mirror_text === "string") {
-      const t = priceEstimate.mirror_text.trim();
-      if (t) return [t];
-    }
-
-    // 2) Array of { q_key, text }
-    if (Array.isArray(priceEstimate?.mirror_text)) {
-      const out = [];
-      for (const m of priceEstimate.mirror_text) {
-        const raw = String(m?.text || "").trim();
-        if (!raw) continue;
-        const lbl = labelFor(m?.q_key);
-        const replaced = raw
-          .replace(/\{\{\s*answer_label_lower\s*\}\}/gi, lbl.toLowerCase())
-          .replace(/\{\{\s*answer_label\s*\}\}/gi, lbl);
-        out.push(replaced);
-      }
-      return out.filter(Boolean);
-    }
-
-    // 3) Derive from questions/answers as fallback
-    if (!priceQuestions?.length) return [];
-    const lines = [];
-    for (const q of priceQuestions) {
-      const ans = priceAnswers[q.q_key];
-      if (
-        ans === undefined ||
-        ans === null ||
-        ans === "" ||
-        (Array.isArray(ans) && ans.length === 0)
-      )
-        continue;
-      const opts = normalizeOptions(q);
-      let label = "";
-      if (String(q.type).toLowerCase().includes("multi")) {
-        const picked = Array.isArray(ans) ? ans : [];
-        label = opts
-          .filter((o) => picked.includes(o.key))
-          .map((o) => o.label)
-          .join(", ");
-      } else {
-        const o = opts.find((o) => o.key === ans);
-        label = o?.label || String(ans);
-      }
-      if (!label) continue;
-      const tmpl = q.mirror_template;
-      if (tmpl && typeof tmpl === "string") {
-        const replaced = tmpl
-          .replace(/\{\{\s*answer_label_lower\s*\}\}/gi, label.toLowerCase())
-          .replace(/\{\{\s*answer_label\s*\}\}/gi, label);
-        lines.push(replaced);
-      } else {
-        lines.push(label);
-      }
-    }
-    return lines;
-  }, [priceEstimate, priceQuestions, priceAnswers]);
+          demo_id: item.id || "",
+          title: item.title || "",
+          video_url: item.url || "",
+        })
+      ),
+    });
+    const j = await r.json();
+    const embed = j?.video_url || item.url;
+    setSelected({ ...item, url: embed });
+    requestAnimationFrame(() =>
+      contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+    );
+  } catch {
+    setSelected(item);
+    requestAnimationFrame(() =>
+      contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+    );
+  }
+}
 
   /* ================================================================================= *
    * END SECTION 3                                                                     *
@@ -1123,7 +813,8 @@ function handlePickOption(q, opt) {
 async function sendMessage() {
   if (!input.trim() || !botId) return;
   const outgoing = input.trim();
-
+  
+  // Capture screen-scoped context synchronously at submit time
   const commitScope = (() => {
     let scope = "standard";
     let demo_id, doc_id;
@@ -1136,7 +827,6 @@ async function sendMessage() {
     }
     return { scope, ...(demo_id ? { demo_id } : {}), ...(doc_id ? { doc_id } : {}) };
   })();
-
   setMode("ask");
   setLastQuestion(outgoing);
   setInput("");
@@ -1197,6 +887,7 @@ async function sendMessage() {
 
     setResponseText(text);
     setLoading(false);
+    // Reset scope to standard after completing the response
     setScopePayload({ scope: "standard" });
 
     if (recs.length > 0) {
@@ -1226,7 +917,9 @@ const listSource = mode === "browse" ? browseItems : items;
 const askUnderVideo = useMemo(() => {
   if (!selected) return items;
   const selKey = selected.id ?? selected.url ?? selected.title;
-  return (items || []).filter((it) => (it.id ?? it.url ?? it.title) !== selKey);
+  return (items || []).filter(
+    (it) => (it.id ?? it.url ?? it.title) !== selKey
+  );
 }, [selected, items]);
 const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
 
@@ -1235,7 +928,11 @@ const tabs = useMemo(() => {
   if (tabsEnabled.demos)
     out.push({ key: "demos", label: "Browse Demos", onClick: openBrowse });
   if (tabsEnabled.docs)
-    out.push({ key: "docs", label: "Browse Documents", onClick: openBrowseDocs });
+    out.push({
+      key: "docs",
+      label: "Browse Documents",
+      onClick: openBrowseDocs,
+    });
   if (tabsEnabled.price)
     out.push({
       key: "price",
@@ -1269,11 +966,17 @@ if (!botId) {
       <div className="text-gray-800 text-center space-y-2">
         <div className="text-lg font-semibold">No bot selected</div>
         {alias ? (
-          <div className="text-sm text-gray-600">Resolving alias “{alias}”…</div>
+          <div className="text-sm text-gray-600">
+            Resolving alias “{alias}”…
+          </div>
         ) : (
           <div className="text-sm text-gray-600">
-            Provide a <code>?bot_id=…</code> or <code>?alias=…</code> in the URL
-            {defaultAlias ? <> (trying default alias “{defaultAlias}”)</> : null}.
+            Provide a <code>?bot_id=…</code> or <code>?alias=…</code> in the
+            URL
+            {defaultAlias ? (
+              <> (trying default alias “{defaultAlias}”)</>
+            ) : null}
+            .
           </div>
         )}
       </div>
@@ -1282,9 +985,14 @@ if (!botId) {
 }
 
 const showAskBottom = mode !== "price" || !!priceEstimate;
-const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
+const embedDomain =
+  typeof window !== "undefined" ? window.location.hostname : "";
 
-const logoSrc = brandAssets.logo_url || brandAssets.logo_light_url || brandAssets.logo_dark_url || fallbackLogo;
+const logoSrc =
+  brandAssets.logo_url ||
+  brandAssets.logo_light_url ||
+  brandAssets.logo_dark_url ||
+  fallbackLogo;
 
 return (
   <div
@@ -1338,7 +1046,9 @@ return (
             className="px-6 pt-0 pb-6 flex-1 overflow-y-auto"
           >
             {!priceQuestions?.length ? (
-              <div className="text-sm text-[var(--helper-fg)]">Loading questions…</div>
+              <div className="text-sm text-[var(--helper-fg)]">
+                Loading questions…
+              </div>
             ) : nextPriceQuestion ? (
               <QuestionBlock
                 q={nextPriceQuestion}
@@ -1351,79 +1061,26 @@ return (
                   "We’ll follow up with a custom quote tailored to your selection."}
               </div>
             ) : (
-              <EstimateCard estimate={priceEstimate} outroText={pricingCopy?.outro || ""} />
+              <EstimateCard
+                estimate={priceEstimate}
+                outroText={pricingCopy?.outro || ""}
+              />
             )}
-            {priceBusy ? <div className="mt-2 text-sm text-[var(--helper-fg)]">Calculating…</div> : null}
-            {priceErr ? <div className="mt-2 text-sm text-red-600">{priceErr}</div> : null}
+            {priceBusy ? (
+              <div className="mt-2 text-sm text-[var(--helper-fg)]">
+                Calculating…
+              </div>
+            ) : null}
+            {priceErr ? (
+              <div className="mt-2 text-sm text-red-600">{priceErr}</div>
+            ) : null}
           </div>
         </>
       ) : (
-              <>
-      
-              {/* Bottom Ask Bar — divider only */}
-              <div
-                className="px-4 py-3 border-t border-[var(--border-default)]"
-                data-patch="ask-bottom-bar"
-              >
-
-          {showAskBottom ? (
-            <div className="relative w-full">
-              <textarea
-                ref={inputRef}
-                rows={1}
-                className="w-full rounded-[0.75rem] px-4 py-2 pr-20 text-base placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px] bg-[var(--card-bg)] border border-[var(--border-default)] focus:border-[var(--border-default)] focus:ring-1 focus:ring-[var(--border-default)] outline-none"
-                placeholder="Ask your question here"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onInput={(e) => {
-                  e.currentTarget.style.height = "auto";
-                  e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    sendMessage();
-                  }
-                }}
-              />
-              {/* Info button to (re)open form-fill modal */}
-              <button
-                aria-label="Edit your info"
-                title="Edit your info"
-                onClick={() => {
-                  try {
-                    window.dispatchEvent(
-                      new CustomEvent("open-form-fill", {
-                        detail: { bot_id: botId, session_id: sessionId, visitor_id: visitorId },
-                      })
-                    );
-                  } catch {}
-                }}
-                className="absolute right-12 top-1/2 -translate-y-1/2 px-2 py-1 rounded-[0.5rem] border border-[var(--border-default)] bg-[var(--card-bg)] hover:brightness-105 active:scale-95"
-                type="button"
-              >
-                <span className="text-xs font-semibold">Info</span>
-              </button>
-              <button
-                aria-label="Send"
-                onClick={sendMessage}
-                className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
-              >
-                <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:brightness-110" />
-              </button>
-            
-            </div>
-          ) : null}
-        </div>
-        </>
-      )}
-    </div>
-  </div>
-);
-
+  
 /* ================================================================================= *
- *  END SECTION 4                                                                    *
- * ================================================================================= */
+* END SECTION 4                                                                     *
+* ================================================================================= */
 
 
 /* ================================================================================= *
