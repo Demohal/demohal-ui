@@ -158,12 +158,38 @@ export default function AskAssistant() {
   const inputRef = useRef(null);
   const frameRef = useRef(null); // context card container (for ColorBox placement)
 
-  // NEW: visitor/session identity
+    // NEW: visitor/session identity
   const [visitorId, setVisitorId] = useState("");
   const [sessionId, setSessionId] = useState("");
+  const didPrefillRef = useRef(false);
 
   // Theme vars (DB → in-memory → derived → live with picker overrides)
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
+
+  // URL Prefill: once we have bot/session/visitor, send URL params for backend prefill
+  useEffect(() => {
+    if (didPrefillRef.current) return;
+    if (!botId || !sessionId || !visitorId) return;
+    didPrefillRef.current = true;
+    try {
+      const qs = new URLSearchParams(window.location.search);
+      const params = {};
+      qs.forEach((v, k) => {
+        if (typeof v === "string" && k) params[k] = v;
+      });
+      if (!Object.keys(params).length) return;
+      fetch(`${apiBase}/form-fill/prefill-from-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...withIdsHeaders() },
+        body: JSON.stringify(
+          withIdsBody({ bot_id: botId, params })
+        ),
+      }).catch(() => {});
+    } catch {
+      // ignore
+    }
+  }, [botId, sessionId, visitorId, apiBase]);
+
   const derivedTheme = useMemo(() => {
     const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
     return { ...themeVars, "--tab-active-fg": activeFg };
