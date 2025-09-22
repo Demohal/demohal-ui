@@ -1361,12 +1361,14 @@ return (
           </div>
         </>
       ) : (
+              <>
+      
+              {/* Bottom Ask Bar — divider only */}
+              <div
+                className="px-4 py-3 border-t border-[var(--border-default)]"
+                data-patch="ask-bottom-bar"
+              >
 
-        {/* Bottom Ask Bar — divider only */}
-        <div
-          className="px-4 py-3 border-t border-[var(--border-default)]"
-          data-patch="ask-bottom-bar"
-        >
           {showAskBottom ? (
             <div className="relative w-full">
               <textarea
@@ -1412,9 +1414,11 @@ return (
               >
                 <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:brightness-110" />
               </button>
+            
             </div>
           ) : null}
         </div>
+        </>
       )}
     </div>
   </div>
