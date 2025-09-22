@@ -1650,7 +1650,7 @@ useEffect(() => {
               <textarea
                 ref={inputRef}
                 rows={1}
-                className="w-full rounded-[0.75rem] px-4 py-2 pr-20 text-base placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px] bg-[var(--card-bg)] border border-[var(--border-default)] focus:border-[var(--border-default)] focus:ring-1 focus:ring-[var(--border-default)] outline-none"
+                className="w-full rounded-[0.75rem] px-4 py-2 pr-14 text-base placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px] bg-[var(--card-bg)] border border-[var(--border-default)] focus:border-[var(--border-default)] focus:ring-1 focus:ring-[var(--border-default)] outline-none"
                 placeholder="Ask your question here"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -1665,24 +1665,6 @@ useEffect(() => {
                   }
                 }}
               />
-              {/* Info button to (re)open form-fill modal */}
-              <button
-                aria-label="Edit your info"
-                title="Edit your info"
-                onClick={() => {
-                  try {
-                    window.dispatchEvent(
-                      new CustomEvent("open-form-fill", {
-                        detail: { bot_id: botId, session_id: sessionId, visitor_id: visitorId },
-                      })
-                    );
-                  } catch {}
-                }}
-                className="absolute right-12 top-1/2 -translate-y-1/2 px-2 py-1 rounded-[0.5rem] border border-[var(--border-default)] bg-[var(--card-bg)] hover:brightness-105 active:scale-95"
-                type="button"
-              >
-                <span className="text-xs font-semibold">Info</span>
-              </button>
               <button
                 aria-label="Send"
                 onClick={sendMessage}
@@ -1693,6 +1675,17 @@ useEffect(() => {
             </div>
           ) : null}
         </div>
+      </div>
+      {/* ThemeLab (enable with ?themelab=1) — ColorBox only */}
+      {themeLabOn && botId ? (
+        <ColorBox
+          apiBase={apiBase}
+          botId={botId}
+          frameRef={frameRef}
+          onVars={(vars) => setPickerVars(vars)}
+        />
+      ) : null}
+    </div>
   );
 }    
 
