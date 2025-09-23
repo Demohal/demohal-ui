@@ -98,6 +98,10 @@ export default function AskAssistant() {
   const [introVideoUrl, setIntroVideoUrl] = useState("");
   const [showIntroVideo, setShowIntroVideo] = useState(false);
 
+  // Browse data
+  const [browseItems, setBrowseItems] = useState([]); // demos
+  const [browseDocs, setBrowseDocs] = useState([]);   // documents
+
   // ---- Init: resolve bot by alias / bot_id ----
   useEffect(() => {
     let cancel = false;
@@ -269,6 +273,25 @@ export default function AskAssistant() {
     }
   }
 
+  // --------- LOAD DEMOS/DOCS ----------
+  useEffect(() => {
+    if (!botId || !tabsEnabled.demos) return;
+    setStage("fetch:demos");
+    fetch(`${apiBase}/demos?bot_id=${encodeURIComponent(botId)}`)
+      .then(r => r.json())
+      .then((data) => { setBrowseItems(Array.isArray(data) ? data : []); setStage("ok:demos"); })
+      .catch(() => { setBrowseItems([]); setStage("warn:demos"); });
+  }, [botId, tabsEnabled.demos, apiBase]);
+
+  useEffect(() => {
+    if (!botId || !tabsEnabled.docs) return;
+    setStage("fetch:docs");
+    fetch(`${apiBase}/documents?bot_id=${encodeURIComponent(botId)}`)
+      .then(r => r.json())
+      .then((data) => { setBrowseDocs(Array.isArray(data) ? data : []); setStage("ok:docs"); })
+      .catch(() => { setBrowseDocs([]); setStage("warn:docs"); });
+  }, [botId, tabsEnabled.docs, apiBase]);
+
   return (
     <div className="min-h-screen" style={liveTheme}>
       {/* Stage */}
@@ -355,9 +378,39 @@ export default function AskAssistant() {
           </div>
         ) : (
           <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
-            <div className={UI.CARD}>
-              <div className="text-sm text-[var(--helper-fg)]">Other modes will render here.</div>
-            </div>
+            {mode === "browse" && (
+              <div className="grid gap-3">
+                {browseItems.length === 0 ? (
+                  <div className={UI.CARD}>No demos yet.</div>
+                ) : (
+                  browseItems.map((d) => (
+                    <a key={d.id} href={d.url} target="_blank" rel="noreferrer" className={UI.CARD}>
+                      <div className="font-bold">{d.title}</div>
+                      <div className="text-sm opacity-80">{d.description}</div>
+                    </a>
+                  ))
+                )}
+              </div>
+            )}
+            {mode === "docs" && (
+              <div className="grid gap-3">
+                {browseDocs.length === 0 ? (
+                  <div className={UI.CARD}>No documents yet.</div>
+                ) : (
+                  browseDocs.map((doc) => (
+                    <a key={doc.id} href={doc.url} target="_blank" rel="noreferrer" className={UI.CARD}>
+                      <div className="font-bold">{doc.title}</div>
+                      <div className="text-sm opacity-80">{doc.description}</div>
+                    </a>
+                  ))
+                )}
+              </div>
+            )}
+            {mode !== "browse" && mode !== "docs" && (
+              <div className={UI.CARD}>
+                <div className="text-sm text-[var(--helper-fg)]">Other modes will render here.</div>
+              </div>
+            )}
           </div>
         )}
       </div>
