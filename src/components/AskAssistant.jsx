@@ -289,7 +289,7 @@ export default function AskAssistant() {
   useEffect(() => {
     if (!botId || !tabsEnabled.demos) return;
     setStage("fetch:demos");
-    fetch(`${apiBase}/demos?bot_id=${encodeURIComponent(botId)}`)
+    fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`, { headers: { ...(sessionId ? { "X-Session-Id": sessionId } : {}), ...(visitorId ? { "X-Visitor-Id": visitorId } : {}) } })`
       .then(r => r.json())
       .then((data) => {
         const list = extractList(data);
@@ -302,7 +302,7 @@ export default function AskAssistant() {
   useEffect(() => {
     if (!botId || !tabsEnabled.docs) return;
     setStage("fetch:docs");
-    fetch(`${apiBase}/documents?bot_id=${encodeURIComponent(botId)}`)
+    fetch(`${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`, { headers: { ...(sessionId ? { "X-Session-Id": sessionId } : {}), ...(visitorId ? { "X-Visitor-Id": visitorId } : {}) } })`
       .then(r => r.json())
       .then((data) => {
         const list = extractList(data);
