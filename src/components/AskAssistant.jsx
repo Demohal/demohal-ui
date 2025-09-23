@@ -302,7 +302,7 @@ export default function AskAssistant() {
   useEffect(() => {
     if (!botId || !tabsEnabled.docs) return;
     setStage("fetch:docs");
-    fetch(`${apiBase}/browse-documents?bot_id=${encodeURIComponent(botId)}`)
+    fetch(`${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`)
       .then(r => r.json())
       .then((data) => {
         const list = extractList(data);
