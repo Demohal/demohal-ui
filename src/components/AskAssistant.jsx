@@ -63,6 +63,7 @@ export default function AskAssistant() {
   const contentRef = useRef(null);
   const inputRef = useRef(null);
   const frameRef = useRef(null); // context card container (for ColorBox placement)
+  const priceScrollRef = useRef(null);
 
   // NEW: visitor/session identity
   const [visitorId, setVisitorId] = useState("");
@@ -113,6 +114,36 @@ export default function AskAssistant() {
   const [priceBusy, setPriceBusy] = useState(false);
   const [priceErr, setPriceErr] = useState("");
   const [agent, setAgent] = useState(null);
+  const mirrorLines = useMemo(() => {
+  const qs = Array.isArray(priceQuestions) ? priceQuestions : [];
+  const out = [];
+  for (const q of qs) {
+    const key = q?.q_key;
+    if (!key) continue;
+    const val = priceAnswers?.[key];
+    const isMulti = String(q?.type || "").toLowerCase().includes("multi");
+    const has = isMulti ? Array.isArray(val) && val.length > 0 : val != null && val !== "";
+    if (!has) continue;
+    const label = q?.prompt || q?.label || key;
+    const display = isMulti ? val.join(", ") : String(val);
+    out.push(`${label}: ${display}`);
+    }
+    return out;
+  }, [priceQuestions, priceAnswers]);
+  const nextPriceQuestion = useMemo(() => {
+  const qs = Array.isArray(priceQuestions) ? priceQuestions : [];
+  for (const q of qs) {
+    const key = q?.q_key;
+    if (!key) continue;
+    const val = priceAnswers?.[key];
+    const isMulti = String(q?.type || "").toLowerCase().includes("multi");
+    const answered = isMulti ? Array.isArray(val) && val.length > 0 : val != null && val !== "";
+    if (!answered) return q;
+    }
+    return null;
+  }, [priceQuestions, priceAnswers]);
+
+
   // Screen-scoped chat context (reset after each answer)
   const [scopePayload, setScopePayload] = useState({ scope: "standard" });
 
