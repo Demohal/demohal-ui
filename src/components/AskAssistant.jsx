@@ -746,7 +746,7 @@ return (
       {mode === "price" ? (
         <>
           <div className="px-6 pt-3 pb-2" data-patch="price-intro">
-            <PriceMirror lines={mirrorLines.length ? mirrorLines : [""]} />
+            <PriceMirror lines={[]} />
             {!mirrorLines.length ? (
               <div className="text-base font-bold whitespace-pre-line text-[var(--message-fg)]">
                 {pricingCopy?.intro ||
