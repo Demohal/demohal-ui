@@ -28,7 +28,9 @@ export default function AskAssistant() {
     return {
       alias: (qs.get("alias") || qs.get("alais") || "").trim(),
       botIdFromUrl: (qs.get("bot_id") || "").trim(),
-      themeLabOn: ((qs.get("themelab") || "").trim() === "1") || ((qs.get("themelab") || "").trim().toLowerCase() === "true"),
+      themeLabOn:
+        (qs.get("themelab") || "").trim() === "1" ||
+        (qs.get("themelab") || "").trim().toLowerCase() === "true",
     };
   }, []);
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
@@ -59,30 +61,41 @@ export default function AskAssistant() {
     return { ...themeVars, "--tab-active-fg": activeFg };
   }, [themeVars]);
   const [pickerVars, setPickerVars] = useState({});
-  const liveTheme = useMemo(() => ({ ...derivedTheme, ...pickerVars }), [derivedTheme, pickerVars]);
+  const liveTheme = useMemo(
+    () => ({ ...derivedTheme, ...pickerVars }),
+    [derivedTheme, pickerVars]
+  );
 
   // Brand
-  const [brandAssets, setBrandAssets] = useState({ logo_url: null, logo_light_url: null, logo_dark_url: null });
+  const [brandAssets, setBrandAssets] = useState({
+    logo_url: null,
+    logo_light_url: null,
+    logo_dark_url: null,
+  });
   const initialBrandReady = useMemo(() => !(botIdFromUrl || alias), [botIdFromUrl, alias]);
   const [brandReady, setBrandReady] = useState(initialBrandReady);
 
-  // Tabs
-  const [tabsEnabled, setTabsEnabled] = useState({ demos: false, docs: false, meeting: false, price: false });
+  // Tabs (from bot flags)
+  const [tabsEnabled, setTabsEnabled] = useState({
+    demos: false,
+    docs: false,
+    meeting: false,
+    price: false,
+  });
 
-  // Pricing
+  // Pricing (stubbed until later steps)
   const [pricingCopy, setPricingCopy] = useState({ intro: "", outro: "", custom_notice: "" });
   const [priceQuestions, setPriceQuestions] = useState([]);
   const [priceAnswers, setPriceAnswers] = useState({});
   const [priceEstimate, setPriceEstimate] = useState(null);
   const [priceBusy, setPriceBusy] = useState(false);
   const [priceErr, setPriceErr] = useState("");
-
-  // Derived for price
   const mirrorLines = useMemo(() => [], []);
   const nextPriceQuestion = useMemo(() => null, []);
 
-  // Scope payload (stub)
-  const [scopePayload, setScopePayload] = useState({ scope: "standard" });
+  // Minimal UI extras
+  const [introVideoUrl, setIntroVideoUrl] = useState("");
+  const [showIntroVideo, setShowIntroVideo] = useState(false);
 
   // ---- Init: resolve bot by alias / bot_id ----
   useEffect(() => {
@@ -112,8 +125,6 @@ export default function AskAssistant() {
         price: !!b.show_price_estimate,
       });
       setResponseText(b.welcome_message || "");
-      setStage("ok:welcome");
-
       setIntroVideoUrl(b.intro_video_url || "");
       setShowIntroVideo(!!b.show_intro_video);
       setPricingCopy({
@@ -148,7 +159,9 @@ export default function AskAssistant() {
       }
     });
 
-    return () => { cancel = true; };
+    return () => {
+      cancel = true;
+    };
   }, [apiBase, alias, botIdFromUrl, defaultAlias]);
 
   // Brand load
@@ -178,7 +191,9 @@ export default function AskAssistant() {
         if (!cancel) setBrandReady(true);
       }
     })();
-    return () => { cancel = true; };
+    return () => {
+      cancel = true;
+    };
   }, [botId, apiBase]);
 
   // Autosize input
@@ -189,14 +204,32 @@ export default function AskAssistant() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  // Minimal UI
-  const [introVideoUrl, setIntroVideoUrl] = useState("");
-  const [showIntroVideo, setShowIntroVideo] = useState(false);
+  // Build tabs list from flags
+  const tabs = useMemo(() => {
+    const t = [];
+    if (tabsEnabled.demos) t.push({ key: "demos", label: "Browse Demos", onClick: () => setMode("browse") });
+    if (tabsEnabled.docs) t.push({ key: "docs", label: "Browse Documents", onClick: () => setMode("docs") });
+    if (tabsEnabled.price) t.push({ key: "price", label: "Price", onClick: () => setMode("price") });
+    if (tabsEnabled.meeting) t.push({ key: "meeting", label: "Schedule Meeting", onClick: () => setMode("meeting") });
+    return t.length ? t : [{ key: "ask", label: "Ask", onClick: () => setMode("ask") }];
+  }, [tabsEnabled]);
 
   return (
     <div className="min-h-screen" style={liveTheme}>
-      {/* Stage readout */}
-      <div style={{position:"fixed",right:8,top:8,zIndex:9999,background:"#000",color:"#fff",padding:"4px 8px",borderRadius:6,fontSize:12}}>
+      {/* Stage */}
+      <div
+        style={{
+          position: "fixed",
+          right: 8,
+          top: 8,
+          zIndex: 9999,
+          background: "#000",
+          color: "#fff",
+          padding: "4px 8px",
+          borderRadius: 6,
+          fontSize: 12,
+        }}
+      >
         Stage: {stage || "-"}
       </div>
 
@@ -213,17 +246,9 @@ export default function AskAssistant() {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs (only those enabled) */}
       <div className="max-w-5xl mx-auto mt-2">
-        <TabsNav
-          mode={mode}
-          tabs={[
-            { key: "demos", label: "Browse Demos", onClick: () => setMode("browse") },
-            { key: "docs", label: "Browse Documents", onClick: () => setMode("docs") },
-            { key: "price", label: "Price", onClick: () => setMode("price") },
-            { key: "meeting", label: "Schedule Meeting", onClick: () => setMode("meeting") },
-          ]}
-        />
+        <TabsNav mode={mode} tabs={tabs} />
       </div>
 
       {/* Body */}
@@ -235,7 +260,23 @@ export default function AskAssistant() {
           </div>
         ) : mode === "ask" ? (
           <div className={UI.CARD}>
+            {/* Welcome copy */}
             <div className="text-base whitespace-pre-line text-[var(--message-fg)]">{responseText}</div>
+
+            {/* Intro video (if enabled) */}
+            {showIntroVideo && introVideoUrl ? (
+              <div className="mt-3">
+                <iframe
+                  title="intro"
+                  src={introVideoUrl}
+                  className="w-full aspect-video rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              </div>
+            ) : null}
+
+            {/* Ask box (stub) */}
             <div className="mt-3 flex gap-2">
               <textarea
                 ref={inputRef}
@@ -244,8 +285,11 @@ export default function AskAssistant() {
                 placeholder="Ask a question"
                 className={UI.FIELD}
               />
-              <button className={UI.BTN_DOC} onClick={() => setMode("browse")}>Browse</button>
+              <button className={UI.BTN_DOC} onClick={() => setMode("browse")}>
+                Browse
+              </button>
             </div>
+
             <DebugPanel debug={debugInfo} />
           </div>
         ) : mode === "price" ? (
@@ -267,9 +311,7 @@ export default function AskAssistant() {
       </div>
 
       {/* ThemeLab */}
-      {themeLabOn ? (
-        <ColorBox apiBase={apiBase} botId={botId} frameRef={frameRef} onVars={setPickerVars} />
-      ) : null}
+      {themeLabOn ? <ColorBox apiBase={apiBase} botId={botId} frameRef={frameRef} onVars={setPickerVars} /> : null}
     </div>
   );
 }
