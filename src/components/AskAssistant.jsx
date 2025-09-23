@@ -84,7 +84,7 @@ export default function AskAssistant() {
     price: false,
   });
 
-  // Pricing (stubbed until later steps)
+  // Pricing (stubbed)
   const [pricingCopy, setPricingCopy] = useState({ intro: "", outro: "", custom_notice: "" });
   const [priceQuestions, setPriceQuestions] = useState([]);
   const [priceAnswers, setPriceAnswers] = useState({});
@@ -94,7 +94,7 @@ export default function AskAssistant() {
   const mirrorLines = useMemo(() => [], []);
   const nextPriceQuestion = useMemo(() => null, []);
 
-  // Minimal UI extras
+  // Intro video
   const [introVideoUrl, setIntroVideoUrl] = useState("");
   const [showIntroVideo, setShowIntroVideo] = useState(false);
 
@@ -114,7 +114,6 @@ export default function AskAssistant() {
         return;
       }
 
-      // IDs
       setVisitorId(data.visitor_id || "");
       setSessionId(data.session_id || "");
 
@@ -139,30 +138,28 @@ export default function AskAssistant() {
       setStage("ok:botId");
     }
 
-    const intro = async () => {
-      if (botIdFromUrl) {
-        await loadBy(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botIdFromUrl)}`);
-        return;
+    (async () => {
+      try {
+        if (botIdFromUrl) {
+          await loadBy(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botIdFromUrl)}`);
+          return;
+        }
+        const useAlias = alias || defaultAlias;
+        if (!useAlias) {
+          setFatal("Invalid or inactive alias.");
+          setStage("fatal");
+          return;
+        }
+        await loadBy(`${apiBase}/bot-settings?alias=${encodeURIComponent(useAlias)}`);
+      } catch {
+        if (!cancel) {
+          setFatal("Invalid or inactive alias.");
+          setStage("fatal");
+        }
       }
-      const useAlias = alias || defaultAlias;
-      if (!useAlias) {
-        setFatal("Invalid or inactive alias.");
-        setStage("fatal");
-        return;
-      }
-      await loadBy(`${apiBase}/bot-settings?alias=${encodeURIComponent(useAlias)}`);
-    };
+    })();
 
-    intro().catch(() => {
-      if (!cancel) {
-        setFatal("Invalid or inactive alias.");
-        setStage("fatal");
-      }
-    });
-
-    return () => {
-      cancel = true;
-    };
+    return () => { cancel = true; };
   }, [apiBase, alias, botIdFromUrl, defaultAlias]);
 
   // Brand load
@@ -192,9 +189,7 @@ export default function AskAssistant() {
         if (!cancel) setBrandReady(true);
       }
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => { cancel = true; };
   }, [botId, apiBase]);
 
   // Autosize input
@@ -215,7 +210,7 @@ export default function AskAssistant() {
     return t.length ? t : [{ key: "ask", label: "Ask", onClick: () => setMode("ask") }];
   }, [tabsEnabled]);
 
-  // ---------- ASK FLOW ----------
+  // ---------- ASK FLOW (POST /demo-hal) ----------
   async function sendMessage() {
     const q = (input || "").trim();
     if (!q) return;
@@ -224,8 +219,9 @@ export default function AskAssistant() {
     setLoading(true);
     setStage("ask:posting");
     setLastQuestion(q);
+
     try {
-      const res = await fetch(`${apiBase}/ask`, {
+      const res = await fetch(`${apiBase}/demo-hal`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -234,26 +230,25 @@ export default function AskAssistant() {
         },
         body: JSON.stringify({
           bot_id: botId,
-          question: q,
-          session_id: sessionId || undefined,
-          visitor_id: visitorId || undefined,
+          user_question: q,
+          debug: true,
           scope: "standard",
         }),
       });
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data?.ok === false) {
-        setResponseText(data?.error || "Sorry, I couldn't answer that.");
+        setResponseText(data?.error || "Sorry—something went wrong.");
         setDebugInfo(data?.debug || null);
         setStage("ask:error");
       } else {
-        const answer =
+        const text =
+          data?.response_text ||
           data?.answer?.text ||
-          data?.answer ||
           data?.message ||
           data?.text ||
           "";
-        setResponseText(String(answer || "").trim());
+        setResponseText(String(text || "").trim());
         setDebugInfo(data?.debug || null);
         setStage("ask:ok");
       }
@@ -263,7 +258,6 @@ export default function AskAssistant() {
     } finally {
       setLoading(false);
       setInput("");
-      // keep focus on textarea
       setTimeout(() => inputRef.current?.focus(), 0);
     }
   }
@@ -278,19 +272,7 @@ export default function AskAssistant() {
   return (
     <div className="min-h-screen" style={liveTheme}>
       {/* Stage */}
-      <div
-        style={{
-          position: "fixed",
-          right: 8,
-          top: 8,
-          zIndex: 9999,
-          background: "#000",
-          color: "#fff",
-          padding: "4px 8px",
-          borderRadius: 6,
-          fontSize: 12,
-        }}
-      >
+      <div style={{position:"fixed",right:8,top:8,zIndex:9999,background:"#000",color:"#fff",padding:"4px 8px",borderRadius:6,fontSize:12}}>
         Stage: {stage || "-"}
       </div>
 
@@ -307,7 +289,7 @@ export default function AskAssistant() {
         </div>
       </div>
 
-      {/* Tabs (only those enabled) */}
+      {/* Tabs */}
       <div className="max-w-5xl mx-auto mt-2">
         <TabsNav mode={mode} tabs={tabs} />
       </div>
@@ -324,7 +306,7 @@ export default function AskAssistant() {
             {/* Welcome copy */}
             <div className="text-base whitespace-pre-line text-[var(--message-fg)]">{responseText}</div>
 
-            {/* Intro video (if enabled) */}
+            {/* Intro video */}
             {showIntroVideo && introVideoUrl ? (
               <div className="mt-3">
                 <iframe
@@ -366,11 +348,7 @@ export default function AskAssistant() {
           <div className="space-y-3">
             <PriceMirror lines={[]} />
             {nextPriceQuestion ? (
-              <QuestionBlock
-                q={nextPriceQuestion}
-                value={priceAnswers?.[nextPriceQuestion?.q_key]}
-                onPick={() => {}}
-              />
+              <QuestionBlock q={nextPriceQuestion} value={priceAnswers?.[nextPriceQuestion?.q_key]} onPick={() => {}} />
             ) : (
               <EstimateCard estimate={priceEstimate} outroText={pricingCopy?.outro || ""} />
             )}
