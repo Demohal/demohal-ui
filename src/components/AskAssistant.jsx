@@ -43,6 +43,7 @@ export default function AskAssistant() {
   const [lastQuestion, setLastQuestion] = useState("");
   const [responseText, setResponseText] = useState("");
   const [debugInfo, setDebugInfo] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   // Refs
   const contentRef = useRef(null);
@@ -214,6 +215,66 @@ export default function AskAssistant() {
     return t.length ? t : [{ key: "ask", label: "Ask", onClick: () => setMode("ask") }];
   }, [tabsEnabled]);
 
+  // ---------- ASK FLOW ----------
+  async function sendMessage() {
+    const q = (input || "").trim();
+    if (!q) return;
+    if (!botId) { setFatal("Invalid or inactive alias."); return; }
+
+    setLoading(true);
+    setStage("ask:posting");
+    setLastQuestion(q);
+    try {
+      const res = await fetch(`${apiBase}/ask`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(sessionId ? { "X-Session-Id": sessionId } : {}),
+          ...(visitorId ? { "X-Visitor-Id": visitorId } : {}),
+        },
+        body: JSON.stringify({
+          bot_id: botId,
+          question: q,
+          session_id: sessionId || undefined,
+          visitor_id: visitorId || undefined,
+          scope: "standard",
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) {
+        setResponseText(data?.error || "Sorry, I couldn't answer that.");
+        setDebugInfo(data?.debug || null);
+        setStage("ask:error");
+      } else {
+        const answer =
+          data?.answer?.text ||
+          data?.answer ||
+          data?.message ||
+          data?.text ||
+          "";
+        setResponseText(String(answer || "").trim());
+        setDebugInfo(data?.debug || null);
+        setStage("ask:ok");
+      }
+    } catch {
+      setResponseText("Network error.");
+      setStage("ask:network-error");
+    } finally {
+      setLoading(false);
+      setInput("");
+      // keep focus on textarea
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }
+
+  function onKeyDown(e) {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      e.preventDefault();
+      sendMessage();
+    }
+  }
+
   return (
     <div className="min-h-screen" style={liveTheme}>
       {/* Stage */}
@@ -276,15 +337,24 @@ export default function AskAssistant() {
               </div>
             ) : null}
 
-            {/* Ask box (stub) */}
-            <div className="mt-3 flex gap-2">
+            {/* Ask box */}
+            <div className="mt-3 flex gap-2 items-start">
               <textarea
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask a question"
+                onKeyDown={onKeyDown}
+                placeholder="Ask a question (Cmd/Ctrl+Enter to send)"
                 className={UI.FIELD}
               />
+              <button
+                className={UI.BTN_DOC}
+                onClick={sendMessage}
+                disabled={loading || !input.trim()}
+                title={loading ? "Sending..." : "Send"}
+              >
+                {loading ? "Sending…" : "Send"}
+              </button>
               <button className={UI.BTN_DOC} onClick={() => setMode("browse")}>
                 Browse
               </button>
@@ -296,7 +366,11 @@ export default function AskAssistant() {
           <div className="space-y-3">
             <PriceMirror lines={[]} />
             {nextPriceQuestion ? (
-              <QuestionBlock q={nextPriceQuestion} value={priceAnswers?.[nextPriceQuestion?.q_key]} onPick={() => {}} />
+              <QuestionBlock
+                q={nextPriceQuestion}
+                value={priceAnswers?.[nextPriceQuestion?.q_key]}
+                onPick={() => {}}
+              />
             ) : (
               <EstimateCard estimate={priceEstimate} outroText={pricingCopy?.outro || ""} />
             )}
