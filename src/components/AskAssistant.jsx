@@ -273,13 +273,29 @@ export default function AskAssistant() {
     }
   }
 
+  // ---- helper to normalize list payloads (array or object containers)
+  function extractList(data) {
+    if (!data) return [];
+    if (Array.isArray(data)) return data;
+    const keys = ["items", "rows", "data", "demos", "documents", "docs", "list"];
+    for (const k of keys) {
+      const v = data?.[k];
+      if (Array.isArray(v)) return v;
+    }
+    return [];
+  }
+
   // --------- LOAD DEMOS/DOCS ----------
   useEffect(() => {
     if (!botId || !tabsEnabled.demos) return;
     setStage("fetch:demos");
     fetch(`${apiBase}/demos?bot_id=${encodeURIComponent(botId)}`)
       .then(r => r.json())
-      .then((data) => { setBrowseItems(Array.isArray(data) ? data : []); setStage("ok:demos"); })
+      .then((data) => {
+        const list = extractList(data);
+        setBrowseItems(list);
+        setStage(`ok:demos:${list.length}`);
+      })
       .catch(() => { setBrowseItems([]); setStage("warn:demos"); });
   }, [botId, tabsEnabled.demos, apiBase]);
 
@@ -288,7 +304,11 @@ export default function AskAssistant() {
     setStage("fetch:docs");
     fetch(`${apiBase}/documents?bot_id=${encodeURIComponent(botId)}`)
       .then(r => r.json())
-      .then((data) => { setBrowseDocs(Array.isArray(data) ? data : []); setStage("ok:docs"); })
+      .then((data) => {
+        const list = extractList(data);
+        setBrowseDocs(list);
+        setStage(`ok:docs:${list.length}`);
+      })
       .catch(() => { setBrowseDocs([]); setStage("warn:docs"); });
   }, [botId, tabsEnabled.docs, apiBase]);
 
