@@ -250,7 +250,7 @@ export default function AskAssistant() {
           </div>
         ) : mode === "price" ? (
           <div className="space-y-3">
-            <PriceMirror lines={mirrorLines} />
+            <PriceMirror lines={[]} />
             {nextPriceQuestion ? (
               <QuestionBlock q={nextPriceQuestion} value={priceAnswers?.[nextPriceQuestion?.q_key]} onPick={() => {}} />
             ) : (
