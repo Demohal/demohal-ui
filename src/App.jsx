@@ -1,1 +1,2 @@
-export default function App() { return <div>OK</div>; }
+import AskAssistant from "./components/AskAssistant";
+export default function App(){ return <AskAssistant/>; }
