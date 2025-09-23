@@ -787,7 +787,6 @@ return (
           </div>
         </>
       ) : (
-        {/* OTHER MODES */}
           <div
             ref={contentRef}
             className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto"
