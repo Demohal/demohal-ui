@@ -1,9 +1,4 @@
 import {
-  DEFAULT_THEME_VARS,
-  TOKEN_TO_CSS,
-  SCREEN_ORDER,
-  classNames,
-  inverseBW,
   UI,
   Row,
   OptionButton,
@@ -12,7 +7,9 @@ import {
   normalizeOptions,
   QuestionBlock,
   TabsNav,
-} from "./AskAssistant.ui";
+  DebugPanel
+} from "./AskAssistant/AskAssistant.ui";
+
 
 /* =================== *
  *  MAIN APP COMPONENT *
