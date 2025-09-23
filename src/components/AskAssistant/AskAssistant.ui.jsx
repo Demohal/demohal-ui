@@ -1,422 +1,323 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  DEFAULT_THEME_VARS,
-  classNames,
-  inverseBW,
-  UI,
-  Row,
-  OptionButton,
-  PriceMirror,
-  EstimateCard,
-  normalizeOptions,
-  QuestionBlock,
-  TabsNav,
-} from "./AskAssistant/AskAssistant.ui";
-import DocIframe from "./AskAssistant/widgets/DocIframe";
-import ColorBox from "./AskAssistant/widgets/ColorBox";
-import DebugPanel from "./AskAssistant/widgets/DebugPanel";
+// src/components/AskAssistant/AskAssistant.ui.jsx
+// UI tokens, helpers, and small presentational components extracted from SECTION 1
+// All are **named exports**.
 
-export default function AskAssistant() {
-  const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
+import React from "react";
 
-  // --- DEBUG STAGE ---
-  const [stage, setStage] = useState("boot");
+/* =============================== *
+ *  CLIENT-CONTROLLED CSS TOKENS   *
+ * =============================== */
+export const DEFAULT_THEME_VARS = {
+  "--banner-bg": "#000000",
+  "--banner-fg": "#ffffff",
+  "--page-bg": "#e6e6e6",
+  "--card-bg": "#ffffff",
+  "--shadow-elevation":
+    "0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.10)",
 
-  // URL
-  const { alias, botIdFromUrl, themeLabOn } = useMemo(() => {
-    const qs = new URLSearchParams(window.location.search);
-    return {
-      alias: (qs.get("alias") || qs.get("alais") || "").trim(),
-      botIdFromUrl: (qs.get("bot_id") || "").trim(),
-      themeLabOn:
-        (qs.get("themelab") || "").trim() === "1" ||
-        (qs.get("themelab") || "").trim().toLowerCase() === "true",
-    };
-  }, []);
-  const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
+  // Text roles
+  "--message-fg": "#000000",
+  "--helper-fg": "#4b5563",
+  "--mirror-fg": "#4b5563",
 
-  // Core state
-  const [botId, setBotId] = useState(botIdFromUrl || "");
-  const [fatal, setFatal] = useState("");
-  const [mode, setMode] = useState("ask");
-  const [input, setInput] = useState("");
-  const [lastQuestion, setLastQuestion] = useState("");
-  const [responseText, setResponseText] = useState("");
-  const [debugInfo, setDebugInfo] = useState(null);
-  const [loading, setLoading] = useState(false);
+  // Tabs (inactive)
+  "--tab-bg": "#303030",
+  "--tab-fg": "#ffffff",
+  "--tab-active-fg": "#ffffff", // derived at runtime
 
-  // Refs
-  const contentRef = useRef(null);
-  const inputRef = useRef(null);
-  const frameRef = useRef(null);
-  const priceScrollRef = useRef(null);
+  // Buttons (explicit types)
+  "--demo-button-bg": "#3a4554",
+  "--demo-button-fg": "#ffffff",
+  "--doc.button.background": "#000000", // legacy mapping guard (no-op)
+  "--doc-button-bg": "#000000",
+  "--doc-button-fg": "#ffffff",
+  "--price-button-bg": "#1a1a1a",
+  "--price-button-fg": "#ffffff",
 
-  // Identity
-  const [visitorId, setVisitorId] = useState("");
-  const [sessionId, setSessionId] = useState("");
+  // Send icon
+  "--send-color": "#000000",
 
-  // Theme
-  const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
-  const derivedTheme = useMemo(() => {
-    const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
-    return { ...themeVars, "--tab-active-fg": activeFg };
-  }, [themeVars]);
-  const [pickerVars, setPickerVars] = useState({});
-  const liveTheme = useMemo(
-    () => ({ ...derivedTheme, ...pickerVars }),
-    [derivedTheme, pickerVars]
+  // Default faint gray border (used only where allowed)
+  "--border-default": "#9ca3af",
+};
+
+// Map DB token_key → CSS var used in this app (mirror of server mapping)
+export const TOKEN_TO_CSS = {
+  "banner.background": "--banner-bg",
+  "banner.foreground": "--banner-fg",
+  "page.background": "--page-bg",
+  "content.area.background": "--card-bg",
+
+  "message.text.foreground": "--message-fg",
+  "helper.text.foreground": "--helper-fg",
+  "mirror.text.foreground": "--mirror-fg",
+
+  "tab.background": "--tab-bg",
+  "tab.foreground": "--tab-fg",
+
+  "demo.button.background": "--demo-button-bg",
+  "demo.button.foreground": "--demo-button-fg",
+  "doc.button.background": "--doc-button-bg",
+  "doc.button.foreground": "--doc-button-fg",
+  "price.button.background": "--price-button-bg",
+  "price.button.foreground": "--price-button-fg",
+
+  "send.button.background": "--send-color",
+
+  "border.default": "--border-default",
+};
+
+// Hardcoded screen order/labels for grouping the 16 client-controlled tokens
+export const SCREEN_ORDER = [
+  { key: "welcome", label: "Welcome" },
+  { key: "bot_response", label: "Bot Response" },
+  { key: "browse_demos", label: "Browse Demos" },
+  { key: "browse_docs", label: "Browse Documents" },
+  { key: "price", label: "Price Estimate" },
+];
+
+export const classNames = (...xs) => xs.filter(Boolean).join(" ");
+export function inverseBW(hex) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(
+    String(hex || "").trim()
   );
+  if (!m) return "#000000";
+  const r = parseInt(m[1], 16),
+    g = parseInt(m[2], 16),
+    b = parseInt(m[3], 16);
+  const L = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return L > 0.5 ? "#000000" : "#ffffff";
+}
 
-  // Brand
-  const [brandAssets, setBrandAssets] = useState({
-    logo_url: null,
-    logo_light_url: null,
-    logo_dark_url: null,
-  });
-  const initialBrandReady = useMemo(() => !(botIdFromUrl || alias), [botIdFromUrl, alias]);
-  const [brandReady, setBrandReady] = useState(initialBrandReady);
+/* ========================== *
+ *  UI PRIMITIVES             *
+ * ========================== */
+export const UI = {
+  CARD: "rounded-[0.75rem] p-4 bg-white [box-shadow:var(--shadow-elevation)]",
+  BTN_DEMO:
+    "w-full text-center rounded-[0.75rem] px-4 py-3 transition " +
+    "text-[var(--demo-button-fg)] bg-[var(--demo-button-bg)] hover:brightness-110 active:brightness-95",
+  BTN_DOC:
+    "w-full text-center rounded-[0.75rem] px-4 py-3 transition " +
+    "text-[var(--doc-button-fg)] bg-[var(--doc-button-bg)] hover:brightness-110 active:brightness-95",
+  BTN_PRICE:
+    "w-full text-center rounded-[0.75rem] px-4 py-3 transition " +
+    "text-[var(--price-button-fg)] bg-[var(--price-button-bg)] hover:brightness-110 active:brightness-95",
+  FIELD:
+    "w-full rounded-[0.75rem] px-4 py-3 text-base bg-[var(--card-bg)] " +
+    "border border-[var(--border-default)]",
+  TAB_ACTIVE:
+    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] " +
+    "[box-shadow:var(--shadow-elevation)]",
+  TAB_INACTIVE:
+    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] hover:brightness-110",
+};
 
-  // Tabs (from bot flags)
-  const [tabsEnabled, setTabsEnabled] = useState({
-    demos: false,
-    docs: false,
-    meeting: false,
-    price: false,
-  });
+export function Row({ item, onPick, kind = "demo" }) {
+  const btnClass =
+    kind === "doc"
+      ? UI.BTN_DOC
+      : kind === "price"
+      ? UI.BTN_PRICE
+      : UI.BTN_DEMO;
+  return (
+    <button
+      data-patch="row-button"
+      onClick={() => onPick(item)}
+      className={btnClass}
+      title={item.description || ""}
+    >
+      <div className="font-extrabold text-xs sm:text-sm">{item.title}</div>
+      {item.description ? (
+        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">
+          {item.description}
+        </div>
+      ) : item.functions_text ? (
+        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">
+          {item.functions_text}
+        </div>
+      ) : null}
+    </button>
+  );
+}
 
-  // Pricing (stubbed)
-  const [pricingCopy, setPricingCopy] = useState({ intro: "", outro: "", custom_notice: "" });
-  const [priceQuestions, setPriceQuestions] = useState([]);
-  const [priceAnswers, setPriceAnswers] = useState({});
-  const [priceEstimate, setPriceEstimate] = useState(null);
-  const [priceBusy, setPriceBusy] = useState(false);
-  const [priceErr, setPriceErr] = useState("");
-  const mirrorLines = useMemo(() => [], []);
-  const nextPriceQuestion = useMemo(() => null, []);
+export function OptionButton({ opt, selected, onClick }) {
+  return (
+    <button
+      data-patch="option-button"
+      onClick={() => onClick(opt)}
+      className={classNames(UI.BTN_PRICE, selected && "ring-2 ring-black/20")}
+      title={opt.tooltip || ""}
+    >
+      <div className="font-extrabold text-xs sm:text-sm">{opt.label}</div>
+      {opt.tooltip ? (
+        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">
+          {opt.tooltip}
+        </div>
+      ) : null}
+    </button>
+  );
+}
 
-  // Intro video
-  const [introVideoUrl, setIntroVideoUrl] = useState("");
-  const [showIntroVideo, setShowIntroVideo] = useState(false);
+export function PriceMirror({ lines }) {
+  if (!lines?.length) return null;
+  return (
+    <div data-patch="price-mirror" className="mb-3">
+      {lines.map((ln, i) => (
+        <div
+          key={i}
+          className="text-base italic whitespace-pre-line text-[var(--mirror-fg)]"
+        >
+          {ln}
+        </div>
+      ))}
+    </div>
+  );
+}
 
-  // Browse data
-  const [browseItems, setBrowseItems] = useState([]); // demos
-  const [browseDocs, setBrowseDocs] = useState([]);   // documents
+export function EstimateCard({ estimate, outroText }) {
+  if (!estimate) return null;
 
-  // ---- Init: resolve bot by alias / bot_id ----
-  useEffect(() => {
-    let cancel = false;
+  const items = Array.isArray(estimate.line_items) ? estimate.line_items : [];
 
-    async function loadBy(u) {
-      setStage("fetch:bot-settings");
-      const res = await fetch(u);
-      const data = await res.json().catch(() => ({}));
-      if (cancel) return;
+  const fmtAmount = (ccy, v) => `${ccy} ${Number(v).toLocaleString()}`;
+  const fmtRange = (ccy, min, max) =>
+    Number(min) === Number(max) ? fmtAmount(ccy, max) : `${fmtAmount(ccy, min)} – ${fmtAmount(ccy, max)}`;
 
-      if (!res.ok || data?.ok === false || !data?.bot?.id) {
-        setFatal("Invalid or inactive alias.");
-        setStage("fatal");
-        return;
-      }
-
-      setVisitorId(data.visitor_id || "");
-      setSessionId(data.session_id || "");
-
-      const b = data.bot || {};
-      setTabsEnabled({
-        demos: !!b.show_browse_demos,
-        docs: !!b.show_browse_docs,
-        meeting: !!b.show_schedule_meeting,
-        price: !!b.show_price_estimate,
-      });
-      setResponseText(b.welcome_message || "");
-      setIntroVideoUrl(b.intro_video_url || "");
-      setShowIntroVideo(!!b.show_intro_video);
-      setPricingCopy({
-        intro: b.pricing_intro || "",
-        outro: b.pricing_outro || "",
-        custom_notice: b.pricing_custom_notice || "",
-      });
-
-      setBotId(b.id);
-      setFatal("");
-      setStage("ok:botId");
-    }
-
-    (async () => {
-      try {
-        if (botIdFromUrl) {
-          await loadBy(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botIdFromUrl)}`);
-          return;
-        }
-        const useAlias = alias || defaultAlias;
-        if (!useAlias) {
-          setFatal("Invalid or inactive alias.");
-          setStage("fatal");
-          return;
-        }
-        await loadBy(`${apiBase}/bot-settings?alias=${encodeURIComponent(useAlias)}`);
-      } catch {
-        if (!cancel) {
-          setFatal("Invalid or inactive alias.");
-          setStage("fatal");
-        }
-      }
-    })();
-
-    return () => { cancel = true; };
-  }, [apiBase, alias, botIdFromUrl, defaultAlias]);
-
-  // Brand load
-  useEffect(() => {
-    if (!botId) return;
-    let cancel = false;
-    (async () => {
-      setStage("fetch:brand");
-      try {
-        const res = await fetch(`${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`);
-        const data = await res.json().catch(() => ({}));
-        if (cancel) return;
-        if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
-          setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
-        }
-        if (data?.ok && data?.assets) {
-          setBrandAssets({
-            logo_url: data.assets.logo_url || null,
-            logo_light_url: data.assets.logo_light_url || null,
-            logo_dark_url: data.assets.logo_dark_url || null,
-          });
-        }
-        setStage("ok:brand");
-      } catch {
-        setStage("warn:brand");
-      } finally {
-        if (!cancel) setBrandReady(true);
-      }
-    })();
-    return () => { cancel = true; };
-  }, [botId, apiBase]);
-
-  // Autosize input
-  useEffect(() => {
-    const el = inputRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [input]);
-
-  // Build tabs list from flags
-  const tabs = useMemo(() => {
-    const t = [];
-    if (tabsEnabled.demos) t.push({ key: "demos", label: "Browse Demos", onClick: () => setMode("browse") });
-    if (tabsEnabled.docs) t.push({ key: "docs", label: "Browse Documents", onClick: () => setMode("docs") });
-    if (tabsEnabled.price) t.push({ key: "price", label: "Price", onClick: () => setMode("price") });
-    if (tabsEnabled.meeting) t.push({ key: "meeting", label: "Schedule Meeting", onClick: () => setMode("meeting") });
-    return t.length ? t : [{ key: "ask", label: "Ask", onClick: () => setMode("ask") }];
-  }, [tabsEnabled]);
-
-  // ---------- ASK FLOW (POST /demo-hal) ----------
-  async function sendMessage() {
-    const q = (input || "").trim();
-    if (!q) return;
-    if (!botId) { setFatal("Invalid or inactive alias."); return; }
-
-    setLoading(true);
-    setStage("ask:posting");
-    setLastQuestion(q);
-
-    try {
-      const res = await fetch(`${apiBase}/demo-hal`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(sessionId ? { "X-Session-Id": sessionId } : {}),
-          ...(visitorId ? { "X-Visitor-Id": visitorId } : {}),
-        },
-        body: JSON.stringify({
-          bot_id: botId,
-          user_question: q,
-          debug: true,
-          scope: "standard",
-        }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data?.ok === false) {
-        setResponseText(data?.error || "Sorry—something went wrong.");
-        setDebugInfo(data?.debug || null);
-        setStage("ask:error");
-      } else {
-        const text =
-          data?.response_text ||
-          data?.answer?.text ||
-          data?.message ||
-          data?.text ||
-          "";
-        setResponseText(String(text || "").trim());
-        setDebugInfo(data?.debug || null);
-        setStage("ask:ok");
-      }
-    } catch {
-      setResponseText("Network error.");
-      setStage("ask:network-error");
-    } finally {
-      setLoading(false);
-      setInput("");
-      setTimeout(() => inputRef.current?.focus(), 0);
-    }
-  }
-
-  function onKeyDown(e) {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-      e.preventDefault();
-      sendMessage();
-    }
-  }
-
-  // --------- LOAD DEMOS/DOCS ----------
-  useEffect(() => {
-    if (!botId || !tabsEnabled.demos) return;
-    setStage("fetch:demos");
-    fetch(`${apiBase}/demos?bot_id=${encodeURIComponent(botId)}`)
-      .then(r => r.json())
-      .then((data) => { setBrowseItems(Array.isArray(data) ? data : []); setStage("ok:demos"); })
-      .catch(() => { setBrowseItems([]); setStage("warn:demos"); });
-  }, [botId, tabsEnabled.demos, apiBase]);
-
-  useEffect(() => {
-    if (!botId || !tabsEnabled.docs) return;
-    setStage("fetch:docs");
-    fetch(`${apiBase}/documents?bot_id=${encodeURIComponent(botId)}`)
-      .then(r => r.json())
-      .then((data) => { setBrowseDocs(Array.isArray(data) ? data : []); setStage("ok:docs"); })
-      .catch(() => { setBrowseDocs([]); setStage("warn:docs"); });
-  }, [botId, tabsEnabled.docs, apiBase]);
+  const totalText = fmtRange(estimate.currency_code, estimate.total_min, estimate.total_max);
 
   return (
-    <div className="min-h-screen" style={liveTheme}>
-      {/* Stage */}
-      <div style={{position:"fixed",right:8,top:8,zIndex:9999,background:"#000",color:"#fff",padding:"4px 8px",borderRadius:6,fontSize:12}}>
-        Stage: {stage || "-"}
-      </div>
-
-      {/* Banner */}
-      <div className="w-full p-4" style={{ background: "var(--banner-bg)", color: "var(--banner-fg)" }}>
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {brandAssets.logo_url ? (
-              <img src={brandAssets.logo_url} alt="logo" className="h-8 w-auto" />
-            ) : (
-              <div className="font-extrabold">DemoHAL</div>
-            )}
+    <div data-patch="estimate-card">
+      <div className={UI.CARD}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="font-bold text-lg">Your Estimate</div>
+          <div className="font-bold text-lg text-right [font-variant-numeric:tabular-nums]">
+            {totalText}
           </div>
+        </div>
+
+        <div className="space-y-3">
+          {items.map((li, idx) => {
+            const name = li?.product?.name ?? li?.label ?? "Item";
+            const key = li?.product?.id ?? `${name}-${idx}`;
+            const ccy = li?.currency_code || estimate.currency_code || "";
+            const lineText = fmtRange(ccy, li?.price_min, li?.price_max);
+
+            return (
+              <div key={key} className="rounded-[0.75rem] p-3 bg-white">
+                <div className="grid grid-cols-[1fr_auto] items-center gap-3">
+                  <div className="font-bold">{name}</div>
+                  <div className="font-bold text-lg text-right [font-variant-numeric:tabular-nums]">
+                    {lineText}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="max-w-5xl mx-auto mt-2">
-        <TabsNav mode={mode} tabs={tabs} />
-      </div>
+      {outroText ? (
+        <div className="mt-3 text-base font-bold whitespace-pre-line">
+          {outroText}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
-      {/* Body */}
-      <div className="max-w-5xl mx-auto px-4 py-4">
-        {fatal ? (
-          <div className={UI.CARD} style={{ border: "1px solid #ef4444" }}>
-            <div className="font-bold text-red-600">Error</div>
-            <div>{fatal}</div>
-          </div>
-        ) : mode === "ask" ? (
-          <div className={UI.CARD}>
-            {/* Welcome copy */}
-            <div className="text-base whitespace-pre-line text-[var(--message-fg)]">{responseText}</div>
+/* ---------- Options normalizer (accepts many backend shapes) ---------- */
+export function normalizeOptions(q) {
+  const raw = q?.options ?? q?.choices ?? q?.buttons ?? q?.values ?? [];
 
-            {/* Intro video */}
-            {showIntroVideo && introVideoUrl ? (
-              <div className="mt-3">
-                <iframe
-                  title="intro"
-                  src={introVideoUrl}
-                  className="w-full aspect-video rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                />
-              </div>
-            ) : null}
+  return (Array.isArray(raw) ? raw : [])
+    .map((o, idx) => {
+      if (o == null) return null;
+      if (typeof o === "string") {
+        return { key: o, label: o, id: String(idx) };
+      }
+      const key = o.key ?? o.value ?? o.id ?? String(idx);
+      const label = o.label ?? o.title ?? o.name ?? String(key);
+      const tooltip = o.tooltip ?? o.description ?? o.help ?? undefined;
+      return { key, label, tooltip, id: String(o.id ?? key ?? idx) };
+    })
+    .filter(Boolean);
+}
 
-            {/* Ask box */}
-            <div className="mt-3 flex gap-2 items-start">
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={onKeyDown}
-                placeholder="Ask a question (Cmd/Ctrl+Enter to send)"
-                className={UI.FIELD}
-              />
-              <button
-                className={UI.BTN_DOC}
-                onClick={sendMessage}
-                disabled={loading || !input.trim()}
-                title={loading ? "Sending..." : "Send"}
-              >
-                {loading ? "Sending…" : "Send"}
-              </button>
-              <button className={UI.BTN_DOC} onClick={() => setMode("browse")}>
-                Browse
-              </button>
-            </div>
+export function QuestionBlock({ q, value, onPick }) {
+  const opts = normalizeOptions(q);
+  const type = String(q?.type || "").toLowerCase();
+  const isMulti =
+    type === "multi_choice" || type === "multichoice" || type === "multi";
 
-            <DebugPanel debug={debugInfo} />
-          </div>
-        ) : mode === "price" ? (
-          <div className="space-y-3">
-            <PriceMirror lines={[]} />
-            {nextPriceQuestion ? (
-              <QuestionBlock q={nextPriceQuestion} value={priceAnswers?.[nextPriceQuestion?.q_key]} onPick={() => {}} />
-            ) : (
-              <EstimateCard estimate={priceEstimate} outroText={pricingCopy?.outro || ""} />
-            )}
-          </div>
-        ) : (
-          <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
-            {mode === "browse" && (
-              <div className="grid gap-3">
-                {browseItems.length === 0 ? (
-                  <div className={UI.CARD}>No demos yet.</div>
-                ) : (
-                  browseItems.map((d) => (
-                    <a key={d.id} href={d.url} target="_blank" rel="noreferrer" className={UI.CARD}>
-                      <div className="font-bold">{d.title}</div>
-                      <div className="text-sm opacity-80">{d.description}</div>
-                    </a>
-                  ))
-                )}
-              </div>
-            )}
-            {mode === "docs" && (
-              <div className="grid gap-3">
-                {browseDocs.length === 0 ? (
-                  <div className={UI.CARD}>No documents yet.</div>
-                ) : (
-                  browseDocs.map((doc) => (
-                    <a key={doc.id} href={doc.url} target="_blank" rel="noreferrer" className={UI.CARD}>
-                      <div className="font-bold">{doc.title}</div>
-                      <div className="text-sm opacity-80">{doc.description}</div>
-                    </a>
-                  ))
-                )}
-              </div>
-            )}
-            {mode !== "browse" && mode !== "docs" && (
-              <div className={UI.CARD}>
-                <div className="text-sm text-[var(--helper-fg)]">Other modes will render here.</div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+  return (
+    <div data-patch="question-block" className={UI.FIELD}>
+      <div className="font-bold text-base">{q.prompt}</div>
+      {q.help_text ? (
+        <div className="text-xs italic mt-1 text-[var(--helper-fg)]">
+          {q.help_text}
+        </div>
+      ) : null}
 
-      {/* ThemeLab */}
-      {themeLabOn ? <ColorBox apiBase={apiBase} botId={botId} frameRef={frameRef} onVars={setPickerVars} /> : null}
+      {opts.length > 0 ? (
+        <div className="mt-3 flex flex-col gap-3">
+          {opts.map((opt) => (
+            <OptionButton
+              key={opt.id}
+              opt={opt}
+              selected={
+                isMulti
+                  ? Array.isArray(value) && value.includes(opt.key)
+                  : value === opt.key
+              }
+              onClick={() => onPick(q, opt)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 text-xs text-[var(--helper-fg)]">
+          No options available.
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function TabsNav({ mode, tabs }) {
+  return (
+    <div
+      className="w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      data-patch="tabs-nav"
+    >
+      <nav
+        className="inline-flex min-w-max items-center gap-0.5 overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        role="tablist"
+      >
+        {tabs.map((t) => {
+          const active =
+            (mode === "browse" && t.key === "demos") ||
+            (mode === "docs" && t.key === "docs") ||
+            (mode === "price" && t.key === "price") ||
+            (mode === "meeting" && t.key === "meeting");
+          return (
+            <button
+              key={t.key}
+              onClick={t.onClick}
+              role="tab"
+              aria-selected={active}
+              className={active ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}
+              style={
+                active
+                  ? { background: "var(--card-bg)", color: "var(--tab-active-fg)" }
+                  : { background: "var(--tab-bg)", color: "var(--tab-fg)" }
+              }
+              type="button"
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }
