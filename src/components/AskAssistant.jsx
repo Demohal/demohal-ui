@@ -1,266 +1,205 @@
-// src/components/AskAssistant.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
-
-// UI tokens + small primitives (same values as old file)
 import {
   DEFAULT_THEME_VARS,
-  TOKEN_TO_CSS,
-  SCREEN_ORDER,
-  UI,
   inverseBW,
+  UI,
 } from "./AskAssistant/AskAssistant.ui";
-
-// Small leaf components (used later but safe to import now)
-import DocIframe from "./AskAssistant/widgets/DocIframe";
+import DocIframe from "./AskAssistant/DocIframe";
 import ColorBox from "./AskAssistant/widgets/ColorBox";
-import DebugPanel from "./AskAssistant/widgets/DebugPanel";
+import DebugPanel from "./AskAssistant/DebugPanel";
 
-// ---------------------------------------------
-// AskAssistant (shell only — same layout/order)
-// ---------------------------------------------
 export default function AskAssistant() {
-  const apiBase =
-    import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
+  const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-  // URL → alias / bot_id / themelab (unchanged)
+  // URL → alias / bot_id / themelab
   const { alias, botIdFromUrl, themeLabOn } = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
-    const a = (qs.get("alias") || qs.get("alais") || "").trim();
-    const b = (qs.get("bot_id") || "").trim();
     const th = (qs.get("themelab") || "").trim();
     return {
-      alias: a,
-      botIdFromUrl: b,
+      alias: (qs.get("alias") || qs.get("alais") || "").trim(),
+      botIdFromUrl: (qs.get("bot_id") || "").trim(),
       themeLabOn: th === "1" || th.toLowerCase() === "true",
     };
   }, []);
-
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
 
-  // Core state kept from old file
+  // Core state
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [fatal, setFatal] = useState("");
+  const [resolved, setResolved] = useState(false); // nothing renders until true
+
   const [mode, setMode] = useState("ask");
   const [input, setInput] = useState("");
   const [responseText, setResponseText] = useState("");
-  const [introVideoUrl, setIntroVideoUrl] = useState("");
-  const [showIntroVideo, setShowIntroVideo] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [tabsEnabled, setTabsEnabled] = useState({
-    demos: false,
-    docs: false,
-    meeting: false,
-    price: false,
-  });
 
-  // Theme + brand
+  // Theme / brand
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
   const derivedTheme = useMemo(() => {
-    const activeFg = inverseBW(themeVars["--tab-fg"] || "#ffffff");
+    const activeFg = inverseBW(themeVars["--tab-fg"] || "#000");
     return { ...themeVars, "--tab-active-fg": activeFg };
   }, [themeVars]);
-  const [pickerVars, setPickerVars] = useState({});
-  const liveTheme = useMemo(() => ({ ...derivedTheme, ...pickerVars }), [derivedTheme, pickerVars]);
+  const [brandAssets, setBrandAssets] = useState({ logo_url: null });
 
-  const [brandAssets, setBrandAssets] = useState({
-    logo_url: null,
-    logo_light_url: null,
-    logo_dark_url: null,
-  });
+  // Intro video
+  const [introVideoUrl, setIntroVideoUrl] = useState("");
+  const [showIntroVideo, setShowIntroVideo] = useState(false);
 
-  // Refs
+  // Tabs enable flags
+  const [tabsEnabled, setTabsEnabled] = useState({ demos: false, docs: false, meeting: false, price: false });
+
+  // Ask box autosize
   const inputRef = useRef(null);
-
-  // -------------------------
-  // Autosize ask textarea
-  // -------------------------
   useEffect(() => {
-    const el = inputRef.current;
-    if (!el) return;
+    const el = inputRef.current; if (!el) return;
+    const lineH = 24; // close to UI.FIELD line-height
+    const max = lineH * 3; // up to 3 lines
     el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
+    el.style.maxHeight = `${max}px`;
+    el.style.overflowY = el.scrollHeight > max ? "auto" : "hidden";
+    el.style.height = `${Math.min(el.scrollHeight, max)}px`;
   }, [input]);
 
-  // -------------------------
-  // Resolve bot by alias
-  // -------------------------
+  // Resolve bot
   useEffect(() => {
-    if (botId) return;
-    const useAlias = alias || defaultAlias;
-    if (!useAlias) return;
-    let cancel = false;
+    async function loadBy(url) {
+      const res = await fetch(url);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false || !data?.bot?.id) {
+        setFatal("Invalid or inactive alias.");
+        setResolved(false);
+        return;
+      }
+      const b = data.bot;
+      setTabsEnabled({
+        demos: !!b.show_browse_demos,
+        docs: !!b.show_browse_docs,
+        meeting: !!b.show_schedule_meeting,
+        price: !!b.show_price_estimate,
+      });
+      setResponseText(b.welcome_message || "");
+      setIntroVideoUrl(b.intro_video_url || "");
+      setShowIntroVideo(!!b.show_intro_video);
+      setBotId(b.id);
+      setResolved(true);
+    }
     (async () => {
       try {
-        const res = await fetch(`${apiBase}/bot-settings?alias=${encodeURIComponent(useAlias)}`);
-        const data = await res.json();
-        if (cancel) return;
-        const b = data?.ok ? data?.bot : null;
-        if (b) {
-          setTabsEnabled({
-            demos: !!b.show_browse_demos,
-            docs: !!b.show_browse_docs,
-            meeting: !!b.show_schedule_meeting,
-            price: !!b.show_price_estimate,
-          });
-          setResponseText(b.welcome_message || "");
-          setIntroVideoUrl(b.intro_video_url || "");
-          setShowIntroVideo(!!b.show_intro_video);
-          setBotId(b.id || "");
-        } else {
-          setFatal("Invalid or inactive alias.");
-        }
+        if (botIdFromUrl) return loadBy(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botIdFromUrl)}`);
+        const useAlias = alias || defaultAlias;
+        if (!useAlias) { setResolved(false); return; }
+        return loadBy(`${apiBase}/bot-settings?alias=${encodeURIComponent(useAlias)}`);
       } catch {
-        if (!cancel) setFatal("Invalid or inactive alias.");
+        setResolved(false);
       }
     })();
-    return () => { cancel = true; };
-  }, [alias, defaultAlias, apiBase, botId]);
+  }, [alias, defaultAlias, botIdFromUrl, apiBase]);
 
-  // -------------------------
-  // Brand: css vars + assets
-  // -------------------------
+  // Load brand after bot resolves
   useEffect(() => {
-    if (!botId) return;
-    let cancel = false;
+    if (!resolved || !botId) return;
     (async () => {
       try {
         const res = await fetch(`${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`);
-        const data = await res.json();
-        if (cancel) return;
+        const data = await res.json().catch(() => ({}));
         if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
           setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
         }
-        if (data?.ok && data?.assets) {
-          setBrandAssets({
-            logo_url: data.assets.logo_url || null,
-            logo_light_url: data.assets.logo_light_url || null,
-            logo_dark_url: data.assets.logo_dark_url || null,
-          });
-        }
+        if (data?.ok && data?.assets?.logo_url) setBrandAssets({ logo_url: data.assets.logo_url });
       } catch {}
     })();
-    return () => { cancel = true; };
-  }, [botId, apiBase]);
+  }, [resolved, botId, apiBase]);
 
-  // Tabs list (identical labels/order)
+  // Tabs list
   const tabs = [
-    tabsEnabled.demos && { key: "demos", label: "Browse Demos", onClick: () => setMode("demos") },
-    tabsEnabled.docs && { key: "docs", label: "Browse Documents", onClick: () => setMode("docs") },
-    tabsEnabled.price && { key: "price", label: "Price Estimate", onClick: () => setMode("price") },
-    tabsEnabled.meeting && { key: "meeting", label: "Schedule Meeting", onClick: () => setMode("meeting") },
+    tabsEnabled.demos && { key: "demos", label: "Browse Demos" },
+    tabsEnabled.docs && { key: "docs", label: "Browse Documents" },
+    tabsEnabled.price && { key: "price", label: "Price Estimate" },
+    tabsEnabled.meeting && { key: "meeting", label: "Schedule Meeting" },
   ].filter(Boolean);
 
-  // Send keybinding (Cmd/Ctrl+Enter)
-  const onKeyDown = (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-      e.preventDefault();
-      sendMessage();
-    }
-  };
+  // Send
+  const send = () => {};
 
-  // Stub send
-  const sendMessage = async () => {
-    if (!input.trim() || loading) return;
-    setLoading(true);
-    try {
-      // (kept as a no-op for now — old behavior preserved visually)
-      setInput("");
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Gate: nothing until alias/bot resolved
+  const noBot = !resolved;
 
-  // ---------------------------------------------
-  // RENDER — exact shell order/format as before
-  // ---------------------------------------------
   return (
-    <div className="min-h-screen" style={liveTheme}>
-      {/* Banner WITH tabs inside (exact like old) */}
-      <div className="w-full" style={{ background: "var(--banner-bg)", color: "var(--banner-fg)" }}>
-        <div className="max-w-5xl mx-auto px-4">
-          <div className="flex items-center justify-between py-3">
-            <div className="flex items-center gap-3">
-              {brandAssets.logo_url ? (
-                <img src={brandAssets.logo_url} alt="logo" className="h-8 w-auto" />
-              ) : (
-                <div className="font-extrabold">DemoHAL</div>
-              )}
-            </div>
-            <div className="text-green-400 font-semibold">Ask the Assistant</div>
-          </div>
-
-          {/* Tabs row is INSIDE banner */}
-          <div className="flex gap-2 pb-3">
-            {tabs.map((t) => (
-              <button
-                key={t.key}
-                onClick={t.onClick}
-                className={mode === t.key ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}
-              >
-                {t.label}
-              </button>
-            ))}
+    <div className="min-h-screen" style={derivedTheme}>
+      {noBot ? (
+        <div className="w-full h-[60vh] flex items-center justify-center text-gray-500">
+          <div className="text-center">
+            <div className="text-2xl font-semibold mb-1">No bot selected</div>
+            <div className="text-sm">Provide a <code>?bot_id=…</code> or <code>?alias=…</code> in the URL.</div>
           </div>
         </div>
-      </div>
-
-      {/* Body card (fixed width like old) */}
-      <div className="max-w-5xl mx-auto px-4 py-4">
-        {fatal ? (
-          <div className={UI.CARD} style={{ border: "1px solid #ef4444" }}>
-            <div className="font-bold text-red-600">Error</div>
-            <div>{fatal}</div>
-          </div>
-        ) : mode === "ask" ? (
-          <div className={UI.CARD}>
-            {/* Welcome copy */}
-            {responseText ? (
-              <div className="text-base whitespace-pre-line text-[var(--message-fg)]">
-                {responseText}
+      ) : (
+        <div className="mx-auto mt-8 mb-10 rounded-2xl overflow-hidden" style={{ width: "56rem", boxShadow: "var(--shadow-elevation, 0 10px 30px rgba(0,0,0,.08))" }}>
+          {/* Banner INSIDE card */}
+          <div className="bg-black text-white px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {brandAssets.logo_url ? (
+                  <img src={brandAssets.logo_url} alt="logo" className="h-8 w-auto" />
+                ) : (
+                  <div className="font-extrabold">DemoHAL</div>
+                )}
               </div>
-            ) : null}
-
-            {/* Intro video */}
-            {showIntroVideo && introVideoUrl ? (
-              <div className="mt-3">
-                <iframe
-                  title="intro"
-                  src={introVideoUrl}
-                  className="w-full aspect-video rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                />
-              </div>
-            ) : null}
-
-            {/* Ask box with arrow button INSIDE the field on the right */}
-            <div className="mt-3 relative">
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={onKeyDown}
-                placeholder="Ask a question (Cmd/Ctrl+Enter to send)"
-                className={UI.FIELD + " pr-12"} // room for icon
-              />
-              <button
-                aria-label="Send"
-                title={loading ? "Sending..." : "Send"}
-                onClick={sendMessage}
-                disabled={loading || !input.trim()}
-                className="absolute right-2 bottom-2 disabled:opacity-50"
-              >
-                <ArrowUpCircleIcon className="h-8 w-8 text-[var(--send-color)]" />
-              </button>
+              <div className="text-sm font-semibold" style={{ color: "#22c55e" }}>Ask the Assistant</div>
+            </div>
+            {/* Centered tabs */}
+            <div className="flex justify-center gap-2 pt-3">
+              {tabs.map((t) => (
+                <button key={t.key} onClick={() => setMode(t.key)} className={mode === t.key ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}>
+                  {t.label}
+                </button>
+              ))}
             </div>
           </div>
-        ) : (
-          // Other modes will be re-attached next
-          <div className={UI.CARD}>Loading…</div>
-        )}
-      </div>
+
+          {/* Body */}
+          <div className="px-4 pb-4">
+            <div className={UI.CARD}>
+              {responseText ? (
+                <div className="text-base whitespace-pre-line text-[var(--message-fg)]">{responseText}</div>
+              ) : null}
+              {showIntroVideo && introVideoUrl ? (
+                <div className="mt-3">
+                  <iframe title="intro" src={introVideoUrl} className="w-full aspect-video rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
+                </div>
+              ) : null}
+
+              {/* Footer divider + ask box (1→3 lines) */}
+              <div className="mt-3 pt-3 border-t border-[var(--border-color,#e5e7eb)] relative">
+                <textarea
+                  ref={inputRef}
+                  rows={1}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Ask your question here"
+                  className={UI.FIELD + " pr-12"}
+                />
+                <button
+                  type="button"
+                  onClick={send}
+                  className="absolute right-2 bottom-2"
+                  aria-label="Send"
+                  title="Send"
+                >
+                  <ArrowUpCircleIcon className="h-8 w-8 text-[var(--send-color,#22c55e)]" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ThemeLab floating panel (unchanged) */}
+      {themeLabOn && botId ? (
+        <ColorBox apiBase={apiBase} botId={botId} frameRef={null} onVars={(vars) => setThemeVars((prev) => ({ ...prev, ...vars }))} />
+      ) : null}
+
+      <DebugPanel debug={{ active_context: { scope: mode } }} />
     </div>
   );
 }
