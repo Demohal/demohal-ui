@@ -1,3 +1,4 @@
+// Gutted down to 200 lines
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import {
