@@ -1,4 +1,3 @@
-
 /* ================================================================================= *
  *  BEGIN SECTION 1                                                                  *
  * ================================================================================= */
@@ -331,7 +330,6 @@ function TabsNav({ mode, tabs }) {
 /* ================================================================================= *
  *  END SECTION 1                                                                    *
  * ================================================================================= */
-
 
 /* ================================================================================= *
  *  BEGIN SECTION 2                                                                  *
@@ -694,18 +692,22 @@ export default function AskAssistant() {
   }, [input]);
 
 /* ================================================================================= *
+ *  END SECTION 2                                                                  *
+ * ================================================================================= */
+  
+/* ================================================================================= *
  *  BEGIN SECTION 3                                                                  *
  * ================================================================================= */
-// release sticky when scrolling
-useEffect(() => {
-  const el = contentRef.current;
-  if (!el || !selected) return;
-  const onScroll = () => {
-    if (el.scrollTop > 8 && isAnchored) setIsAnchored(false);
-  };
-  el.addEventListener("scroll", onScroll, { passive: true });
-  return () => el.removeEventListener("scroll", onScroll);
-}, [selected, isAnchored]);
+  // release sticky when scrolling
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el || !selected) return;
+    const onScroll = () => {
+      if (el.scrollTop > 8 && isAnchored) setIsAnchored(false);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [selected, isAnchored]);
 
 // Calendly booking listener — send rich payload to backend (no Calendly fetch)
 useEffect(() => {
@@ -757,331 +759,615 @@ useEffect(() => {
   return () => window.removeEventListener("message", onCalendlyMessage);
 }, [mode, botId, sessionId, visitorId, apiBase]);
 
-async function normalizeAndSelectDemo(item) {
-  try {
-    const r = await fetch(`${apiBase}/render-video-iframe`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...withIdsHeaders(),
-      },
-      body: JSON.stringify(
-        withIdsBody({
-          bot_id: botId,
-          demo_id: item.id || "",
-          title: item.title || "",
-          video_url: item.url || "",
-        })
-      ),
-    });
-    const j = await r.json();
-    const embed = j?.video_url || item.url;
-    setSelected({ ...item, url: embed });
-    requestAnimationFrame(() =>
-      contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-    );
-  } catch {
-    setSelected(item);
-    requestAnimationFrame(() =>
-      contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-    );
+  async function normalizeAndSelectDemo(item) {
+    try {
+      const r = await fetch(`${apiBase}/render-video-iframe`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...withIdsHeaders(),
+        },
+        body: JSON.stringify(
+          withIdsBody({
+            bot_id: botId,
+            demo_id: item.id || "",
+            title: item.title || "",
+            video_url: item.url || "",
+          })
+        ),
+      });
+      const j = await r.json();
+      const embed = j?.video_url || item.url;
+      setSelected({ ...item, url: embed });
+      requestAnimationFrame(() =>
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+      );
+    } catch {
+      setSelected(item);
+      requestAnimationFrame(() =>
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+      );
+    }
   }
-}
+
+  async function openMeeting() {
+    if (!botId) return;
+    setMode("meeting");
+    try {
+      const res = await fetch(
+        `${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`
+      );
+      const data = await res.json();
+      const ag = data?.ok ? data.agent : null;
+      setAgent(ag);
+      if (
+        ag &&
+        ag.calendar_link_type &&
+        String(ag.calendar_link_type).toLowerCase() === "external" &&
+        ag.calendar_link
+      ) {
+        try {
+          {
+            const base = ag.calendar_link || "";
+            const withQS = `${base}${base.includes('?') ? '&' : '?'}session_id=${encodeURIComponent(sessionId||'')}&visitor_id=${encodeURIComponent(visitorId||'')}&bot_id=${encodeURIComponent(botId||'')}&utm_source=${encodeURIComponent(botId||'')}&utm_medium=${encodeURIComponent(sessionId||'')}&utm_campaign=${encodeURIComponent(visitorId||'')}`;
+            window.open(withQS, "_blank", "noopener,noreferrer");
+
+          }
+        } catch {}
+      }
+      requestAnimationFrame(() =>
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+      );
+    } catch {
+      setAgent(null);
+    }
+  }
+
+  async function openBrowse() {
+    if (!botId) return;
+    setMode("browse");
+    setSelected(null);
+    try {
+      const url = withIdsQS(
+        `${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`
+      );
+      const res = await fetch(url, { headers: withIdsHeaders() });
+      const data = await res.json();
+      const src = Array.isArray(data?.items) ? data.items : [];
+      setBrowseItems(
+        src.map((it) => ({
+          id: it.id ?? it.value ?? it.url ?? it.title,
+          title: it.title ?? it.button_title ?? it.label ?? "",
+          url: it.url ?? it.value ?? it.button_value ?? "",
+          description: it.description ?? it.summary ?? it.functions_text ?? "",
+          functions_text: it.functions_text ?? it.description ?? "",
+        }))
+      );
+      requestAnimationFrame(() =>
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+      );
+    } catch {
+      setBrowseItems([]);
+    }
+  }
+
+  async function openBrowseDocs() {
+    if (!botId) return;
+    setMode("docs");
+    setSelected(null);
+    try {
+      const url = withIdsQS(
+        `${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`
+      );
+      const res = await fetch(url, { headers: withIdsHeaders() });
+      const data = await res.json();
+      const src = Array.isArray(data?.items) ? data.items : [];
+      setBrowseDocs(
+        src.map((it) => ({
+          id: it.id ?? it.value ?? it.url ?? it.title,
+          title: it.title ?? it.button_title ?? it.label ?? "",
+          url: it.url ?? it.value ?? it.button_value ?? "",
+          description: it.description ?? it.summary ?? it.functions_text ?? "",
+          functions_text: it.functions_text ?? it.description ?? "",
+        }))
+      );
+      requestAnimationFrame(() =>
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+      );
+    } catch {
+      setBrowseDocs([]);
+    }
+  }
+
+
+  
+  // Pricing loader
+  const priceScrollRef = useRef(null);
+  useEffect(() => {
+    if (mode !== "price" || !botId) return;
+    let cancel = false;
+    (async () => {
+      try {
+        setPriceErr("");
+        setPriceEstimate(null);
+        setPriceAnswers({});
+        const res = await fetch(
+          `${apiBase}/pricing/questions?bot_id=${encodeURIComponent(botId)}`
+        );
+        const data = await res.json();
+        if (cancel) return;
+        if (!data?.ok)
+          throw new Error(data?.error || "Failed to load pricing questions");
+        // only questions now; copy comes from /bot-settings
+        setPriceQuestions(Array.isArray(data.questions) ? data.questions : []);
+        requestAnimationFrame(() =>
+          priceScrollRef.current?.scrollTo({ top: 0, behavior: "auto" })
+        );
+      } catch {
+        if (!cancel) setPriceErr("Unable to load price estimator.");
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [mode, botId, apiBase]);
+
+  // Pricing: compute estimate when inputs ready
+  useEffect(() => {
+    const haveAll = (() => {
+      if (!priceQuestions?.length) return false;
+      const req = priceQuestions.filter(
+        (q) => (q.group ?? "estimation") === "estimation" && q.required !== false
+      );
+      if (!req.length) return false;
+      return req.every((q) => {
+        const v = priceAnswers[q.q_key];
+        const isMulti = String(q.type).toLowerCase().includes("multi");
+        return isMulti
+          ? Array.isArray(v) && v.length > 0
+          : !(v === undefined || v === null || v === "");
+      });
+    })();
+
+    if (mode !== "price" || !botId || !haveAll) {
+      setPriceEstimate(null);
+      return;
+    }
+    let cancel = false;
+    (async () => {
+      try {
+        setPriceBusy(true);
+        const body = {
+          bot_id: botId,
+          answers: {
+            product_id:
+              priceAnswers?.product ||
+              priceAnswers?.edition ||
+              priceAnswers?.product_id ||
+              "",
+            tier_id:
+              priceAnswers?.tier ||
+              priceAnswers?.transactions ||
+              priceAnswers?.tier_id ||
+              "",
+          },
+          session_id: sessionId || undefined,
+          visitor_id: visitorId || undefined,
+        };
+        const res = await fetch(`${apiBase}/pricing/estimate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (cancel) return;
+        if (!data?.ok)
+          throw new Error(data?.error || "Failed to compute estimate");
+        setPriceEstimate(data);
+      } catch {
+        if (!cancel) setPriceErr("Unable to compute estimate.");
+      } finally {
+        if (!cancel) setPriceBusy(false);
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [
+    mode,
+    botId,
+    apiBase,
+    priceQuestions,
+    priceAnswers,
+    sessionId,
+    visitorId,
+  ]);
+
+  // Next unanswered (null when all required answered → show estimate)
+  const nextPriceQuestion = useMemo(() => {
+    if (!priceQuestions?.length) return null;
+    for (const q of priceQuestions) {
+      if ((q.group ?? "estimation") !== "estimation" || q.required === false)
+        continue;
+      const v = priceAnswers[q.q_key];
+      const isMulti = String(q.type).toLowerCase().includes("multi");
+      const empty = isMulti
+        ? !(Array.isArray(v) && v.length > 0)
+        : v === undefined || v === null || v === "";
+      if (empty) return q;
+    }
+    return null;
+  }, [priceQuestions, priceAnswers]);
+
+  // Mirror lines — prefer estimate.mirror_text; handle arrays with {q_key,text}
+  const mirrorLines = useMemo(() => {
+    // Helper: get chosen label for a given q_key
+    const labelFor = (q_key) => {
+      const q = (priceQuestions || []).find((qq) => qq.q_key === q_key);
+      if (!q) return "";
+      const ans = priceAnswers[q.q_key];
+      if (ans == null || ans === "" || (Array.isArray(ans) && ans.length === 0)) return "";
+      const opts = normalizeOptions(q);
+      if (String(q.type).toLowerCase().includes("multi")) {
+        const picked = Array.isArray(ans) ? ans : [];
+        return opts.filter((o) => picked.includes(o.key)).map((o) => o.label).join(", ");
+      }
+      const o = opts.find((o) => o.key === ans);
+      return o?.label || String(ans);
+    };
+
+    // 1) String mirror from server
+    if (typeof priceEstimate?.mirror_text === "string") {
+      const t = priceEstimate.mirror_text.trim();
+      if (t) return [t];
+    }
+
+    // 2) Array of { q_key, text }
+    if (Array.isArray(priceEstimate?.mirror_text)) {
+      const out = [];
+      for (const m of priceEstimate.mirror_text) {
+        const raw = String(m?.text || "").trim();
+        if (!raw) continue;
+        const lbl = labelFor(m?.q_key);
+        const replaced = raw
+          .replace(/\{\{\s*answer_label_lower\s*\}\}/gi, lbl.toLowerCase())
+          .replace(/\{\{\s*answer_label\s*\}\}/gi, lbl);
+        out.push(replaced);
+      }
+      return out.filter(Boolean);
+    }
+
+    // 3) Derive from questions/answers as fallback
+    if (!priceQuestions?.length) return [];
+    const lines = [];
+    for (const q of priceQuestions) {
+      const ans = priceAnswers[q.q_key];
+      if (
+        ans === undefined ||
+        ans === null ||
+        ans === "" ||
+        (Array.isArray(ans) && ans.length === 0)
+      )
+        continue;
+      const opts = normalizeOptions(q);
+      let label = "";
+      if (String(q.type).toLowerCase().includes("multi")) {
+        const picked = Array.isArray(ans) ? ans : [];
+        label = opts
+          .filter((o) => picked.includes(o.key))
+          .map((o) => o.label)
+          .join(", ");
+      } else {
+        const o = opts.find((o) => o.key === ans);
+        label = o?.label || String(ans);
+      }
+      if (!label) continue;
+      const tmpl = q.mirror_template;
+      if (tmpl && typeof tmpl === "string") {
+        const replaced = tmpl
+          .replace(/\{\{\s*answer_label_lower\s*\}\}/gi, label.toLowerCase())
+          .replace(/\{\{\s*answer_label\s*\}\}/gi, label);
+        lines.push(replaced);
+      } else {
+        lines.push(label);
+      }
+    }
+    return lines;
+  }, [priceEstimate, priceQuestions, priceAnswers]);
 
   /* ================================================================================= *
    * END SECTION 3                                                                     *
    * ================================================================================= */
   
-  /* ================================================================================= *
- *  BEGIN SECTION 4                                                                  *
- * ================================================================================= */
-
-function handlePickOption(q, opt) {
-  const isMulti = String(q?.type || "").toLowerCase().includes("multi");
-  setPriceAnswers((prev) => {
-    if (isMulti) {
-      const curr = Array.isArray(prev[q.q_key]) ? prev[q.q_key] : [];
-      const exists = curr.includes(opt.key);
-      const next = exists ? curr.filter((k) => k !== opt.key) : [...curr, opt.key];
-      return { ...prev, [q.q_key]: next };
-    }
-    return { ...prev, [q.q_key]: opt.key };
-  });
-}
-
-// Ask flow
-async function sendMessage() {
-  if (!input.trim() || !botId) return;
-  const outgoing = input.trim();
+    /* ================================================================================= *
+   *  BEGIN SECTION 4                                                                  *
+   * ================================================================================= */
   
-  // Capture screen-scoped context synchronously at submit time
-  const commitScope = (() => {
-    let scope = "standard";
-    let demo_id, doc_id;
-    if (selected && selected.id && mode === "docs") {
-      scope = "doc";
-      doc_id = String(selected.id);
-    } else if (selected && selected.id && mode !== "docs") {
-      scope = "demo";
-      demo_id = String(selected.id);
-    }
-    return { scope, ...(demo_id ? { demo_id } : {}), ...(doc_id ? { doc_id } : {}) };
-  })();
-  setMode("ask");
-  setLastQuestion(outgoing);
-  setInput("");
-  setSelected(null);
-  setResponseText("");
-  setHelperPhase("hidden");
-  setItems([]);
-  setLoading(true);
-  try {
-    const res = await axios.post(
-      `${apiBase}/demo-hal`,
-      withIdsBody({ bot_id: botId, user_question: outgoing, ...commitScope, debug: true }),
-      { timeout: 30000, headers: withIdsHeaders() }
-    );
-    const data = res?.data || {};
-    setDebugInfo(data?.debug || null);
+  function handlePickOption(q, opt) {
+    const isMulti = String(q?.type || "").toLowerCase().includes("multi");
+    setPriceAnswers((prev) => {
+      if (isMulti) {
+        const curr = Array.isArray(prev[q.q_key]) ? prev[q.q_key] : [];
+        const exists = curr.includes(opt.key);
+        const next = exists ? curr.filter((k) => k !== opt.key) : [...curr, opt.key];
+        return { ...prev, [q.q_key]: next };
+      }
+      return { ...prev, [q.q_key]: opt.key };
+    });
+  }
 
-    const text = data?.response_text || "";
-    const recSource = Array.isArray(data?.items)
-      ? data.items
-      : Array.isArray(data?.buttons)
-      ? data.buttons
-      : [];
+  // Ask flow
+  async function sendMessage() {
+    if (!input.trim() || !botId) return;
+    const outgoing = input.trim();
+    
+    // Capture screen-scoped context synchronously at submit time
+    const commitScope = (() => {
+      let scope = "standard";
+      let demo_id, doc_id;
+      if (selected && selected.id && mode === "docs") {
+        scope = "doc";
+        doc_id = String(selected.id);
+      } else if (selected && selected.id && mode !== "docs") {
+        scope = "demo";
+        demo_id = String(selected.id);
+      }
+      return { scope, ...(demo_id ? { demo_id } : {}), ...(doc_id ? { doc_id } : {}) };
+    })();
+    setMode("ask");
+    setLastQuestion(outgoing);
+    setInput("");
+    setSelected(null);
+    setResponseText("");
+    setHelperPhase("hidden");
+    setItems([]);
+    setLoading(true);
+    try {
+      const res = await axios.post(
+        `${apiBase}/demo-hal`,
+        withIdsBody({ bot_id: botId, user_question: outgoing, ...commitScope, debug: true }),
+        { timeout: 30000, headers: withIdsHeaders() }
+      );
+      const data = res?.data || {};
+      setDebugInfo(data?.debug || null);
 
-    const recs = (Array.isArray(recSource) ? recSource : [])
-      .map((it) => {
-        const id = it.id ?? it.button_id ?? it.value ?? it.url ?? it.title;
-        const title =
-          it.title ??
-          it.button_title ??
-          (typeof it.label === "string"
-            ? it.label.replace(/^Watch the \"|\" demo$/g, "")
-            : it.label) ??
-          "";
-        const url = it.url ?? it.value ?? it.button_value ?? "";
-        const description =
-          it.description ?? it.summary ?? it.functions_text ?? "";
-        const action = it.action ?? it.button_action ?? "demo";
-        return {
-          id,
-          title,
-          url,
-          description,
-          functions_text: it.functions_text ?? description,
-          action,
-        };
-      })
-      .filter((b) => {
-        const act = (b.action || "").toLowerCase();
-        const lbl = (b.title || "").toLowerCase();
-        return (
-          act !== "continue" &&
-          act !== "options" &&
-          lbl !== "continue" &&
-          lbl !== "show me options"
-        );
-      });
+      const text = data?.response_text || "";
+      const recSource = Array.isArray(data?.items)
+        ? data.items
+        : Array.isArray(data?.buttons)
+        ? data.buttons
+        : [];
 
-    setResponseText(text);
-    setLoading(false);
-    // Reset scope to standard after completing the response
-    setScopePayload({ scope: "standard" });
+      const recs = (Array.isArray(recSource) ? recSource : [])
+        .map((it) => {
+          const id = it.id ?? it.button_id ?? it.value ?? it.url ?? it.title;
+          const title =
+            it.title ??
+            it.button_title ??
+            (typeof it.label === "string"
+              ? it.label.replace(/^Watch the \"|\" demo$/g, "")
+              : it.label) ??
+            "";
+          const url = it.url ?? it.value ?? it.button_value ?? "";
+          const description =
+            it.description ?? it.summary ?? it.functions_text ?? "";
+          const action = it.action ?? it.button_action ?? "demo";
+          return {
+            id,
+            title,
+            url,
+            description,
+            functions_text: it.functions_text ?? description,
+            action,
+          };
+        })
+        .filter((b) => {
+          const act = (b.action || "").toLowerCase();
+          const lbl = (b.title || "").toLowerCase();
+          return (
+            act !== "continue" &&
+            act !== "options" &&
+            lbl !== "continue" &&
+            lbl !== "show me options"
+          );
+        });
 
-    if (recs.length > 0) {
-      setHelperPhase("header");
-      setTimeout(() => {
-        setItems(recs);
-        setHelperPhase("buttons");
-      }, 60);
-    } else {
+      setResponseText(text);
+      setLoading(false);
+      // Reset scope to standard after completing the response
+      setScopePayload({ scope: "standard" });
+
+      if (recs.length > 0) {
+        setHelperPhase("header");
+        setTimeout(() => {
+          setItems(recs);
+          setHelperPhase("buttons");
+        }, 60);
+      } else {
+        setHelperPhase("hidden");
+        setItems([]);
+      }
+
+      requestAnimationFrame(() =>
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+      );
+    } catch {
+      setLoading(false);
+      setScopePayload({ scope: "standard" });
+      setResponseText("Sorry—something went wrong.");
       setHelperPhase("hidden");
       setItems([]);
     }
-
-    requestAnimationFrame(() =>
-      contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-    );
-  } catch {
-    setLoading(false);
-    setScopePayload({ scope: "standard" });
-    setResponseText("Sorry—something went wrong.");
-    setHelperPhase("hidden");
-    setItems([]);
   }
-}
 
-const listSource = mode === "browse" ? browseItems : items;
-const askUnderVideo = useMemo(() => {
-  if (!selected) return items;
-  const selKey = selected.id ?? selected.url ?? selected.title;
-  return (items || []).filter(
-    (it) => (it.id ?? it.url ?? it.title) !== selKey
-  );
-}, [selected, items]);
-const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
+  const listSource = mode === "browse" ? browseItems : items;
+  const askUnderVideo = useMemo(() => {
+    if (!selected) return items;
+    const selKey = selected.id ?? selected.url ?? selected.title;
+    return (items || []).filter(
+      (it) => (it.id ?? it.url ?? it.title) !== selKey
+    );
+  }, [selected, items]);
+  const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
 
-const tabs = useMemo(() => {
-  const out = [];
-  if (tabsEnabled.demos)
-    out.push({ key: "demos", label: "Browse Demos", onClick: openBrowse });
-  if (tabsEnabled.docs)
-    out.push({
-      key: "docs",
-      label: "Browse Documents",
-      onClick: openBrowseDocs,
-    });
-  if (tabsEnabled.price)
-    out.push({
-      key: "price",
-      label: "Price Estimate",
-      onClick: () => {
-        setSelected(null);
-        setMode("price");
-      },
-    });
-  if (tabsEnabled.meeting)
-    out.push({ key: "meeting", label: "Schedule Meeting", onClick: openMeeting });
-  return out;
-}, [tabsEnabled]);
+  const tabs = useMemo(() => {
+    const out = [];
+    if (tabsEnabled.demos)
+      out.push({ key: "demos", label: "Browse Demos", onClick: openBrowse });
+    if (tabsEnabled.docs)
+      out.push({
+        key: "docs",
+        label: "Browse Documents",
+        onClick: openBrowseDocs,
+      });
+    if (tabsEnabled.price)
+      out.push({
+        key: "price",
+        label: "Price Estimate",
+        onClick: () => {
+          setSelected(null);
+          setMode("price");
+        },
+      });
+    if (tabsEnabled.meeting)
+      out.push({ key: "meeting", label: "Schedule Meeting", onClick: openMeeting });
+    return out;
+  }, [tabsEnabled]);
 
-if (fatal) {
-  return (
-    <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
-      <div className="text-red-600 font-semibold">{fatal}</div>
-    </div>
-  );
-}
-if (!botId) {
+  if (fatal) {
+    return (
+      <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
+        <div className="text-red-600 font-semibold">{fatal}</div>
+      </div>
+    );
+  }
+  if (!botId) {
+    return (
+      <div
+        className={classNames(
+          "w-screen min-h-[100dvh] flex items-center justify-center bg-[var(--page-bg)] p-4 transition-opacity duration-200",
+          brandReady ? "opacity-100" : "opacity-0"
+        )}
+        style={liveTheme}
+      >
+        <div className="text-gray-800 text-center space-y-2">
+          <div className="text-lg font-semibold">No bot selected</div>
+          {alias ? (
+            <div className="text-sm text-gray-600">
+              Resolving alias “{alias}”…
+            </div>
+          ) : (
+            <div className="text-sm text-gray-600">
+              Provide a <code>?bot_id=…</code> or <code>?alias=…</code> in the
+              URL
+              {defaultAlias ? (
+                <> (trying default alias “{defaultAlias}”)</>
+              ) : null}
+              .
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const showAskBottom = mode !== "price" || !!priceEstimate;
+  const embedDomain =
+    typeof window !== "undefined" ? window.location.hostname : "";
+
+  const logoSrc =
+    brandAssets.logo_url ||
+    brandAssets.logo_light_url ||
+    brandAssets.logo_dark_url ||
+    fallbackLogo;
+
   return (
     <div
       className={classNames(
-        "w-screen min-h-[100dvh] flex items-center justify-center bg-[var(--page-bg)] p-4 transition-opacity duration-200",
+        "w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center transition-opacity duration-200",
         brandReady ? "opacity-100" : "opacity-0"
       )}
       style={liveTheme}
     >
-      <div className="text-gray-800 text-center space-y-2">
-        <div className="text-lg font-semibold">No bot selected</div>
-        {alias ? (
-          <div className="text-sm text-gray-600">
-            Resolving alias “{alias}”…
+      <div
+        ref={frameRef}
+        className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all duration-300"
+      >
+        {/* Header */}
+        <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)]"> 
+          <div className="flex items-center justify-between w-full py-3">
+            <div className="flex items-center gap-3">
+              <img src={logoSrc} alt="Brand logo" className="h-10 object-contain" />
+            </div>
+            <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
+              {selected
+                ? selected.title
+                : mode === "browse"
+                ? "Browse Demos"
+                : mode === "docs"
+                ? "Browse Documents"
+                : mode === "price"
+                ? "Price Estimate"
+                : mode === "meeting"
+                ? "Schedule Meeting"
+                : "Ask the Assistant"}
+            </div>
           </div>
-        ) : (
-          <div className="text-sm text-gray-600">
-            Provide a <code>?bot_id=…</code> or <code>?alias=…</code> in the
-            URL
-            {defaultAlias ? (
-              <> (trying default alias “{defaultAlias}”)</>
-            ) : null}
-            .
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-const showAskBottom = mode !== "price" || !!priceEstimate;
-const embedDomain =
-  typeof window !== "undefined" ? window.location.hostname : "";
-
-const logoSrc =
-  brandAssets.logo_url ||
-  brandAssets.logo_light_url ||
-  brandAssets.logo_dark_url ||
-  fallbackLogo;
-
-return (
-  <div
-    className={classNames(
-      "w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center transition-opacity duration-200",
-      brandReady ? "opacity-100" : "opacity-0"
-    )}
-    style={liveTheme}
-  >
-    <div
-      ref={frameRef}
-      className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all duration-300"
-    >
-      {/* Header */}
-      <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)]"> 
-        <div className="flex items-center justify-between w-full py-3">
-          <div className="flex items-center gap-3">
-            <img src={logoSrc} alt="Brand logo" className="h-10 object-contain" />
-          </div>
-          <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
-            {selected
-              ? selected.title
-              : mode === "browse"
-              ? "Browse Demos"
-              : mode === "docs"
-              ? "Browse Documents"
-              : mode === "price"
-              ? "Price Estimate"
-              : mode === "meeting"
-              ? "Schedule Meeting"
-              : "Ask the Assistant"}
-          </div>
+          <TabsNav mode={mode} tabs={tabs} />
         </div>
-        <TabsNav mode={mode} tabs={tabs} />
-      </div>
 
-      {/* PRICE MODE */}
-      {mode === "price" ? (
-        <>
-          <div className="px-6 pt-3 pb-2" data-patch="price-intro">
-            <PriceMirror lines={mirrorLines.length ? mirrorLines : [""]} />
-            {!mirrorLines.length ? (
-              <div className="text-base font-bold whitespace-pre-line text-[var(--message-fg)]">
-                {pricingCopy?.intro ||
-                  "This tool provides a quick estimate based on your selections. Final pricing may vary by configuration, usage, and implementation."}
-              </div>
-            ) : null}
-          </div>
-          <div
-            ref={priceScrollRef}
-            className="px-6 pt-0 pb-6 flex-1 overflow-y-auto"
-          >
-            {!priceQuestions?.length ? (
-              <div className="text-sm text-[var(--helper-fg)]">
-                Loading questions…
-              </div>
-            ) : nextPriceQuestion ? (
-              <QuestionBlock
-                q={nextPriceQuestion}
-                value={priceAnswers[nextPriceQuestion.q_key]}
-                onPick={handlePickOption}
-              />
-            ) : priceEstimate && priceEstimate.custom ? (
-              <div className="text-base font-bold whitespace-pre-line text-[var(--message-fg)]">
-                {pricingCopy?.custom_notice ||
-                  "We’ll follow up with a custom quote tailored to your selection."}
-              </div>
-            ) : (
-              <EstimateCard
-                estimate={priceEstimate}
-                outroText={pricingCopy?.outro || ""}
-              />
-            )}
-            {priceBusy ? (
-              <div className="mt-2 text-sm text-[var(--helper-fg)]">
-                Calculating…
-              </div>
-            ) : null}
-            {priceErr ? (
-              <div className="mt-2 text-sm text-red-600">{priceErr}</div>
-            ) : null}
-          </div>
-        </>
-      ) : (
+        {/* PRICE MODE */}
+        {mode === "price" ? (
+          <>
+            <div className="px-6 pt-3 pb-2" data-patch="price-intro">
+              <PriceMirror lines={mirrorLines.length ? mirrorLines : [""]} />
+              {!mirrorLines.length ? (
+                <div className="text-base font-bold whitespace-pre-line">
+                  {pricingCopy?.intro ||
+                    "This tool provides a quick estimate based on your selections. Final pricing may vary by configuration, usage, and implementation."}
+                </div>
+              ) : null}
+            </div>
+            <div
+              ref={priceScrollRef}
+              className="px-6 pt-0 pb-6 flex-1 overflow-y-auto"
+            >
+              {!priceQuestions?.length ? (
+                <div className="text-sm text-[var(--helper-fg)]">
+                  Loading questions…
+                </div>
+              ) : nextPriceQuestion ? (
+                <QuestionBlock
+                  q={nextPriceQuestion}
+                  value={priceAnswers[nextPriceQuestion.q_key]}
+                  onPick={handlePickOption}
+                />
+              ) : priceEstimate && priceEstimate.custom ? (
+                <div className="text-base font-bold whitespace-pre-line">
+                  {pricingCopy?.custom_notice ||
+                    "We’ll follow up with a custom quote tailored to your selection."}
+                </div>
+              ) : (
+                <EstimateCard
+                  estimate={priceEstimate}
+                  outroText={pricingCopy?.outro || ""}
+                />
+              )}
+              {priceBusy ? (
+                <div className="mt-2 text-sm text-[var(--helper-fg)]">
+                  Calculating…
+                </div>
+              ) : null}
+              {priceErr ? (
+                <div className="mt-2 text-sm text-red-600">{priceErr}</div>
+              ) : null}
+            </div>
+          </>
+        ) : (
   
 /* ================================================================================= *
 * END SECTION 4                                                                     *
 * ================================================================================= */
-
 
 /* ================================================================================= *
 *  BEGIN SECTION 5                                                                  *
@@ -1264,7 +1550,7 @@ return (
               <div className="w-full flex-1 flex flex-col">
                 {!lastQuestion && !loading && (
                   <div className="space-y-3">
-                    <div className="text-base font-bold whitespace-pre-line text-[var(--message-fg)]">
+                    <div className="text-base font-bold whitespace-pre-line">
                       {responseText}
                     </div>
                     <DebugPanel debug={debugInfo} />
@@ -1300,7 +1586,7 @@ return (
                       Thinking…
                     </p>
                   ) : lastQuestion ? (
-                    <p className="text-base font-bold whitespace-pre-line text-[var(--message-fg)]">
+                    <p className="text-base font-bold whitespace-pre-line">
                       {responseText}
                     </p>
                   ) : null}
@@ -1327,7 +1613,7 @@ return (
             )}
           </div>
         )}
-        
+
         {/* Bottom Ask Bar — divider only */}
         <div
           className="px-4 py-3 border-t border-[var(--border-default)]"
@@ -1364,6 +1650,7 @@ return (
           ) : null}
         </div>
       </div>
+
       {/* ThemeLab (enable with ?themelab=1) — ColorBox only */}
       {themeLabOn && botId ? (
         <ColorBox
@@ -1375,12 +1662,11 @@ return (
       ) : null}
     </div>
   );
-}    
+}
 
 /* ================================================================================= *
-* END SECTION 5                                                                     *
-* ================================================================================= */
-
+ * END SECTION 5                                                                     *
+ * ================================================================================= */
 
 /* ================================================================================= *
  *  BEGIN SECTION 6                                                                  *
