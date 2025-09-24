@@ -22,7 +22,7 @@ export default function AskAssistant() {
   const [fatal, setFatal] = useState("");
   const [mode, setMode] = useState("ask");
   const [input, setInput] = useState("");
-  const [responseText, setResponseText] = useState(""); // welcome text lives here
+  const [responseText, setResponseText] = useState(""); // welcome text
   const [loading, setLoading] = useState(false);
 
   // Intro video
@@ -56,6 +56,30 @@ export default function AskAssistant() {
     logo_light_url: null,
     logo_dark_url: null,
   });
+
+  // --------------------------
+  // Step 3: Form-capture state
+  // --------------------------
+  const LS_KEY = "dh_form_v1";
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name: "", email: "", company: "" });
+  const [formErrors, setFormErrors] = useState({});
+  const [formSubmitted, setFormSubmitted] = useState(false);
+  const [pendingQuestion, setPendingQuestion] = useState("");
+
+  // Load any saved form (once)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (saved && (saved.name || saved.email || saved.company)) {
+          setForm(saved);
+          setFormSubmitted(true);
+        }
+      }
+    } catch {}
+  }, []);
 
   // ---- Resolve bot (alias or bot_id) ----
   useEffect(() => {
@@ -100,10 +124,8 @@ export default function AskAssistant() {
         }
         await loadBy(`${apiBase}/bot-settings?alias=${encodeURIComponent(useAlias)}`);
       } catch {
-        if (!cancel) {
-          setFatal("Invalid or inactive alias.");
-          setStage("fatal");
-        }
+        setFatal("Invalid or inactive alias.");
+        setStage("fatal");
       }
     })();
 
@@ -151,25 +173,51 @@ export default function AskAssistant() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  // Tabs: Ask only (other tabs later)
-  const tabs = useMemo(() => [{ key: "ask", label: "Ask", onClick: () => setMode("ask") }], []);
+  // Tabs: Ask only (others later). Clicking Ask triggers form the first time.
+  const tabs = useMemo(
+    () => [
+      {
+        key: "ask",
+        label: "Ask",
+        onClick: () => {
+          setMode("ask");
+          if (!formSubmitted) setShowForm(true);
+        },
+      },
+    ],
+    [formSubmitted]
+  );
 
-  // Send (simple)
-  async function sendMessage() {
-    const q = (input || "").trim();
-    if (!q) return;
-    if (!botId) {
-      setFatal("Invalid or inactive alias.");
-      return;
+  // Validate + save form
+  function validateForm(f) {
+    const errs = {};
+    if (!f.name.trim()) errs.name = "Required";
+    if (!f.email.trim()) errs.email = "Required";
+    else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email)) errs.email = "Invalid";
+    return errs;
     }
+  function saveForm(f) {
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(f));
+    } catch {}
+    setFormSubmitted(true);
+  }
 
+  // Actual send
+  async function reallySend(q) {
     setLoading(true);
     setStage("ask:posting");
     try {
       const res = await fetch(`${apiBase}/demo-hal`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...idHeaders },
-        body: JSON.stringify({ bot_id: botId, user_question: q, debug: false, scope: "standard" }),
+        body: JSON.stringify({
+          bot_id: botId,
+          user_question: q,
+          debug: false,
+          scope: "standard",
+          form_capture: formSubmitted ? form : undefined,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       const text =
@@ -191,10 +239,45 @@ export default function AskAssistant() {
     }
   }
 
+  // Public send handler
+  async function sendMessage() {
+    const q = (input || "").trim();
+    if (!q) return;
+    if (!botId) {
+      setFatal("Invalid or inactive alias.");
+      return;
+    }
+
+    // Gate on first send
+    if (!formSubmitted) {
+      setPendingQuestion(q);
+      setShowForm(true);
+      return;
+    }
+
+    reallySend(q);
+  }
+
   function onKeyDown(e) {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
       sendMessage();
+    }
+  }
+
+  // Submit form
+  function submitForm(e) {
+    e?.preventDefault?.();
+    const errs = validateForm(form);
+    setFormErrors(errs);
+    if (Object.keys(errs).length) return;
+    saveForm(form);
+    setShowForm(false);
+
+    if (pendingQuestion) {
+      const q = pendingQuestion;
+      setPendingQuestion("");
+      reallySend(q);
     }
   }
 
@@ -246,9 +329,7 @@ export default function AskAssistant() {
           <div className={UI.CARD}>
             {/* Welcome text */}
             {responseText ? (
-              <div className="text-base whitespace-pre-line text-[var(--message-fg)]">
-                {responseText}
-              </div>
+              <div className="text-base whitespace-pre-line text-[var(--message-fg)]">{responseText}</div>
             ) : null}
 
             {/* Intro video */}
@@ -286,6 +367,72 @@ export default function AskAssistant() {
           </div>
         )}
       </div>
+
+      {/* Form Modal */}
+      {showForm ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 10000,
+          }}
+        >
+          <div className={UI.CARD} style={{ width: 560, maxWidth: "90vw" }}>
+            <div className="font-bold text-lg mb-2">Tell us a bit about you</div>
+            <form onSubmit={submitForm} className="grid gap-2">
+              <div>
+                <label className="block text-sm mb-1">Name</label>
+                <input
+                  className={UI.FIELD}
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="Your name"
+                />
+                {formErrors.name ? <div className="text-red-600 text-xs mt-1">{formErrors.name}</div> : null}
+              </div>
+              <div>
+                <label className="block text-sm mb-1">Email</label>
+                <input
+                  className={UI.FIELD}
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="you@company.com"
+                  type="email"
+                />
+                {formErrors.email ? <div className="text-red-600 text-xs mt-1">{formErrors.email}</div> : null}
+              </div>
+              <div>
+                <label className="block text-sm mb-1">Company (optional)</label>
+                <input
+                  className={UI.FIELD}
+                  value={form.company}
+                  onChange={(e) => setForm({ ...form, company: e.target.value })}
+                  placeholder="Company"
+                />
+              </div>
+              <div className="flex justify-end gap-2 mt-2">
+                <button
+                  type="button"
+                  className={UI.BTN_DOC}
+                  onClick={() => {
+                    setShowForm(false);
+                    setPendingQuestion("");
+                  }}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className={UI.BTN_DOC}>
+                  Continue
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
