@@ -1,5 +1,6 @@
-// File: src/components/ControlShell.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
+import { DEFAULT_THEME_VARS, inverseBW, UI } from "./AskAssistant/AskAssistant.ui";
 
 export default function ControlShell() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
@@ -14,29 +15,42 @@ export default function ControlShell() {
   }, []);
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
 
-  // Core shell state
-  const [mode, setMode] = useState("welcome"); // welcome | bot_response | demos | docs | price | meeting
+  // Core state
   const [botId, setBotId] = useState(botIdFromUrl || "");
-  const [resolved, setResolved] = useState(false);
   const [fatal, setFatal] = useState("");
-
-  // Branding
-  const [cssVars, setCssVars] = useState({});
-  const [brandLogo, setBrandLogo] = useState(null);
-
-  // Ask box
+  const [resolved, setResolved] = useState(false); // gate UI until bot resolved
+  const [mode, setMode] = useState("ask");
   const [input, setInput] = useState("");
+  const [responseText, setResponseText] = useState("");
+
+  // Theme / brand (CSS custom props)
+  const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
+  const derivedTheme = useMemo(() => {
+    const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
+    return { ...themeVars, "--tab-active-fg": activeFg };
+  }, [themeVars]);
+  const [brandAssets, setBrandAssets] = useState({ logo_url: null });
+
+  // Intro video
+  const [introVideoUrl, setIntroVideoUrl] = useState("");
+  const [showIntroVideo, setShowIntroVideo] = useState(false);
+
+  // Tabs enable flags (mirror prod)
+  const [tabsEnabled, setTabsEnabled] = useState({ demos: false, docs: false, meeting: false, price: false });
+
+  // Ask box autosize (1 → 3 lines)
   const inputRef = useRef(null);
   useEffect(() => {
     const el = inputRef.current; if (!el) return;
-    const lineH = 22; const max = lineH * 3;
+    const lineH = 22; // tuned to UI.FIELD
+    const max = lineH * 3;
     el.style.height = "auto";
     el.style.maxHeight = `${max}px`;
     el.style.overflowY = el.scrollHeight > max ? "auto" : "hidden";
     el.style.height = `${Math.min(el.scrollHeight, max)}px`;
   }, [input]);
 
-  // Resolve bot
+  // Resolve bot settings exactly like prod
   useEffect(() => {
     async function loadBy(url) {
       const res = await fetch(url);
@@ -46,7 +60,17 @@ export default function ControlShell() {
         setResolved(false);
         return;
       }
-      setBotId(data.bot.id);
+      const b = data.bot;
+      setTabsEnabled({
+        demos: !!b.show_browse_demos,
+        docs: !!b.show_browse_docs,
+        meeting: !!b.show_schedule_meeting,
+        price: !!b.show_price_estimate,
+      });
+      setResponseText(b.welcome_message || "");
+      setIntroVideoUrl(b.intro_video_url || "");
+      setShowIntroVideo(!!b.show_intro_video);
+      setBotId(b.id);
       setResolved(true);
     }
     (async () => {
@@ -54,143 +78,118 @@ export default function ControlShell() {
         if (botIdFromUrl) return loadBy(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botIdFromUrl)}`);
         const useAlias = alias || defaultAlias; if (!useAlias) { setResolved(false); return; }
         return loadBy(`${apiBase}/bot-settings?alias=${encodeURIComponent(useAlias)}`);
-      } catch { setResolved(false); }
+      } catch {
+        setResolved(false);
+      }
     })();
   }, [alias, defaultAlias, botIdFromUrl, apiBase]);
 
-  // Load brand tokens → apply to card root only
-  const cardRef = useRef(null);
+  // Load brand tokens / assets
   useEffect(() => {
     if (!resolved || !botId) return;
     (async () => {
       try {
         const res = await fetch(`${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`);
         const data = await res.json().catch(() => ({}));
-        const vars = (data?.ok && data?.css_vars && typeof data.css_vars === "object") ? data.css_vars : {};
-        setCssVars(vars);
-        if (data?.ok && data?.assets?.logo_url) setBrandLogo(data.assets.logo_url);
-        // Apply directly to the card element to avoid global overrides
-        const el = cardRef.current; if (el && vars) {
-          for (const k of Object.keys(vars)) el.style.setProperty(k, vars[k]);
+        if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
+          setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
         }
+        if (data?.ok && data?.assets?.logo_url) setBrandAssets({ logo_url: data.assets.logo_url });
       } catch {}
     })();
   }, [resolved, botId, apiBase]);
 
-  // Fixed card metrics
-  const CARD_W = "48rem";
+  // Tabs list (labels/order preserved)
+  const tabs = [
+    tabsEnabled.demos && { key: "demos", label: "Browse Demos" },
+    tabsEnabled.docs && { key: "docs", label: "Browse Documents" },
+    tabsEnabled.price && { key: "price", label: "Price Estimate" },
+    tabsEnabled.meeting && { key: "meeting", label: "Schedule Meeting" },
+  ].filter(Boolean);
+
+  const send = () => {};
+
+  // Fixed card metrics (parity with prod shell)
+  const CARD_W = "56rem";
   const CARD_H = "44rem";
 
-  // Content Outlet (simple switch for now)
-  const ContentOutlet = () => {
-    switch (mode) {
-      case "welcome":
-        return (
-          <div className="text-[var(--message-fg,#111827)]">
-            <div className="font-semibold mb-2">Welcome</div>
-            <p>Content area is locked inside the frame. Try switching tabs or asking a question.</p>
-          </div>
-        );
-      case "bot_response":
-        return (
-          <div>
-            <div className="font-semibold mb-2">Bot Response</div>
-            <p>This is where answers will render.</p>
-          </div>
-        );
-      default:
-        return (
-          <div>
-            <div className="font-semibold mb-2">{mode}</div>
-            <p>Stub view inside the content area.</p>
-          </div>
-        );
-    }
-  };
-
-  // Gate: show nothing until bot is resolved
-  if (!resolved) {
-    return (
-      <div className="w-full h-[60vh] flex items-center justify-center text-gray-500">
-        <div className="text-center">
-          <div className="text-2xl font-semibold mb-1">No bot selected</div>
-          <div className="text-sm">Provide a <code>?bot_id=…</code> or <code>?alias=…</code> in the URL.</div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen">
-      <div
-        ref={cardRef}
-        className="mx-auto mt-8 mb-10 rounded-2xl overflow-hidden"
-        style={{ width: CARD_W, height: CARD_H, boxShadow: "0 10px 30px rgba(0,0,0,.08)" }}
-      >
-        {/* Banner inside card */}
-        <div className="bg-black text-white px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {brandLogo ? (
-                <img src={brandLogo} alt="logo" className="h-8 w-auto" />
-              ) : (
-                <div className="font-extrabold">DemoHAL</div>
-              )}
-            </div>
-            <div className="text-sm font-semibold" style={{ color: "#22c55e" }}>Ask the Assistant</div>
-          </div>
-          {/* Tabs centered */}
-          <div className="flex justify-center gap-2 pt-3">
-            {[
-              { key: "welcome", label: "Welcome" },
-              { key: "bot_response", label: "Bot Response" },
-              { key: "demos", label: "Browse Demos" },
-              { key: "docs", label: "Browse Documents" },
-              { key: "price", label: "Price Estimate" },
-              { key: "meeting", label: "Schedule Meeting" },
-            ].map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setMode(t.key)}
-                className={
-                  (mode === t.key
-                    ? "bg-[var(--tab-active-bg,#111827)] text-[var(--tab-active-fg,#ffffff)]"
-                    : "bg-[var(--tab-bg,#111827)] text-[var(--tab-fg,#9ca3af)] hover:text-white)") +
-                  " px-3 py-1 rounded-full text-sm"
-                }
-              >
-                {t.label}
-              </button>
-            ))}
+    <div className="min-h-screen" style={derivedTheme}>
+      {!resolved ? (
+        <div className="w-full h-[60vh] flex items-center justify-center text-gray-500">
+          <div className="text-center">
+            <div className="text-2xl font-semibold mb-1">No bot selected</div>
+            <div className="text-sm">Provide a <code>?bot_id=…</code> or <code>?alias=…</code> in the URL.</div>
           </div>
         </div>
+      ) : (
+        <div
+          className="mx-auto mt-8 mb-10 rounded-2xl overflow-hidden"
+          style={{ width: CARD_W, height: CARD_H, boxShadow: "var(--shadow-elevation, 0 10px 30px rgba(0,0,0,.08))" }}
+        >
+          {/* Banner INSIDE the card, with centered tabs */}
+          <div className="bg-black text-white px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {brandAssets.logo_url ? (
+                  <img src={brandAssets.logo_url} alt="logo" className="h-8 w-auto" />
+                ) : (
+                  <div className="font-extrabold">DemoHAL</div>
+                )}
+              </div>
+              <div className="text-sm font-semibold" style={{ color: "#22c55e" }}>Ask the Assistant</div>
+            </div>
+            <div className="flex justify-center gap-2 pt-3">
+              {tabs.map((t) => (
+                <button key={t.key} onClick={() => setMode(t.key)} className={mode === t.key ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
-        {/* Body: scroll within fixed card */}
-        <div className="px-4 pb-4 overflow-auto" style={{ height: `calc(${CARD_H} - 6.5rem)` }}>
-          <div className="bg-[var(--card-bg,#ffffff)] text-[var(--message-fg,#111827)] rounded-xl p-3 shadow-sm">
-            <ContentOutlet />
-            {/* Footer divider + ask box */}
-            <div className="mt-3 pt-3 border-t border-[var(--border-color,#e5e7eb)] relative">
-              <textarea
-                ref={inputRef}
-                rows={1}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask your question here"
-                className="w-full resize-none rounded-lg border border-[var(--border-color,#e5e7eb)] bg-white/50 p-3 pr-12 focus:outline-none"
-              />
-              <button
-                type="button"
-                className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-[var(--send-color,#ef4444)] text-white grid place-items-center"
-                aria-label="Send"
-                title="Send"
-              >
-                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor"><path d="M12 2l5 20-5-3-5 3 5-20z"/></svg>
-              </button>
+          {/* Body: scroll within fixed card height */}
+          <div className="px-4 pb-4 overflow-auto" style={{ height: `calc(${CARD_H} - 6.5rem)` }}>
+            <div className={UI.CARD}>
+              {responseText ? (
+                <div className="text-base font-semibold whitespace-pre-line text-[var(--message-fg)]">{responseText}</div>
+              ) : null}
+              {showIntroVideo && introVideoUrl ? (
+                <div className="mt-3">
+                  <iframe
+                    title="intro"
+                    src={introVideoUrl}
+                    className="w-full aspect-video rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                  />
+                </div>
+              ) : null}
+
+              {/* Footer divider + ask box (1→3 lines) with centered send */}
+              <div className="mt-3 pt-3 border-t border-[var(--border-color,#e5e7eb)] relative">
+                <textarea
+                  ref={inputRef}
+                  rows={1}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Ask your question here"
+                  className={UI.FIELD + " pr-12"}
+                />
+                <button
+                  type="button"
+                  onClick={send}
+                  className="absolute right-2 top-1/2 -translate-y-1/2"
+                  aria-label="Send"
+                  title="Send"
+                >
+                  <ArrowUpCircleIcon className="h-8 w-8 text-[var(--send-color,#22c55e)]" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
