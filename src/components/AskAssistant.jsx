@@ -3,9 +3,9 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_THEME_VARS, inverseBW, UI, TabsNav } from "./AskAssistant/AskAssistant.ui";
-import ColorBox from "./AskAssistant/ColorBox";
-import DocIframe from "./AskAssistant/DocIframe";
-import DebugPanel from "./AskAssistant/DebugPanel";
+import ColorBox from "./AskAssistant/widgets/ColorBox";
+import DocIframe from "./AskAssistant/widgets/DocIframe";
+import DebugPanel from "./AskAssistant/widgets/DebugPanel";
 
 export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
