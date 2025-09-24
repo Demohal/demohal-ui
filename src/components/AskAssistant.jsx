@@ -20,9 +20,9 @@ export default function AskAssistant() {
   // Shell state
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [fatal, setFatal] = useState("");
-  const [mode, setMode] = useState("ask");
+  const [mode, setMode] = useState("browse"); // default to first tab layout
   const [input, setInput] = useState("");
-  const [responseText, setResponseText] = useState(""); // welcome text
+  const [responseText, setResponseText] = useState(""); // includes welcome text and answers
   const [loading, setLoading] = useState(false);
 
   // Intro video
@@ -58,7 +58,7 @@ export default function AskAssistant() {
   });
 
   // --------------------------
-  // Step 3: Form-capture state
+  // Form-capture (placeholder)
   // --------------------------
   const LS_KEY = "dh_form_v1";
   const [showForm, setShowForm] = useState(false);
@@ -66,6 +66,7 @@ export default function AskAssistant() {
   const [formErrors, setFormErrors] = useState({});
   const [formSubmitted, setFormSubmitted] = useState(false);
   const [pendingQuestion, setPendingQuestion] = useState("");
+  const [pendingTab, setPendingTab] = useState(null); // "browse" | "docs" | "price" | "meeting"
 
   // Load any saved form (once)
   useEffect(() => {
@@ -173,37 +174,28 @@ export default function AskAssistant() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  // Tabs: Ask only (others later). Clicking Ask triggers form the first time.
+  // Tabs (visible only; features added in later steps)
   const tabs = useMemo(
     () => [
-      {
-        key: "ask",
-        label: "Ask",
-        onClick: () => {
-          setMode("ask");
-          if (!formSubmitted) setShowForm(true);
-        },
-      },
+      { key: "browse", label: "Browse Demos" },
+      { key: "docs", label: "Browse Documents" },
+      { key: "price", label: "Price Estimate" },
+      { key: "meeting", label: "Schedule Meeting" },
     ],
-    [formSubmitted]
+    []
   );
 
-  // Validate + save form
-  function validateForm(f) {
-    const errs = {};
-    if (!f.name.trim()) errs.name = "Required";
-    if (!f.email.trim()) errs.email = "Required";
-    else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email)) errs.email = "Invalid";
-    return errs;
+  // When a tab is clicked, show form first (once), then switch
+  function onTabClick(nextMode) {
+    if (!formSubmitted) {
+      setPendingTab(nextMode);
+      setShowForm(true);
+      return;
     }
-  function saveForm(f) {
-    try {
-      localStorage.setItem(LS_KEY, JSON.stringify(f));
-    } catch {}
-    setFormSubmitted(true);
+    setMode(nextMode);
   }
 
-  // Actual send
+  // Ask logic (sends welcome/answers; attaches form if present)
   async function reallySend(q) {
     setLoading(true);
     setStage("ask:posting");
@@ -239,22 +231,18 @@ export default function AskAssistant() {
     }
   }
 
-  // Public send handler
-  async function sendMessage() {
+  function sendMessage() {
     const q = (input || "").trim();
     if (!q) return;
     if (!botId) {
       setFatal("Invalid or inactive alias.");
       return;
     }
-
-    // Gate on first send
     if (!formSubmitted) {
       setPendingQuestion(q);
       setShowForm(true);
       return;
     }
-
     reallySend(q);
   }
 
@@ -265,7 +253,20 @@ export default function AskAssistant() {
     }
   }
 
-  // Submit form
+  // Form handling
+  function validateForm(f) {
+    const errs = {};
+    if (!f.name.trim()) errs.name = "Required";
+    if (!f.email.trim()) errs.email = "Required";
+    else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email)) errs.email = "Invalid";
+    return errs;
+  }
+  function saveForm(f) {
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(f));
+    } catch {}
+    setFormSubmitted(true);
+  }
   function submitForm(e) {
     e?.preventDefault?.();
     const errs = validateForm(form);
@@ -274,10 +275,15 @@ export default function AskAssistant() {
     saveForm(form);
     setShowForm(false);
 
+    // Continue pending action
     if (pendingQuestion) {
       const q = pendingQuestion;
       setPendingQuestion("");
       reallySend(q);
+    } else if (pendingTab) {
+      const t = pendingTab;
+      setPendingTab(null);
+      setMode(t);
     }
   }
 
@@ -315,7 +321,13 @@ export default function AskAssistant() {
 
       {/* Tabs */}
       <div className="max-w-5xl mx-auto mt-2">
-        <TabsNav mode={mode} tabs={tabs} />
+        <TabsNav
+          mode={mode}
+          tabs={tabs.map((t) => ({
+            ...t,
+            onClick: () => onTabClick(t.key),
+          }))}
+        />
       </div>
 
       {/* Body: Welcome + optional video + Ask box */}
@@ -327,7 +339,7 @@ export default function AskAssistant() {
           </div>
         ) : (
           <div className={UI.CARD}>
-            {/* Welcome text */}
+            {/* Welcome / Response */}
             {responseText ? (
               <div className="text-base whitespace-pre-line text-[var(--message-fg)]">{responseText}</div>
             ) : null}
@@ -421,6 +433,7 @@ export default function AskAssistant() {
                   onClick={() => {
                     setShowForm(false);
                     setPendingQuestion("");
+                    setPendingTab(null);
                   }}
                 >
                   Cancel
