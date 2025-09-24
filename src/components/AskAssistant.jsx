@@ -89,6 +89,9 @@ export default function AskAssistant() {
   // Selection for inline views
   const [selectedDoc, setSelectedDoc] = useState(null);
 
+  // Meeting
+  const [agents, setAgents] = useState([]);
+
   // Helpers to include identity headers
   const idHeaders = useMemo(
     () => ({
@@ -258,7 +261,7 @@ export default function AskAssistant() {
     }
   }
 
-  // ---- Load demos/docs (correct endpoints)
+  // Load demos/docs
   useEffect(() => {
     if (!botId || !tabsEnabled.demos) return;
     setStage("fetch:demos");
@@ -284,6 +287,18 @@ export default function AskAssistant() {
       })
       .catch(() => { setBrowseDocs([]); setStage("warn:docs"); });
   }, [botId, tabsEnabled.docs, apiBase, idHeaders]);
+
+  // Load agents (meeting)
+  useEffect(() => {
+    if (!botId || !tabsEnabled.meeting) return;
+    fetch(`${apiBase}/agents?bot_id=${encodeURIComponent(botId)}`, { headers: { ...idHeaders } })
+      .then(r => r.json())
+      .then(data => {
+        const list = Array.isArray(data) ? data : (data.items || data.agents || data.rows || data.data || []);
+        setAgents(list || []);
+      })
+      .catch(() => setAgents([]));
+  }, [botId, tabsEnabled.meeting, apiBase, idHeaders]);
 
   return (
     <div className="min-h-screen" style={liveTheme}>
@@ -393,6 +408,19 @@ export default function AskAssistant() {
                   ))
                 )}
               </div>
+            )}
+          </div>
+        ) : mode === "meeting" ? (
+          <div className="grid gap-3">
+            {agents.length === 0 ? (
+              <div className={UI.CARD}>No agents available.</div>
+            ) : (
+              agents.map((a) => (
+                <a key={a.id} href={a.meeting_url} target="_blank" rel="noreferrer" className={UI.CARD}>
+                  <div className="font-bold">{a.name}</div>
+                  <div className="text-sm opacity-80">{a.title || ""}</div>
+                </a>
+              ))
             )}
           </div>
         ) : (
