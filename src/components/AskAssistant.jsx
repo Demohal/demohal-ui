@@ -292,7 +292,7 @@ export default function AskAssistant() {
   // Load agents (meeting)
   useEffect(() => {
     if (!botId || !tabsEnabled.meeting) return;
-    fetch(`${apiBase}/agents?bot_id=${encodeURIComponent(botId)}`, { headers: { ...idHeaders } })
+    fetch(`${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`, { headers: { ...idHeaders } })
       .then(r => r.json())
       .then(data => {
         const list = Array.isArray(data) ? data : (data.items || data.agents || data.rows || data.data || []);
