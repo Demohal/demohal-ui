@@ -17,12 +17,12 @@ export default function AskAssistant() {
   }, []);
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
 
-  // Shell state
+  // Core state
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [fatal, setFatal] = useState("");
-  const [mode, setMode] = useState("browse"); // default to first tab layout
+  const [mode, setMode] = useState("browse"); // tabs switch this
   const [input, setInput] = useState("");
-  const [responseText, setResponseText] = useState(""); // includes welcome text and answers
+  const [responseText, setResponseText] = useState(""); // welcome + answers
   const [loading, setLoading] = useState(false);
 
   // Intro video
@@ -57,9 +57,7 @@ export default function AskAssistant() {
     logo_dark_url: null,
   });
 
-  // --------------------------
-  // Form-capture (placeholder)
-  // --------------------------
+  // -------- Form-capture (placeholder) --------
   const LS_KEY = "dh_form_v1";
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", company: "" });
@@ -68,7 +66,6 @@ export default function AskAssistant() {
   const [pendingQuestion, setPendingQuestion] = useState("");
   const [pendingTab, setPendingTab] = useState(null); // "browse" | "docs" | "price" | "meeting"
 
-  // Load any saved form (once)
   useEffect(() => {
     try {
       const raw = localStorage.getItem(LS_KEY);
@@ -82,10 +79,9 @@ export default function AskAssistant() {
     } catch {}
   }, []);
 
-  // ---- Resolve bot (alias or bot_id) ----
+  // ---- Resolve bot ----
   useEffect(() => {
     let cancel = false;
-
     async function loadBy(u) {
       setStage("fetch:bot-settings");
       const res = await fetch(u);
@@ -93,49 +89,28 @@ export default function AskAssistant() {
       if (cancel) return;
 
       if (!res.ok || data?.ok === false || !data?.bot?.id) {
-        setFatal("Invalid or inactive alias.");
-        setStage("fatal");
-        return;
+        setFatal("Invalid or inactive alias."); setStage("fatal"); return;
       }
-
-      setVisitorId(data.visitor_id || "");
-      setSessionId(data.session_id || "");
+      setVisitorId(data.visitor_id || ""); setSessionId(data.session_id || "");
 
       const b = data.bot || {};
       setResponseText(b.welcome_message || "");
-      setIntroVideoUrl(b.intro_video_url || "");
-      setShowIntroVideo(!!b.show_intro_video);
+      setIntroVideoUrl(b.intro_video_url || ""); setShowIntroVideo(!!b.show_intro_video);
 
-      setBotId(b.id);
-      setFatal("");
-      setStage("ok:botId");
+      setBotId(b.id); setFatal(""); setStage("ok:botId");
     }
-
     (async () => {
       try {
-        if (botIdFromUrl) {
-          await loadBy(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botIdFromUrl)}`);
-          return;
-        }
+        if (botIdFromUrl) { await loadBy(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botIdFromUrl)}`); return; }
         const useAlias = alias || defaultAlias;
-        if (!useAlias) {
-          setFatal("Invalid or inactive alias.");
-          setStage("fatal");
-          return;
-        }
+        if (!useAlias) { setFatal("Invalid or inactive alias."); setStage("fatal"); return; }
         await loadBy(`${apiBase}/bot-settings?alias=${encodeURIComponent(useAlias)}`);
-      } catch {
-        setFatal("Invalid or inactive alias.");
-        setStage("fatal");
-      }
+      } catch { setFatal("Invalid or inactive alias."); setStage("fatal"); }
     })();
-
-    return () => {
-      cancel = true;
-    };
+    return () => { cancel = true; };
   }, [apiBase, alias, botIdFromUrl, defaultAlias]);
 
-  // ---- Brand (CSS vars + assets) ----
+  // ---- Brand ----
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
@@ -147,7 +122,7 @@ export default function AskAssistant() {
         if (cancel) return;
 
         if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
-          setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
+          setThemeVars((p) => ({ ...p, ...data.css_vars }));
         }
         if (data?.ok && data?.assets) {
           setBrandAssets({
@@ -157,24 +132,18 @@ export default function AskAssistant() {
           });
         }
         setStage("ok:brand");
-      } catch {
-        setStage("warn:brand");
-      }
+      } catch { setStage("warn:brand"); }
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => { cancel = true; };
   }, [botId, apiBase]);
 
-  // Autosize ask box
+  // Autosize
   useEffect(() => {
-    const el = inputRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
+    const el = inputRef.current; if (!el) return;
+    el.style.height = "auto"; el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  // Tabs (visible only; features added in later steps)
+  // Tabs (visible & wired)
   const tabs = useMemo(
     () => [
       { key: "browse", label: "Browse Demos" },
@@ -184,21 +153,14 @@ export default function AskAssistant() {
     ],
     []
   );
-
-  // When a tab is clicked, show form first (once), then switch
   function onTabClick(nextMode) {
-    if (!formSubmitted) {
-      setPendingTab(nextMode);
-      setShowForm(true);
-      return;
-    }
+    if (!formSubmitted) { setPendingTab(nextMode); setShowForm(true); return; }
     setMode(nextMode);
   }
 
-  // Ask logic (sends welcome/answers; attaches form if present)
+  // Send
   async function reallySend(q) {
-    setLoading(true);
-    setStage("ask:posting");
+    setLoading(true); setStage("ask:posting");
     try {
       const res = await fetch(`${apiBase}/demo-hal`, {
         method: "POST",
@@ -212,48 +174,21 @@ export default function AskAssistant() {
         }),
       });
       const data = await res.json().catch(() => ({}));
-      const text =
-        data?.response_text ||
-        data?.answer?.text ||
-        data?.message ||
-        data?.text ||
-        data?.error ||
-        "OK.";
+      const text = data?.response_text || data?.answer?.text || data?.message || data?.text || data?.error || "OK.";
       setResponseText(String(text || "").trim());
       setStage(res.ok ? "ask:ok" : "ask:error");
-    } catch {
-      setResponseText("Network error.");
-      setStage("ask:network-error");
-    } finally {
-      setLoading(false);
-      setInput("");
-      setTimeout(() => inputRef.current?.focus(), 0);
-    }
+    } catch { setResponseText("Network error."); setStage("ask:network-error"); }
+    finally { setLoading(false); setInput(""); setTimeout(() => inputRef.current?.focus(), 0); }
   }
-
   function sendMessage() {
-    const q = (input || "").trim();
-    if (!q) return;
-    if (!botId) {
-      setFatal("Invalid or inactive alias.");
-      return;
-    }
-    if (!formSubmitted) {
-      setPendingQuestion(q);
-      setShowForm(true);
-      return;
-    }
+    const q = (input || "").trim(); if (!q) return;
+    if (!botId) { setFatal("Invalid or inactive alias."); return; }
+    if (!formSubmitted) { setPendingQuestion(q); setShowForm(true); return; }
     reallySend(q);
   }
+  function onKeyDown(e) { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); sendMessage(); } }
 
-  function onKeyDown(e) {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-      e.preventDefault();
-      sendMessage();
-    }
-  }
-
-  // Form handling
+  // Form helpers
   function validateForm(f) {
     const errs = {};
     if (!f.name.trim()) errs.name = "Required";
@@ -262,53 +197,28 @@ export default function AskAssistant() {
     return errs;
   }
   function saveForm(f) {
-    try {
-      localStorage.setItem(LS_KEY, JSON.stringify(f));
-    } catch {}
+    try { localStorage.setItem(LS_KEY, JSON.stringify(f)); } catch {}
     setFormSubmitted(true);
   }
   function submitForm(e) {
     e?.preventDefault?.();
-    const errs = validateForm(form);
-    setFormErrors(errs);
+    const errs = validateForm(form); setFormErrors(errs);
     if (Object.keys(errs).length) return;
-    saveForm(form);
-    setShowForm(false);
-
-    // Continue pending action
-    if (pendingQuestion) {
-      const q = pendingQuestion;
-      setPendingQuestion("");
-      reallySend(q);
-    } else if (pendingTab) {
-      const t = pendingTab;
-      setPendingTab(null);
-      setMode(t);
-    }
+    saveForm(form); setShowForm(false);
+    if (pendingQuestion) { const q = pendingQuestion; setPendingQuestion(""); reallySend(q); }
+    else if (pendingTab) { const t = pendingTab; setPendingTab(null); setMode(t); }
   }
 
   return (
     <div className="min-h-screen" style={derivedTheme}>
-      {/* Stage pill */}
-      <div
-        style={{
-          position: "fixed",
-          right: 8,
-          top: 8,
-          zIndex: 9999,
-          background: "#000",
-          color: "#fff",
-          padding: "4px 8px",
-          borderRadius: 6,
-          fontSize: 12,
-        }}
-      >
+      {/* Stage */}
+      <div style={{ position: "fixed", right: 8, top: 8, zIndex: 9999, background: "#000", color: "#fff", padding: "4px 8px", borderRadius: 6, fontSize: 12 }}>
         Stage: {stage || "-"}
       </div>
 
-      {/* Banner */}
-      <div className="w-full p-4" style={{ background: "var(--banner-bg)", color: "var(--banner-fg)" }}>
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
+      {/* Containerized banner */}
+      <div className="w-full" style={{ background: "var(--banner-bg)", color: "var(--banner-fg)" }}>
+        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             {brandAssets.logo_url ? (
               <img src={brandAssets.logo_url} alt="logo" className="h-8 w-auto" />
@@ -316,22 +226,22 @@ export default function AskAssistant() {
               <div className="font-extrabold">DemoHAL</div>
             )}
           </div>
+          <div className="text-sm font-semibold" style={{ color: "#22c55e" }}>
+            Ask the Assistant
+          </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="max-w-5xl mx-auto mt-2">
+      {/* Tabs inside container */}
+      <div className="max-w-3xl mx-auto px-4 mt-3">
         <TabsNav
           mode={mode}
-          tabs={tabs.map((t) => ({
-            ...t,
-            onClick: () => onTabClick(t.key),
-          }))}
+          tabs={tabs.map((t) => ({ ...t, onClick: () => onTabClick(t.key) }))}
         />
       </div>
 
-      {/* Body: Welcome + optional video + Ask box */}
-      <div className="max-w-5xl mx-auto px-4 py-4">
+      {/* Body (inside same container width) */}
+      <div className="max-w-3xl mx-auto px-4 py-4">
         {fatal ? (
           <div className={UI.CARD} style={{ border: "1px solid #ef4444" }}>
             <div className="font-bold text-red-600">Error</div>
@@ -341,7 +251,9 @@ export default function AskAssistant() {
           <div className={UI.CARD}>
             {/* Welcome / Response */}
             {responseText ? (
-              <div className="text-base whitespace-pre-line text-[var(--message-fg)]">{responseText}</div>
+              <div className="text-base whitespace-pre-line text-[var(--message-fg)]">
+                {responseText}
+              </div>
             ) : null}
 
             {/* Intro video */}
@@ -357,23 +269,25 @@ export default function AskAssistant() {
               </div>
             ) : null}
 
-            {/* Ask box */}
-            <div className="mt-3 flex gap-2 items-start">
+            {/* Ask row with circular send button */}
+            <div className="mt-3 flex items-stretch gap-2">
               <textarea
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={onKeyDown}
-                placeholder="Ask a question (Cmd/Ctrl+Enter to send)"
+                placeholder="Ask your question here"
                 className={UI.FIELD}
               />
               <button
-                className={UI.BTN_DOC}
+                type="button"
+                className={UI.BTN_SEND}
                 onClick={sendMessage}
                 disabled={loading || !input.trim()}
-                title={loading ? "Sending..." : "Send"}
+                title="Send"
+                aria-label="Send"
               >
-                {loading ? "Sending…" : "Send"}
+                ↗
               </button>
             </div>
           </div>
