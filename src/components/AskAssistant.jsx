@@ -13,9 +13,9 @@ import {
 } from "./AskAssistant/AskAssistant.ui";
 
 // Small leaf components (used later but safe to import now)
-import DocIframe from "./AskAssistant/DocIframe";
-import ColorBox from "./AskAssistant/ColorBox";
-import DebugPanel from "./AskAssistant/DebugPanel";
+import DocIframe from "./AskAssistant/widgets/DocIframe";
+import ColorBox from "./AskAssistant/widgets/ColorBox";
+import DebugPanel from "./AskAssistant/widgets/DebugPanel";
 
 // ---------------------------------------------
 // AskAssistant (shell only — same layout/order)
