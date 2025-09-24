@@ -1,23 +1,26 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_THEME_VARS, inverseBW, UI, TabsNav } from "./AskAssistant/AskAssistant.ui";
+import ColorBox from "./AskAssistant/widgets/ColorBox";
 
 export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-  // Debug
-  const [stage, setStage] = useState("boot");
-
-  // URL args
-  const { alias, botIdFromUrl } = useMemo(() => {
+  // --- URL args ---
+  const { alias, botIdFromUrl, themeLabOn } = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
+    const th = (qs.get("themelab") || "").trim();
     return {
       alias: (qs.get("alias") || qs.get("alais") || "").trim(),
       botIdFromUrl: (qs.get("bot_id") || "").trim(),
+      themeLabOn: th === "1" || th.toLowerCase() === "true",
     };
   }, []);
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
 
-  // Core state
+  // --- Debug stage ---
+  const [stage, setStage] = useState("boot");
+
+  // --- Core state ---
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [fatal, setFatal] = useState("");
   const [mode, setMode] = useState("browse"); // tabs switch this
@@ -25,14 +28,14 @@ export default function AskAssistant() {
   const [responseText, setResponseText] = useState(""); // welcome + answers
   const [loading, setLoading] = useState(false);
 
-  // Intro video
+  // --- Intro video ---
   const [introVideoUrl, setIntroVideoUrl] = useState("");
   const [showIntroVideo, setShowIntroVideo] = useState(false);
 
-  // Refs
+  // --- Refs ---
   const inputRef = useRef(null);
 
-  // Identity
+  // --- Identity ---
   const [visitorId, setVisitorId] = useState("");
   const [sessionId, setSessionId] = useState("");
   const idHeaders = useMemo(
@@ -43,14 +46,14 @@ export default function AskAssistant() {
     [sessionId, visitorId]
   );
 
-  // Theme
+  // --- Theme ---
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
   const derivedTheme = useMemo(() => {
     const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
     return { ...themeVars, "--tab-active-fg": activeFg };
   }, [themeVars]);
 
-  // Brand
+  // --- Brand ---
   const [brandAssets, setBrandAssets] = useState({
     logo_url: null,
     logo_light_url: null,
@@ -143,7 +146,7 @@ export default function AskAssistant() {
     el.style.height = "auto"; el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  // Tabs (visible & wired)
+  // Tabs (wired)
   const tabs = useMemo(
     () => [
       { key: "browse", label: "Browse Demos" },
@@ -211,14 +214,15 @@ export default function AskAssistant() {
 
   return (
     <div className="min-h-screen" style={derivedTheme}>
-      {/* Stage */}
+      {/* Stage pill */}
       <div style={{ position: "fixed", right: 8, top: 8, zIndex: 9999, background: "#000", color: "#fff", padding: "4px 8px", borderRadius: 6, fontSize: 12 }}>
         Stage: {stage || "-"}
       </div>
 
-      {/* Containerized banner */}
-      <div className="w-full" style={{ background: "var(--banner-bg)", color: "var(--banner-fg)" }}>
-        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between">
+      {/* Centered, fixed-width container with rounded corners */}
+      <div className="max-w-3xl mx-auto mt-8 mb-10 rounded-2xl overflow-hidden" style={{ boxShadow: "var(--shadow-elevation, 0 10px 30px rgba(0,0,0,.08))" }}>
+        {/* Banner inside container */}
+        <div className="bg-black text-white px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             {brandAssets.logo_url ? (
               <img src={brandAssets.logo_url} alt="logo" className="h-8 w-auto" />
@@ -230,69 +234,82 @@ export default function AskAssistant() {
             Ask the Assistant
           </div>
         </div>
-      </div>
 
-      {/* Tabs inside container */}
-      <div className="max-w-3xl mx-auto px-4 mt-3">
-        <TabsNav
-          mode={mode}
-          tabs={tabs.map((t) => ({ ...t, onClick: () => onTabClick(t.key) }))}
-        />
-      </div>
+        {/* Tabs row */}
+        <div className="px-4 pt-3">
+          <TabsNav
+            mode={mode}
+            tabs={tabs.map((t) => ({ ...t, onClick: () => onTabClick(t.key) }))}
+          />
+        </div>
 
-      {/* Body (inside same container width) */}
-      <div className="max-w-3xl mx-auto px-4 py-4">
-        {fatal ? (
-          <div className={UI.CARD} style={{ border: "1px solid #ef4444" }}>
-            <div className="font-bold text-red-600">Error</div>
-            <div>{fatal}</div>
-          </div>
-        ) : (
-          <div className={UI.CARD}>
-            {/* Welcome / Response */}
-            {responseText ? (
-              <div className="text-base whitespace-pre-line text-[var(--message-fg)]">
-                {responseText}
-              </div>
-            ) : null}
-
-            {/* Intro video */}
-            {showIntroVideo && introVideoUrl ? (
-              <div className="mt-3">
-                <iframe
-                  title="intro"
-                  src={introVideoUrl}
-                  className="w-full aspect-video rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                />
-              </div>
-            ) : null}
-
-            {/* Ask row with circular send button */}
-            <div className="mt-3 flex items-stretch gap-2">
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={onKeyDown}
-                placeholder="Ask your question here"
-                className={UI.FIELD}
-              />
-              <button
-                type="button"
-                className={UI.BTN_SEND}
-                onClick={sendMessage}
-                disabled={loading || !input.trim()}
-                title="Send"
-                aria-label="Send"
-              >
-                ↗
-              </button>
+        {/* Body */}
+        <div className="px-4 pb-4">
+          {fatal ? (
+            <div className={UI.CARD} style={{ border: "1px solid #ef4444" }}>
+              <div className="font-bold text-red-600">Error</div>
+              <div>{fatal}</div>
             </div>
-          </div>
-        )}
+          ) : (
+            <div className={UI.CARD}>
+              {/* Welcome / Response */}
+              {responseText ? (
+                <div className="text-base whitespace-pre-line text-[var(--message-fg)]">
+                  {responseText}
+                </div>
+              ) : null}
+
+              {/* Intro video */}
+              {showIntroVideo && introVideoUrl ? (
+                <div className="mt-3">
+                  <iframe
+                    title="intro"
+                    src={introVideoUrl}
+                    className="w-full aspect-video rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                  />
+                </div>
+              ) : null}
+
+              {/* Ask field with green up-arrow INSIDE the box (absolute) */}
+              <div className="mt-3 relative">
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={onKeyDown}
+                  placeholder="Ask your question here"
+                  className={UI.FIELD + " pr-12"} // space for the button
+                />
+                <button
+                  type="button"
+                  className={UI.BTN_SEND + " !absolute !right-2 !top-1/2 -translate-y-1/2"}
+                  onClick={sendMessage}
+                  disabled={loading || !input.trim()}
+                  title="Send"
+                  aria-label="Send"
+                >
+                  ↗
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Themelab (URL: ?themelab=1) */}
+      {themeLabOn ? (
+        <ColorBox
+          apiBase={apiBase}
+          botId={botId}
+          frameRef={{ current: null }}
+          onVars={(vars) => {
+            // live preview by overriding theme vars
+            setThemeVars((prev) => ({ ...prev, ...vars }));
+          }}
+        />
+      ) : null}
 
       {/* Form Modal */}
       {showForm ? (
