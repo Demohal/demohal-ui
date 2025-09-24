@@ -1,14 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   DEFAULT_THEME_VARS,
-  classNames,
   inverseBW,
   UI,
-  Row,
-  OptionButton,
   PriceMirror,
   EstimateCard,
-  normalizeOptions,
   QuestionBlock,
   TabsNav,
 } from "./AskAssistant/AskAssistant.ui";
@@ -19,10 +15,9 @@ import DebugPanel from "./AskAssistant/widgets/DebugPanel";
 export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-  // --- DEBUG STAGE ---
   const [stage, setStage] = useState("boot");
 
-  // URL
+  // URL args
   const { alias, botIdFromUrl, themeLabOn } = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     return {
@@ -40,16 +35,13 @@ export default function AskAssistant() {
   const [fatal, setFatal] = useState("");
   const [mode, setMode] = useState("ask");
   const [input, setInput] = useState("");
-  const [lastQuestion, setLastQuestion] = useState("");
   const [responseText, setResponseText] = useState("");
   const [debugInfo, setDebugInfo] = useState(null);
   const [loading, setLoading] = useState(false);
 
   // Refs
-  const contentRef = useRef(null);
   const inputRef = useRef(null);
   const frameRef = useRef(null);
-  const priceScrollRef = useRef(null);
 
   // Identity
   const [visitorId, setVisitorId] = useState("");
@@ -62,10 +54,7 @@ export default function AskAssistant() {
     return { ...themeVars, "--tab-active-fg": activeFg };
   }, [themeVars]);
   const [pickerVars, setPickerVars] = useState({});
-  const liveTheme = useMemo(
-    () => ({ ...derivedTheme, ...pickerVars }),
-    [derivedTheme, pickerVars]
-  );
+  const liveTheme = useMemo(() => ({ ...derivedTheme, ...pickerVars }), [derivedTheme, pickerVars]);
 
   // Brand
   const [brandAssets, setBrandAssets] = useState({
@@ -76,7 +65,7 @@ export default function AskAssistant() {
   const initialBrandReady = useMemo(() => !(botIdFromUrl || alias), [botIdFromUrl, alias]);
   const [brandReady, setBrandReady] = useState(initialBrandReady);
 
-  // Tabs (from bot flags)
+  // Tabs
   const [tabsEnabled, setTabsEnabled] = useState({
     demos: false,
     docs: false,
@@ -84,25 +73,32 @@ export default function AskAssistant() {
     price: false,
   });
 
-  // Pricing (stubbed)
+  // Pricing (stubs)
   const [pricingCopy, setPricingCopy] = useState({ intro: "", outro: "", custom_notice: "" });
-  const [priceQuestions, setPriceQuestions] = useState([]);
-  const [priceAnswers, setPriceAnswers] = useState({});
-  const [priceEstimate, setPriceEstimate] = useState(null);
-  const [priceBusy, setPriceBusy] = useState(false);
-  const [priceErr, setPriceErr] = useState("");
-  const mirrorLines = useMemo(() => [], []);
-  const nextPriceQuestion = useMemo(() => null, []);
+  const [priceAnswers] = useState({});
+  const [priceEstimate] = useState(null);
 
-  // Intro video
+  // Intro
   const [introVideoUrl, setIntroVideoUrl] = useState("");
   const [showIntroVideo, setShowIntroVideo] = useState(false);
 
   // Browse data
   const [browseItems, setBrowseItems] = useState([]); // demos
-  const [browseDocs, setBrowseDocs] = useState([]);   // documents
+  const [browseDocs, setBrowseDocs] = useState([]);   // docs
 
-  // ---- Init: resolve bot by alias / bot_id ----
+  // Selection for inline views
+  const [selectedDoc, setSelectedDoc] = useState(null);
+
+  // Helpers to include identity headers
+  const idHeaders = useMemo(
+    () => ({
+      ...(sessionId ? { "X-Session-Id": sessionId } : {}),
+      ...(visitorId ? { "X-Visitor-Id": visitorId } : {}),
+    }),
+    [sessionId, visitorId]
+  );
+
+  // Resolve bot
   useEffect(() => {
     let cancel = false;
 
@@ -166,7 +162,7 @@ export default function AskAssistant() {
     return () => { cancel = true; };
   }, [apiBase, alias, botIdFromUrl, defaultAlias]);
 
-  // Brand load
+  // Brand
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
@@ -196,7 +192,7 @@ export default function AskAssistant() {
     return () => { cancel = true; };
   }, [botId, apiBase]);
 
-  // Autosize input
+  // Autosize textarea
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
@@ -204,17 +200,17 @@ export default function AskAssistant() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  // Build tabs list from flags
+  // Tabs list
   const tabs = useMemo(() => {
     const t = [];
-    if (tabsEnabled.demos) t.push({ key: "demos", label: "Browse Demos", onClick: () => setMode("browse") });
-    if (tabsEnabled.docs) t.push({ key: "docs", label: "Browse Documents", onClick: () => setMode("docs") });
+    if (tabsEnabled.demos) t.push({ key: "demos", label: "Browse Demos", onClick: () => { setMode("browse"); setSelectedDoc(null);} });
+    if (tabsEnabled.docs) t.push({ key: "docs", label: "Browse Documents", onClick: () => { setMode("docs"); setSelectedDoc(null);} });
     if (tabsEnabled.price) t.push({ key: "price", label: "Price", onClick: () => setMode("price") });
     if (tabsEnabled.meeting) t.push({ key: "meeting", label: "Schedule Meeting", onClick: () => setMode("meeting") });
     return t.length ? t : [{ key: "ask", label: "Ask", onClick: () => setMode("ask") }];
   }, [tabsEnabled]);
 
-  // ---------- ASK FLOW (POST /demo-hal) ----------
+  // Send question (/demo-hal)
   async function sendMessage() {
     const q = (input || "").trim();
     if (!q) return;
@@ -222,24 +218,13 @@ export default function AskAssistant() {
 
     setLoading(true);
     setStage("ask:posting");
-    setLastQuestion(q);
 
     try {
       const res = await fetch(`${apiBase}/demo-hal`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(sessionId ? { "X-Session-Id": sessionId } : {}),
-          ...(visitorId ? { "X-Visitor-Id": visitorId } : {}),
-        },
-        body: JSON.stringify({
-          bot_id: botId,
-          user_question: q,
-          debug: true,
-          scope: "standard",
-        }),
+        headers: { "Content-Type": "application/json", ...idHeaders },
+        body: JSON.stringify({ bot_id: botId, user_question: q, debug: true, scope: "standard" }),
       });
-
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data?.ok === false) {
         setResponseText(data?.error || "Sorry—something went wrong.");
@@ -273,44 +258,32 @@ export default function AskAssistant() {
     }
   }
 
-  // ---- helper to normalize list payloads (array or object containers)
-  function extractList(data) {
-    if (!data) return [];
-    if (Array.isArray(data)) return data;
-    const keys = ["items", "rows", "data", "demos", "documents", "docs", "list"];
-    for (const k of keys) {
-      const v = data?.[k];
-      if (Array.isArray(v)) return v;
-    }
-    return [];
-  }
-
-  // --------- LOAD DEMOS/DOCS ----------
+  // ---- Load demos/docs (correct endpoints)
   useEffect(() => {
     if (!botId || !tabsEnabled.demos) return;
     setStage("fetch:demos");
-    fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`)
+    fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`, { headers: { ...idHeaders } })
       .then(r => r.json())
-      .then((data) => {
-        const list = extractList(data);
-        setBrowseItems(list);
-        setStage(`ok:demos:${list.length}`);
+      .then(data => {
+        const list = Array.isArray(data) ? data : (data.items || data.demos || data.rows || data.data || []);
+        setBrowseItems(list || []);
+        setStage(`ok:demos:${(list || []).length}`);
       })
       .catch(() => { setBrowseItems([]); setStage("warn:demos"); });
-  }, [botId, tabsEnabled.demos, apiBase]);
+  }, [botId, tabsEnabled.demos, apiBase, idHeaders]);
 
   useEffect(() => {
     if (!botId || !tabsEnabled.docs) return;
     setStage("fetch:docs");
-    fetch(`${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`)
+    fetch(`${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`, { headers: { ...idHeaders } })
       .then(r => r.json())
-      .then((data) => {
-        const list = extractList(data);
-        setBrowseDocs(list);
-        setStage(`ok:docs:${list.length}`);
+      .then(data => {
+        const list = Array.isArray(data) ? data : (data.items || data.documents || data.docs || data.rows || data.data || []);
+        setBrowseDocs(list || []);
+        setStage(`ok:docs:${(list || []).length}`);
       })
       .catch(() => { setBrowseDocs([]); setStage("warn:docs"); });
-  }, [botId, tabsEnabled.docs, apiBase]);
+  }, [botId, tabsEnabled.docs, apiBase, idHeaders]);
 
   return (
     <div className="min-h-screen" style={liveTheme}>
@@ -346,10 +319,8 @@ export default function AskAssistant() {
           </div>
         ) : mode === "ask" ? (
           <div className={UI.CARD}>
-            {/* Welcome copy */}
             <div className="text-base whitespace-pre-line text-[var(--message-fg)]">{responseText}</div>
 
-            {/* Intro video */}
             {showIntroVideo && introVideoUrl ? (
               <div className="mt-3">
                 <iframe
@@ -362,7 +333,6 @@ export default function AskAssistant() {
               </div>
             ) : null}
 
-            {/* Ask box */}
             <div className="mt-3 flex gap-2 items-start">
               <textarea
                 ref={inputRef}
@@ -390,53 +360,60 @@ export default function AskAssistant() {
         ) : mode === "price" ? (
           <div className="space-y-3">
             <PriceMirror lines={[]} />
-            {nextPriceQuestion ? (
-              <QuestionBlock q={nextPriceQuestion} value={priceAnswers?.[nextPriceQuestion?.q_key]} onPick={() => {}} />
-            ) : (
-              <EstimateCard estimate={priceEstimate} outroText={pricingCopy?.outro || ""} />
-            )}
+            <EstimateCard estimate={priceEstimate} outroText={pricingCopy?.outro || ""} />
           </div>
-        ) : (
-          <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
-            {mode === "browse" && (
-              <div className="grid gap-3">
-                {browseItems.length === 0 ? (
-                  <div className={UI.CARD}>No demos yet.</div>
-                ) : (
-                  browseItems.map((d) => (
-                    <a key={d.id} href={d.url} target="_blank" rel="noreferrer" className={UI.CARD}>
-                      <div className="font-bold">{d.title}</div>
-                      <div className="text-sm opacity-80">{d.description}</div>
-                    </a>
-                  ))
-                )}
+        ) : mode === "docs" ? (
+          <div className="flex flex-col gap-4">
+            {selectedDoc ? (
+              <div className={UI.CARD}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="font-bold">{selectedDoc.title}</div>
+                  <div className="flex gap-2">
+                    <a href={selectedDoc.url} target="_blank" rel="noreferrer" className={UI.BTN_DOC}>Open in new tab</a>
+                    <button className={UI.BTN_DOC} onClick={() => setSelectedDoc(null)}>Back</button>
+                  </div>
+                </div>
+                <DocIframe url={selectedDoc.url} />
               </div>
-            )}
-            {mode === "docs" && (
+            ) : (
               <div className="grid gap-3">
                 {browseDocs.length === 0 ? (
                   <div className={UI.CARD}>No documents yet.</div>
                 ) : (
                   browseDocs.map((doc) => (
-                    <a key={doc.id} href={doc.url} target="_blank" rel="noreferrer" className={UI.CARD}>
-                      <div className="font-bold">{doc.title}</div>
-                      <div className="text-sm opacity-80">{doc.description}</div>
-                    </a>
+                    <button
+                      key={doc.id}
+                      className={UI.CARD}
+                      onClick={() => setSelectedDoc(doc)}
+                      title="View"
+                    >
+                      <div className="font-bold text-left">{doc.title}</div>
+                      <div className="text-sm opacity-80 text-left">{doc.description}</div>
+                    </button>
                   ))
                 )}
               </div>
             )}
-            {mode !== "browse" && mode !== "docs" && (
-              <div className={UI.CARD}>
-                <div className="text-sm text-[var(--helper-fg)]">Other modes will render here.</div>
-              </div>
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            {browseItems.length === 0 ? (
+              <div className={UI.CARD}>No demos yet.</div>
+            ) : (
+              browseItems.map((d) => (
+                <a key={d.id} href={d.url} target="_blank" rel="noreferrer" className={UI.CARD}>
+                  <div className="font-bold">{d.title}</div>
+                  <div className="text-sm opacity-80">{d.description}</div>
+                </a>
+              ))
             )}
           </div>
         )}
       </div>
 
-      {/* ThemeLab */}
-      {themeLabOn ? <ColorBox apiBase={apiBase} botId={botId} frameRef={frameRef} onVars={setPickerVars} /> : null}
+      {themeLabOn ? (
+        <ColorBox apiBase={apiBase} botId={botId} frameRef={frameRef} onVars={setPickerVars} />
+      ) : null}
     </div>
   );
 }
