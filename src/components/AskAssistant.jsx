@@ -5,9 +5,9 @@ import {
   inverseBW,
   UI,
 } from "./AskAssistant/AskAssistant.ui";
-import DocIframe from "./AskAssistant/widgets/DocIframe";
-import ColorBox from "./AskAssistant/widgets/ColorBox";
-import DebugPanel from "./AskAssistant/widgets/DebugPanel";
+import DocIframe from "./AskAssistant/DocIframe";
+import ColorBox from "./AskAssistant/ColorBox";
+import DebugPanel from "./AskAssistant/DebugPanel";
 
 export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
@@ -27,8 +27,7 @@ export default function AskAssistant() {
   // Core state
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [fatal, setFatal] = useState("");
-  const [resolved, setResolved] = useState(false); // nothing renders until true
-
+  const [resolved, setResolved] = useState(false); // gate render
   const [mode, setMode] = useState("ask");
   const [input, setInput] = useState("");
   const [responseText, setResponseText] = useState("");
@@ -48,12 +47,12 @@ export default function AskAssistant() {
   // Tabs enable flags
   const [tabsEnabled, setTabsEnabled] = useState({ demos: false, docs: false, meeting: false, price: false });
 
-  // Ask box autosize
+  // Ask box autosize 1 → 3 lines
   const inputRef = useRef(null);
   useEffect(() => {
     const el = inputRef.current; if (!el) return;
-    const lineH = 24; // close to UI.FIELD line-height
-    const max = lineH * 3; // up to 3 lines
+    const lineH = 24; // approx
+    const max = lineH * 3;
     el.style.height = "auto";
     el.style.maxHeight = `${max}px`;
     el.style.overflowY = el.scrollHeight > max ? "auto" : "hidden";
@@ -118,10 +117,8 @@ export default function AskAssistant() {
     tabsEnabled.meeting && { key: "meeting", label: "Schedule Meeting" },
   ].filter(Boolean);
 
-  // Send
   const send = () => {};
 
-  // Gate: nothing until alias/bot resolved
   const noBot = !resolved;
 
   return (
@@ -134,18 +131,18 @@ export default function AskAssistant() {
           </div>
         </div>
       ) : (
-        <div className="mx-auto mt-8 mb-10 rounded-2xl overflow-hidden" style={{ width: "56rem", boxShadow: "var(--shadow-elevation, 0 10px 30px rgba(0,0,0,.08))" }}>
+        <div className="mx-auto mt-8 mb-10 rounded-2xl overflow-hidden" style={{ width: "48rem", boxShadow: "var(--shadow-elevation, 0 10px 30px rgba(0,0,0,.08))" }}>
           {/* Banner INSIDE card */}
           <div className="bg-black text-white px-4 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 {brandAssets.logo_url ? (
-                  <img src={brandAssets.logo_url} alt="logo" className="h-8 w-auto" />
+                  <img src={brandAssets.logo_url} alt="logo" className="h-6 w-auto" />
                 ) : (
-                  <div className="font-extrabold">DemoHAL</div>
+                  <div className="font-extrabold text-sm">DemoHAL</div>
                 )}
               </div>
-              <div className="text-sm font-semibold" style={{ color: "#22c55e" }}>Ask the Assistant</div>
+              <div className="text-xs font-semibold" style={{ color: "#22c55e" }}>Ask the Assistant</div>
             </div>
             {/* Centered tabs */}
             <div className="flex justify-center gap-2 pt-3">
@@ -169,7 +166,7 @@ export default function AskAssistant() {
                 </div>
               ) : null}
 
-              {/* Footer divider + ask box (1→3 lines) */}
+              {/* Footer divider + ask box (1→3 lines) with centered send */}
               <div className="mt-3 pt-3 border-t border-[var(--border-color,#e5e7eb)] relative">
                 <textarea
                   ref={inputRef}
@@ -182,7 +179,7 @@ export default function AskAssistant() {
                 <button
                   type="button"
                   onClick={send}
-                  className="absolute right-2 bottom-2"
+                  className="absolute right-2 top-1/2 -translate-y-1/2"
                   aria-label="Send"
                   title="Send"
                 >
@@ -194,12 +191,7 @@ export default function AskAssistant() {
         </div>
       )}
 
-      {/* ThemeLab floating panel (unchanged) */}
-      {themeLabOn && botId ? (
-        <ColorBox apiBase={apiBase} botId={botId} frameRef={null} onVars={(vars) => setThemeVars((prev) => ({ ...prev, ...vars }))} />
-      ) : null}
-
-      <DebugPanel debug={{ active_context: { scope: mode } }} />
+      {/* Debug removed from default render (can enable later) */}
     </div>
   );
 }
