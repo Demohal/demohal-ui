@@ -15,6 +15,7 @@ import DebugPanel from "./AskAssistant/widgets/DebugPanel";
 export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
+  // --- DEBUG STAGE ---
   const [stage, setStage] = useState("boot");
 
   // URL args
@@ -75,7 +76,6 @@ export default function AskAssistant() {
 
   // Pricing (stubs)
   const [pricingCopy, setPricingCopy] = useState({ intro: "", outro: "", custom_notice: "" });
-  const [priceAnswers] = useState({});
   const [priceEstimate] = useState(null);
 
   // Intro
@@ -92,7 +92,7 @@ export default function AskAssistant() {
   // Meeting
   const [agents, setAgents] = useState([]);
 
-  // Helpers to include identity headers
+  // Headers with identity
   const idHeaders = useMemo(
     () => ({
       ...(sessionId ? { "X-Session-Id": sessionId } : {}),
@@ -213,7 +213,7 @@ export default function AskAssistant() {
     return t.length ? t : [{ key: "ask", label: "Ask", onClick: () => setMode("ask") }];
   }, [tabsEnabled]);
 
-  // Send question (/demo-hal)
+  // ASK: POST /demo-hal
   async function sendMessage() {
     const q = (input || "").trim();
     if (!q) return;
@@ -261,7 +261,7 @@ export default function AskAssistant() {
     }
   }
 
-  // Load demos/docs
+  // Load demos
   useEffect(() => {
     if (!botId || !tabsEnabled.demos) return;
     setStage("fetch:demos");
@@ -275,6 +275,7 @@ export default function AskAssistant() {
       .catch(() => { setBrowseItems([]); setStage("warn:demos"); });
   }, [botId, tabsEnabled.demos, apiBase, idHeaders]);
 
+  // Load docs
   useEffect(() => {
     if (!botId || !tabsEnabled.docs) return;
     setStage("fetch:docs");
@@ -388,7 +389,10 @@ export default function AskAssistant() {
                     <button className={UI.BTN_DOC} onClick={() => setSelectedDoc(null)}>Back</button>
                   </div>
                 </div>
-                <DocIframe url={selectedDoc.url} />
+                <DocIframe url={selectedDoc.embedUrl || selectedDoc.url} />
+                <div className="mt-2 text-sm opacity-70">
+                  If the viewer stays blank, the source blocks embedding. Use “Open in new tab”.
+                </div>
               </div>
             ) : (
               <div className="grid gap-3">
@@ -399,7 +403,14 @@ export default function AskAssistant() {
                     <button
                       key={doc.id}
                       className={UI.CARD}
-                      onClick={() => setSelectedDoc(doc)}
+                      onClick={() => {
+                        const u = doc.url || "";
+                        const needsGView = /\.(pdf|docx?|pptx?)($|[?#])/i.test(u);
+                        const embed = needsGView
+                          ? `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(u)}`
+                          : u;
+                        setSelectedDoc({ ...doc, embedUrl: embed });
+                      }}
                       title="View"
                     >
                       <div className="font-bold text-left">{doc.title}</div>
@@ -429,10 +440,14 @@ export default function AskAssistant() {
               <div className={UI.CARD}>No demos yet.</div>
             ) : (
               browseItems.map((d) => (
-                <a key={d.id} href={d.url} target="_blank" rel="noreferrer" className={UI.CARD}>
-                  <div className="font-bold">{d.title}</div>
-                  <div className="text-sm opacity-80">{d.description}</div>
-                </a>
+                <button
+                  key={d.id}
+                  className={UI.CARD}
+                  onClick={() => window.open(d.url, "_blank", "noopener,noreferrer")}
+                >
+                  <div className="font-bold text-left">{d.title}</div>
+                  <div className="text-sm opacity-80 text-left">{d.description}</div>
+                </button>
               ))
             )}
           </div>
