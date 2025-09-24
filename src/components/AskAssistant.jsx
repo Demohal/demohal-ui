@@ -1,37 +1,33 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  DEFAULT_THEME_VARS,
-  inverseBW,
-  UI,
-  TabsNav,
-} from "./AskAssistant/AskAssistant.ui";
+import { DEFAULT_THEME_VARS, inverseBW, UI, TabsNav } from "./AskAssistant/AskAssistant.ui";
 
 export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-  // Debug stage
+  // Debug
   const [stage, setStage] = useState("boot");
 
   // URL args
-  const { alias, botIdFromUrl, themeLabOn } = useMemo(() => {
+  const { alias, botIdFromUrl } = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     return {
       alias: (qs.get("alias") || qs.get("alais") || "").trim(),
       botIdFromUrl: (qs.get("bot_id") || "").trim(),
-      themeLabOn:
-        (qs.get("themelab") || "").trim() === "1" ||
-        (qs.get("themelab") || "").trim().toLowerCase() === "true",
     };
   }, []);
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
 
-  // Core state (shell only)
+  // Shell state
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [fatal, setFatal] = useState("");
   const [mode, setMode] = useState("ask");
   const [input, setInput] = useState("");
-  const [responseText, setResponseText] = useState("");
+  const [responseText, setResponseText] = useState(""); // welcome text lives here
   const [loading, setLoading] = useState(false);
+
+  // Intro video
+  const [introVideoUrl, setIntroVideoUrl] = useState("");
+  const [showIntroVideo, setShowIntroVideo] = useState(false);
 
   // Refs
   const inputRef = useRef(null);
@@ -60,7 +56,6 @@ export default function AskAssistant() {
     logo_light_url: null,
     logo_dark_url: null,
   });
-  const [brandReady, setBrandReady] = useState(!(botIdFromUrl || alias));
 
   // ---- Resolve bot (alias or bot_id) ----
   useEffect(() => {
@@ -82,7 +77,10 @@ export default function AskAssistant() {
       setSessionId(data.session_id || "");
 
       const b = data.bot || {};
-      setResponseText(b.welcome_message || ""); // will show in step 2
+      setResponseText(b.welcome_message || "");
+      setIntroVideoUrl(b.intro_video_url || "");
+      setShowIntroVideo(!!b.show_intro_video);
+
       setBotId(b.id);
       setFatal("");
       setStage("ok:botId");
@@ -109,10 +107,12 @@ export default function AskAssistant() {
       }
     })();
 
-    return () => { cancel = true; };
+    return () => {
+      cancel = true;
+    };
   }, [apiBase, alias, botIdFromUrl, defaultAlias]);
 
-  // ---- Brand (CSS tokens + assets) ----
+  // ---- Brand (CSS vars + assets) ----
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
@@ -136,14 +136,14 @@ export default function AskAssistant() {
         setStage("ok:brand");
       } catch {
         setStage("warn:brand");
-      } finally {
-        if (!cancel) setBrandReady(true);
       }
     })();
-    return () => { cancel = true; };
+    return () => {
+      cancel = true;
+    };
   }, [botId, apiBase]);
 
-  // Autosize textarea
+  // Autosize ask box
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
@@ -151,16 +151,17 @@ export default function AskAssistant() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  // Tabs (shell step → Ask only)
-  const tabs = useMemo(() => {
-    return [{ key: "ask", label: "Ask", onClick: () => setMode("ask") }];
-  }, []);
+  // Tabs: Ask only (other tabs later)
+  const tabs = useMemo(() => [{ key: "ask", label: "Ask", onClick: () => setMode("ask") }], []);
 
-  // Send question (works; we’ll layer features later)
+  // Send (simple)
   async function sendMessage() {
     const q = (input || "").trim();
     if (!q) return;
-    if (!botId) { setFatal("Invalid or inactive alias."); return; }
+    if (!botId) {
+      setFatal("Invalid or inactive alias.");
+      return;
+    }
 
     setLoading(true);
     setStage("ask:posting");
@@ -200,7 +201,19 @@ export default function AskAssistant() {
   return (
     <div className="min-h-screen" style={derivedTheme}>
       {/* Stage pill */}
-      <div style={{position:"fixed",right:8,top:8,zIndex:9999,background:"#000",color:"#fff",padding:"4px 8px",borderRadius:6,fontSize:12}}>
+      <div
+        style={{
+          position: "fixed",
+          right: 8,
+          top: 8,
+          zIndex: 9999,
+          background: "#000",
+          color: "#fff",
+          padding: "4px 8px",
+          borderRadius: 6,
+          fontSize: 12,
+        }}
+      >
         Stage: {stage || "-"}
       </div>
 
@@ -222,7 +235,7 @@ export default function AskAssistant() {
         <TabsNav mode={mode} tabs={tabs} />
       </div>
 
-      {/* Body (Ask box only for Step 1) */}
+      {/* Body: Welcome + optional video + Ask box */}
       <div className="max-w-5xl mx-auto px-4 py-4">
         {fatal ? (
           <div className={UI.CARD} style={{ border: "1px solid #ef4444" }}>
@@ -231,6 +244,27 @@ export default function AskAssistant() {
           </div>
         ) : (
           <div className={UI.CARD}>
+            {/* Welcome text */}
+            {responseText ? (
+              <div className="text-base whitespace-pre-line text-[var(--message-fg)]">
+                {responseText}
+              </div>
+            ) : null}
+
+            {/* Intro video */}
+            {showIntroVideo && introVideoUrl ? (
+              <div className="mt-3">
+                <iframe
+                  title="intro"
+                  src={introVideoUrl}
+                  className="w-full aspect-video rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              </div>
+            ) : null}
+
+            {/* Ask box */}
             <div className="mt-3 flex gap-2 items-start">
               <textarea
                 ref={inputRef}
