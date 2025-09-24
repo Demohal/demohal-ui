@@ -1,2 +1,2 @@
-import AskAssistant from "./components/AskAssistant";
-export default function App(){ return <AskAssistant/>; }
+import ControlShell from "./components/ControlShell";
+export default function App(){ return <ControlShell />; }
