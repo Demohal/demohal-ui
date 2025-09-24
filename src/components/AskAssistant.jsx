@@ -5,9 +5,9 @@ import {
   inverseBW,
   UI,
 } from "./AskAssistant/AskAssistant.ui";
-import DocIframe from "./AskAssistant/DocIframe";
+import DocIframe from "./AskAssistant/widgets/DocIframe";
 import ColorBox from "./AskAssistant/widgets/ColorBox";
-import DebugPanel from "./AskAssistant/DebugPanel";
+import DebugPanel from "./AskAssistant/widgets/DebugPanel";
 
 export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
