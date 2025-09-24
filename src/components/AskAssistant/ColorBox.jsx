@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { TOKEN_TO_CSS, SCREEN_ORDER } from "../AskAssistant.ui";
+import { TOKEN_TO_CSS, SCREEN_ORDER } from "./AskAssistant.ui";
 
 export default function ColorBox({ apiBase, botId, frameRef, onVars }) {
   const [rows, setRows] = useState([]);
