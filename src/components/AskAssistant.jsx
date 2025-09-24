@@ -22,29 +22,26 @@ export default function AskAssistant() {
 
   // Core state
   const [botId, setBotId] = useState(botIdFromUrl || "");
+  const [resolved, setResolved] = useState(false);
   const [fatal, setFatal] = useState("");
-  const [resolved, setResolved] = useState(false); // gate UI until bot resolved
   const [mode, setMode] = useState("ask");
-  const [input, setInput] = useState("");
   const [responseText, setResponseText] = useState("");
+  const [introVideoUrl, setIntroVideoUrl] = useState("");
+  const [showIntroVideo, setShowIntroVideo] = useState(false);
 
-  // Theme / brand (CSS custom props)
+  // Branding / theme
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
   const derivedTheme = useMemo(() => {
-    // old behavior: compute active fg from tab fg, add as extra var
     const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
     return { ...themeVars, "--tab-active-fg": activeFg };
   }, [themeVars]);
   const [brandAssets, setBrandAssets] = useState({ logo_url: null });
 
-  // Intro video
-  const [introVideoUrl, setIntroVideoUrl] = useState("");
-  const [showIntroVideo, setShowIntroVideo] = useState(false);
-
   // Tabs enable flags
   const [tabsEnabled, setTabsEnabled] = useState({ demos: false, docs: false, meeting: false, price: false });
 
   // Ask box autosize (1 → 3 lines)
+  const [input, setInput] = useState("");
   const inputRef = useRef(null);
   useEffect(() => {
     const el = inputRef.current; if (!el) return;
@@ -86,9 +83,7 @@ export default function AskAssistant() {
         if (botIdFromUrl) return loadBy(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botIdFromUrl)}`);
         const useAlias = alias || defaultAlias; if (!useAlias) { setResolved(false); return; }
         return loadBy(`${apiBase}/bot-settings?alias=${encodeURIComponent(useAlias)}`);
-      } catch {
-        setResolved(false);
-      }
+      } catch { setResolved(false); }
     })();
   }, [alias, defaultAlias, botIdFromUrl, apiBase]);
 
@@ -101,11 +96,9 @@ export default function AskAssistant() {
       try {
         const res = await fetch(`${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`);
         const data = await res.json().catch(() => ({}));
-        // If backend returns css_vars already mapped to CSS custom props, merge directly
         if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
           setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
         }
-        // Assets
         if (data?.ok && data?.assets?.logo_url) setBrandAssets({ logo_url: data.assets.logo_url });
       } catch {}
     })();
@@ -119,105 +112,103 @@ export default function AskAssistant() {
     tabsEnabled.meeting && { key: "meeting", label: "Schedule Meeting" },
   ].filter(Boolean);
 
-  // Send (wire later; shell parity only)
   const send = () => {};
 
   // Gate: show nothing until alias/bot resolved
-  const noBot = !resolved;
+  if (!resolved) {
+    return (
+      <div className="w-full h-[60vh] flex items-center justify-center text-gray-500" style={derivedTheme}>
+        <div className="text-center">
+          <div className="text-2xl font-semibold mb-1">No bot selected</div>
+          <div className="text-sm">Provide a <code>?bot_id=…</code> or <code>?alias=…</code> in the URL.</div>
+        </div>
+      </div>
+    );
+  }
 
-  // Fixed card metrics (from OLD file): 56rem width × 44rem height
-  const CARD_W = "56rem";
+  // Fixed card metrics (old spec)
+  const CARD_W = "48rem";
   const CARD_H = "44rem";
+  const containerRef = useRef(null);
+  useEffect(() => { const el = containerRef.current; if (!el) return; el.style.width = CARD_W; el.style.height = CARD_H; });
 
   return (
     <div className="min-h-screen" style={derivedTheme}>
-      {noBot ? (
-        <div className="w-full h-[60vh] flex items-center justify-center text-gray-500">
-          <div className="text-center">
-            <div className="text-2xl font-semibold mb-1">No bot selected</div>
-            <div className="text-sm">Provide a <code>?bot_id=…</code> or <code>?alias=…</code> in the URL.</div>
+      <div
+        ref={containerRef}
+        className="mx-auto mt-8 mb-10 rounded-2xl overflow-hidden"
+        style={{ width: CARD_W, height: CARD_H, boxShadow: "var(--shadow-elevation, 0 10px 30px rgba(0,0,0,.08))" }}
+      >
+        {/* Banner inside card */}
+        <div className="bg-black text-white px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {brandAssets.logo_url ? (
+                <img src={brandAssets.logo_url} alt="logo" className="h-8 w-auto" />
+              ) : (
+                <div className="font-extrabold">DemoHAL</div>
+              )}
+            </div>
+            <div className="text-sm font-semibold" style={{ color: "#22c55e" }}>Ask the Assistant</div>
+          </div>
+          <div className="flex justify-center gap-2 pt-3">
+            {tabs.map((t) => (
+              <button key={t.key} onClick={() => setMode(t.key)} className={mode === t.key ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}>
+                {t.label}
+              </button>
+            ))}
           </div>
         </div>
-      ) : (
-        <div
-          className="mx-auto mt-8 mb-10 rounded-2xl overflow-hidden"
-          style={{ width: CARD_W, height: CARD_H, boxShadow: "var(--shadow-elevation, 0 10px 30px rgba(0,0,0,.08))" }}
-        >
-          {/* Banner INSIDE the card, with centered tabs */}
-          <div className="bg-black text-white px-4 py-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                {brandAssets.logo_url ? (
-                  <img src={brandAssets.logo_url} alt="logo" className="h-8 w-auto" />
-                ) : (
-                  <div className="font-extrabold">DemoHAL</div>
-                )}
-              </div>
-              <div className="text-sm font-semibold" style={{ color: "#22c55e" }}>Ask the Assistant</div>
-            </div>
-            <div className="flex justify-center gap-2 pt-3">
-              {tabs.map((t) => (
-                <button key={t.key} onClick={() => setMode(t.key)} className={mode === t.key ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}>
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          </div>
 
-          {/* Body: scroll within fixed card height (approx banner ~ 80-100px) */}
-          <div className="px-4 pb-4 overflow-auto" style={{ height: `calc(${CARD_H} - 6.5rem)` }}>
-            <div className={UI.CARD}>
-              {responseText ? (
-                <div className="text-base whitespace-pre-line text-[var(--message-fg)]">{responseText}</div>
-              ) : null}
-              {showIntroVideo && introVideoUrl ? (
-                <div className="mt-3">
-                  <iframe
-                    title="intro"
-                    src={introVideoUrl}
-                    className="w-full aspect-video rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowFullScreen
-                  />
-                </div>
-              ) : null}
+        {/* Body */}
+        <div className="px-4 pb-4 overflow-auto" style={{ height: `calc(${CARD_H} - 6.5rem)` }}>
+          <div className={UI.CARD}>
+            {responseText ? (
+              <div className="text-base whitespace-pre-line text-[var(--message-fg)]">{responseText}</div>
+            ) : null}
 
-              {/* Footer divider + ask box (1→3 lines) with centered send */}
-              <div className="mt-3 pt-3 border-t border-[var(--border-color,#e5e7eb)] relative">
-                <textarea
-                  ref={inputRef}
-                  rows={1}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask your question here"
-                  className={UI.FIELD + " pr-12"}
+            {showIntroVideo && introVideoUrl ? (
+              <div className="mt-3">
+                <iframe
+                  title="intro"
+                  src={introVideoUrl}
+                  className="w-full aspect-video rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
                 />
-                <button
-                  type="button"
-                  onClick={send}
-                  className="absolute right-2 top-1/2 -translate-y-1/2"
-                  aria-label="Send"
-                  title="Send"
-                >
-                  <ArrowUpCircleIcon className="h-8 w-8 text-[var(--send-color,#22c55e)]" />
-                </button>
               </div>
+            ) : null}
+
+            {/* Footer divider + ask box (1→3 lines) with centered send */}
+            <div className="mt-3 pt-3 border-t border-[var(--border-color,#e5e7eb)] relative">
+              <textarea
+                ref={inputRef}
+                rows={1}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask your question here"
+                className={UI.FIELD + " pr-12"}
+              />
+              <button
+                type="button"
+                onClick={send}
+                className="absolute right-2 top-1/2 -translate-y-1/2"
+                aria-label="Send"
+                title="Send"
+              >
+                <ArrowUpCircleIcon className="h-8 w-8 text-[var(--send-color,#22c55e)]" />
+              </button>
             </div>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* ThemeLab floating panel (unchanged) */}
+      {/* ThemeLab (optional) */}
       {themeLabOn && botId ? (
-        <ColorBox
-          apiBase={apiBase}
-          botId={botId}
-          frameRef={null}
-          onVars={(vars) => setThemeVars((prev) => ({ ...prev, ...vars }))}
-        />
+        <ColorBox apiBase={apiBase} botId={botId} frameRef={null} onVars={(vars) => setThemeVars((p) => ({ ...p, ...vars }))} />
       ) : null}
 
-      {/* Debug panel intentionally not rendered by default */}
+      {/* DebugPanel intentionally hidden */}
       {/* <DebugPanel debug={{ active_context: { scope: mode } }} /> */}
     </div>
   );
