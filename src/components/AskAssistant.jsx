@@ -1,11 +1,6 @@
-// Gutted down to 200 lines
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
-import {
-  DEFAULT_THEME_VARS,
-  inverseBW,
-  UI,
-} from "./AskAssistant/AskAssistant.ui";
+import { DEFAULT_THEME_VARS, inverseBW, UI } from "./AskAssistant/AskAssistant.ui";
 import DocIframe from "./AskAssistant/DocIframe";
 import ColorBox from "./AskAssistant/ColorBox";
 import DebugPanel from "./AskAssistant/DebugPanel";
@@ -28,15 +23,16 @@ export default function AskAssistant() {
   // Core state
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [fatal, setFatal] = useState("");
-  const [resolved, setResolved] = useState(false); // gate render
+  const [resolved, setResolved] = useState(false); // gate UI until bot resolved
   const [mode, setMode] = useState("ask");
   const [input, setInput] = useState("");
   const [responseText, setResponseText] = useState("");
 
-  // Theme / brand
+  // Theme / brand (CSS custom props)
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
   const derivedTheme = useMemo(() => {
-    const activeFg = inverseBW(themeVars["--tab-fg"] || "#000");
+    // old behavior: compute active fg from tab fg, add as extra var
+    const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
     return { ...themeVars, "--tab-active-fg": activeFg };
   }, [themeVars]);
   const [brandAssets, setBrandAssets] = useState({ logo_url: null });
@@ -48,11 +44,11 @@ export default function AskAssistant() {
   // Tabs enable flags
   const [tabsEnabled, setTabsEnabled] = useState({ demos: false, docs: false, meeting: false, price: false });
 
-  // Ask box autosize 1 → 3 lines
+  // Ask box autosize (1 → 3 lines)
   const inputRef = useRef(null);
   useEffect(() => {
     const el = inputRef.current; if (!el) return;
-    const lineH = 24; // approx
+    const lineH = 22; // tuned to UI.FIELD
     const max = lineH * 3;
     el.style.height = "auto";
     el.style.maxHeight = `${max}px`;
@@ -60,7 +56,9 @@ export default function AskAssistant() {
     el.style.height = `${Math.min(el.scrollHeight, max)}px`;
   }, [input]);
 
-  // Resolve bot
+  // ---------------------
+  // Resolve bot settings
+  // ---------------------
   useEffect(() => {
     async function loadBy(url) {
       const res = await fetch(url);
@@ -86,8 +84,7 @@ export default function AskAssistant() {
     (async () => {
       try {
         if (botIdFromUrl) return loadBy(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botIdFromUrl)}`);
-        const useAlias = alias || defaultAlias;
-        if (!useAlias) { setResolved(false); return; }
+        const useAlias = alias || defaultAlias; if (!useAlias) { setResolved(false); return; }
         return loadBy(`${apiBase}/bot-settings?alias=${encodeURIComponent(useAlias)}`);
       } catch {
         setResolved(false);
@@ -95,22 +92,26 @@ export default function AskAssistant() {
     })();
   }, [alias, defaultAlias, botIdFromUrl, apiBase]);
 
-  // Load brand after bot resolves
+  // -------------------------------------------
+  // Load brand tokens → apply CSS vars exactly
+  // -------------------------------------------
   useEffect(() => {
     if (!resolved || !botId) return;
     (async () => {
       try {
         const res = await fetch(`${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`);
         const data = await res.json().catch(() => ({}));
+        // If backend returns css_vars already mapped to CSS custom props, merge directly
         if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
           setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
         }
+        // Assets
         if (data?.ok && data?.assets?.logo_url) setBrandAssets({ logo_url: data.assets.logo_url });
       } catch {}
     })();
   }, [resolved, botId, apiBase]);
 
-  // Tabs list
+  // Tabs list (labels/order preserved)
   const tabs = [
     tabsEnabled.demos && { key: "demos", label: "Browse Demos" },
     tabsEnabled.docs && { key: "docs", label: "Browse Documents" },
@@ -118,9 +119,15 @@ export default function AskAssistant() {
     tabsEnabled.meeting && { key: "meeting", label: "Schedule Meeting" },
   ].filter(Boolean);
 
+  // Send (wire later; shell parity only)
   const send = () => {};
 
+  // Gate: show nothing until alias/bot resolved
   const noBot = !resolved;
+
+  // Fixed card metrics (from OLD file): 56rem width × 44rem height
+  const CARD_W = "56rem";
+  const CARD_H = "44rem";
 
   return (
     <div className="min-h-screen" style={derivedTheme}>
@@ -132,20 +139,22 @@ export default function AskAssistant() {
           </div>
         </div>
       ) : (
-        <div className="mx-auto mt-8 mb-10 rounded-2xl overflow-hidden" style={{ width: "48rem", boxShadow: "var(--shadow-elevation, 0 10px 30px rgba(0,0,0,.08))" }}>
-          {/* Banner INSIDE card */}
+        <div
+          className="mx-auto mt-8 mb-10 rounded-2xl overflow-hidden"
+          style={{ width: CARD_W, height: CARD_H, boxShadow: "var(--shadow-elevation, 0 10px 30px rgba(0,0,0,.08))" }}
+        >
+          {/* Banner INSIDE the card, with centered tabs */}
           <div className="bg-black text-white px-4 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 {brandAssets.logo_url ? (
-                  <img src={brandAssets.logo_url} alt="logo" className="h-6 w-auto" />
+                  <img src={brandAssets.logo_url} alt="logo" className="h-8 w-auto" />
                 ) : (
-                  <div className="font-extrabold text-sm">DemoHAL</div>
+                  <div className="font-extrabold">DemoHAL</div>
                 )}
               </div>
-              <div className="text-xs font-semibold" style={{ color: "#22c55e" }}>Ask the Assistant</div>
+              <div className="text-sm font-semibold" style={{ color: "#22c55e" }}>Ask the Assistant</div>
             </div>
-            {/* Centered tabs */}
             <div className="flex justify-center gap-2 pt-3">
               {tabs.map((t) => (
                 <button key={t.key} onClick={() => setMode(t.key)} className={mode === t.key ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}>
@@ -155,15 +164,21 @@ export default function AskAssistant() {
             </div>
           </div>
 
-          {/* Body */}
-          <div className="px-4 pb-4">
+          {/* Body: scroll within fixed card height (approx banner ~ 80-100px) */}
+          <div className="px-4 pb-4 overflow-auto" style={{ height: `calc(${CARD_H} - 6.5rem)` }}>
             <div className={UI.CARD}>
               {responseText ? (
                 <div className="text-base whitespace-pre-line text-[var(--message-fg)]">{responseText}</div>
               ) : null}
               {showIntroVideo && introVideoUrl ? (
                 <div className="mt-3">
-                  <iframe title="intro" src={introVideoUrl} className="w-full aspect-video rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
+                  <iframe
+                    title="intro"
+                    src={introVideoUrl}
+                    className="w-full aspect-video rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                  />
                 </div>
               ) : null}
 
@@ -192,7 +207,18 @@ export default function AskAssistant() {
         </div>
       )}
 
-      {/* Debug removed from default render (can enable later) */}
+      {/* ThemeLab floating panel (unchanged) */}
+      {themeLabOn && botId ? (
+        <ColorBox
+          apiBase={apiBase}
+          botId={botId}
+          frameRef={null}
+          onVars={(vars) => setThemeVars((prev) => ({ ...prev, ...vars }))}
+        />
+      ) : null}
+
+      {/* Debug panel intentionally not rendered by default */}
+      {/* <DebugPanel debug={{ active_context: { scope: mode } }} /> */}
     </div>
   );
 }
