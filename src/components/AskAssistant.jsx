@@ -3,19 +3,13 @@ import {
   DEFAULT_THEME_VARS,
   inverseBW,
   UI,
-  PriceMirror,
-  EstimateCard,
-  QuestionBlock,
   TabsNav,
 } from "./AskAssistant/AskAssistant.ui";
-import DocIframe from "./AskAssistant/widgets/DocIframe";
-import ColorBox from "./AskAssistant/widgets/ColorBox";
-import DebugPanel from "./AskAssistant/widgets/DebugPanel";
 
 export default function AskAssistant() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-  // --- DEBUG STAGE ---
+  // Debug stage
   const [stage, setStage] = useState("boot");
 
   // URL args
@@ -31,68 +25,20 @@ export default function AskAssistant() {
   }, []);
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
 
-  // Core state
+  // Core state (shell only)
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [fatal, setFatal] = useState("");
   const [mode, setMode] = useState("ask");
   const [input, setInput] = useState("");
   const [responseText, setResponseText] = useState("");
-  const [debugInfo, setDebugInfo] = useState(null);
   const [loading, setLoading] = useState(false);
 
   // Refs
   const inputRef = useRef(null);
-  const frameRef = useRef(null);
 
   // Identity
   const [visitorId, setVisitorId] = useState("");
   const [sessionId, setSessionId] = useState("");
-
-  // Theme
-  const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
-  const derivedTheme = useMemo(() => {
-    const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
-    return { ...themeVars, "--tab-active-fg": activeFg };
-  }, [themeVars]);
-  const [pickerVars, setPickerVars] = useState({});
-  const liveTheme = useMemo(() => ({ ...derivedTheme, ...pickerVars }), [derivedTheme, pickerVars]);
-
-  // Brand
-  const [brandAssets, setBrandAssets] = useState({
-    logo_url: null,
-    logo_light_url: null,
-    logo_dark_url: null,
-  });
-  const initialBrandReady = useMemo(() => !(botIdFromUrl || alias), [botIdFromUrl, alias]);
-  const [brandReady, setBrandReady] = useState(initialBrandReady);
-
-  // Tabs
-  const [tabsEnabled, setTabsEnabled] = useState({
-    demos: false,
-    docs: false,
-    meeting: false,
-    price: false,
-  });
-
-  // Pricing (stubs)
-  const [pricingCopy, setPricingCopy] = useState({ intro: "", outro: "", custom_notice: "" });
-  const [priceEstimate] = useState(null);
-
-  // Intro
-  const [introVideoUrl, setIntroVideoUrl] = useState("");
-  const [showIntroVideo, setShowIntroVideo] = useState(false);
-
-  // Browse data
-  const [browseItems, setBrowseItems] = useState([]); // demos
-  const [browseDocs, setBrowseDocs] = useState([]);   // docs
-
-  // Selection for inline views
-  const [selectedDoc, setSelectedDoc] = useState(null);
-
-  // Meeting
-  const [agents, setAgents] = useState([]);
-
-  // Headers with identity
   const idHeaders = useMemo(
     () => ({
       ...(sessionId ? { "X-Session-Id": sessionId } : {}),
@@ -101,7 +47,22 @@ export default function AskAssistant() {
     [sessionId, visitorId]
   );
 
-  // Resolve bot
+  // Theme
+  const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
+  const derivedTheme = useMemo(() => {
+    const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
+    return { ...themeVars, "--tab-active-fg": activeFg };
+  }, [themeVars]);
+
+  // Brand
+  const [brandAssets, setBrandAssets] = useState({
+    logo_url: null,
+    logo_light_url: null,
+    logo_dark_url: null,
+  });
+  const [brandReady, setBrandReady] = useState(!(botIdFromUrl || alias));
+
+  // ---- Resolve bot (alias or bot_id) ----
   useEffect(() => {
     let cancel = false;
 
@@ -121,21 +82,7 @@ export default function AskAssistant() {
       setSessionId(data.session_id || "");
 
       const b = data.bot || {};
-      setTabsEnabled({
-        demos: !!b.show_browse_demos,
-        docs: !!b.show_browse_docs,
-        meeting: !!b.show_schedule_meeting,
-        price: !!b.show_price_estimate,
-      });
-      setResponseText(b.welcome_message || "");
-      setIntroVideoUrl(b.intro_video_url || "");
-      setShowIntroVideo(!!b.show_intro_video);
-      setPricingCopy({
-        intro: b.pricing_intro || "",
-        outro: b.pricing_outro || "",
-        custom_notice: b.pricing_custom_notice || "",
-      });
-
+      setResponseText(b.welcome_message || ""); // will show in step 2
       setBotId(b.id);
       setFatal("");
       setStage("ok:botId");
@@ -165,7 +112,7 @@ export default function AskAssistant() {
     return () => { cancel = true; };
   }, [apiBase, alias, botIdFromUrl, defaultAlias]);
 
-  // Brand
+  // ---- Brand (CSS tokens + assets) ----
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
@@ -175,6 +122,7 @@ export default function AskAssistant() {
         const res = await fetch(`${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`);
         const data = await res.json().catch(() => ({}));
         if (cancel) return;
+
         if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
           setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
         }
@@ -203,17 +151,12 @@ export default function AskAssistant() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  // Tabs list
+  // Tabs (shell step → Ask only)
   const tabs = useMemo(() => {
-    const t = [];
-    if (tabsEnabled.demos) t.push({ key: "demos", label: "Browse Demos", onClick: () => { setMode("browse"); setSelectedDoc(null);} });
-    if (tabsEnabled.docs) t.push({ key: "docs", label: "Browse Documents", onClick: () => { setMode("docs"); setSelectedDoc(null);} });
-    if (tabsEnabled.price) t.push({ key: "price", label: "Price", onClick: () => setMode("price") });
-    if (tabsEnabled.meeting) t.push({ key: "meeting", label: "Schedule Meeting", onClick: () => setMode("meeting") });
-    return t.length ? t : [{ key: "ask", label: "Ask", onClick: () => setMode("ask") }];
-  }, [tabsEnabled]);
+    return [{ key: "ask", label: "Ask", onClick: () => setMode("ask") }];
+  }, []);
 
-  // ASK: POST /demo-hal
+  // Send question (works; we’ll layer features later)
   async function sendMessage() {
     const q = (input || "").trim();
     if (!q) return;
@@ -221,29 +164,22 @@ export default function AskAssistant() {
 
     setLoading(true);
     setStage("ask:posting");
-
     try {
       const res = await fetch(`${apiBase}/demo-hal`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...idHeaders },
-        body: JSON.stringify({ bot_id: botId, user_question: q, debug: true, scope: "standard" }),
+        body: JSON.stringify({ bot_id: botId, user_question: q, debug: false, scope: "standard" }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || data?.ok === false) {
-        setResponseText(data?.error || "Sorry—something went wrong.");
-        setDebugInfo(data?.debug || null);
-        setStage("ask:error");
-      } else {
-        const text =
-          data?.response_text ||
-          data?.answer?.text ||
-          data?.message ||
-          data?.text ||
-          "";
-        setResponseText(String(text || "").trim());
-        setDebugInfo(data?.debug || null);
-        setStage("ask:ok");
-      }
+      const text =
+        data?.response_text ||
+        data?.answer?.text ||
+        data?.message ||
+        data?.text ||
+        data?.error ||
+        "OK.";
+      setResponseText(String(text || "").trim());
+      setStage(res.ok ? "ask:ok" : "ask:error");
     } catch {
       setResponseText("Network error.");
       setStage("ask:network-error");
@@ -261,49 +197,9 @@ export default function AskAssistant() {
     }
   }
 
-  // Load demos
-  useEffect(() => {
-    if (!botId || !tabsEnabled.demos) return;
-    setStage("fetch:demos");
-    fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`, { headers: { ...idHeaders } })
-      .then(r => r.json())
-      .then(data => {
-        const list = Array.isArray(data) ? data : (data.items || data.demos || data.rows || data.data || []);
-        setBrowseItems(list || []);
-        setStage(`ok:demos:${(list || []).length}`);
-      })
-      .catch(() => { setBrowseItems([]); setStage("warn:demos"); });
-  }, [botId, tabsEnabled.demos, apiBase, idHeaders]);
-
-  // Load docs
-  useEffect(() => {
-    if (!botId || !tabsEnabled.docs) return;
-    setStage("fetch:docs");
-    fetch(`${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`, { headers: { ...idHeaders } })
-      .then(r => r.json())
-      .then(data => {
-        const list = Array.isArray(data) ? data : (data.items || data.documents || data.docs || data.rows || data.data || []);
-        setBrowseDocs(list || []);
-        setStage(`ok:docs:${(list || []).length}`);
-      })
-      .catch(() => { setBrowseDocs([]); setStage("warn:docs"); });
-  }, [botId, tabsEnabled.docs, apiBase, idHeaders]);
-
-  // Load agents (meeting)
-  useEffect(() => {
-    if (!botId || !tabsEnabled.meeting) return;
-    fetch(`${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`, { headers: { ...idHeaders } })
-      .then(r => r.json())
-      .then(data => {
-        const list = Array.isArray(data) ? data : (data.items || data.agents || data.rows || data.data || []);
-        setAgents(list || []);
-      })
-      .catch(() => setAgents([]));
-  }, [botId, tabsEnabled.meeting, apiBase, idHeaders]);
-
   return (
-    <div className="min-h-screen" style={liveTheme}>
-      {/* Stage */}
+    <div className="min-h-screen" style={derivedTheme}>
+      {/* Stage pill */}
       <div style={{position:"fixed",right:8,top:8,zIndex:9999,background:"#000",color:"#fff",padding:"4px 8px",borderRadius:6,fontSize:12}}>
         Stage: {stage || "-"}
       </div>
@@ -326,29 +222,15 @@ export default function AskAssistant() {
         <TabsNav mode={mode} tabs={tabs} />
       </div>
 
-      {/* Body */}
+      {/* Body (Ask box only for Step 1) */}
       <div className="max-w-5xl mx-auto px-4 py-4">
         {fatal ? (
           <div className={UI.CARD} style={{ border: "1px solid #ef4444" }}>
             <div className="font-bold text-red-600">Error</div>
             <div>{fatal}</div>
           </div>
-        ) : mode === "ask" ? (
+        ) : (
           <div className={UI.CARD}>
-            <div className="text-base whitespace-pre-line text-[var(--message-fg)]">{responseText}</div>
-
-            {showIntroVideo && introVideoUrl ? (
-              <div className="mt-3">
-                <iframe
-                  title="intro"
-                  src={introVideoUrl}
-                  className="w-full aspect-video rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                />
-              </div>
-            ) : null}
-
             <div className="mt-3 flex gap-2 items-start">
               <textarea
                 ref={inputRef}
@@ -366,97 +248,10 @@ export default function AskAssistant() {
               >
                 {loading ? "Sending…" : "Send"}
               </button>
-              <button className={UI.BTN_DOC} onClick={() => setMode("browse")}>
-                Browse
-              </button>
             </div>
-
-            <DebugPanel debug={debugInfo} />
-          </div>
-        ) : mode === "price" ? (
-          <div className="space-y-3">
-            <PriceMirror lines={[]} />
-            <EstimateCard estimate={priceEstimate} outroText={pricingCopy?.outro || ""} />
-          </div>
-        ) : mode === "docs" ? (
-          <div className="flex flex-col gap-4">
-            {selectedDoc ? (
-              <div className={UI.CARD}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="font-bold">{selectedDoc.title}</div>
-                  <div className="flex gap-2">
-                    <a href={selectedDoc.url} target="_blank" rel="noreferrer" className={UI.BTN_DOC}>Open in new tab</a>
-                    <button className={UI.BTN_DOC} onClick={() => setSelectedDoc(null)}>Back</button>
-                  </div>
-                </div>
-                <DocIframe url={selectedDoc.embedUrl || selectedDoc.url} />
-                <div className="mt-2 text-sm opacity-70">
-                  If the viewer stays blank, the source blocks embedding. Use “Open in new tab”.
-                </div>
-              </div>
-            ) : (
-              <div className="grid gap-3">
-                {browseDocs.length === 0 ? (
-                  <div className={UI.CARD}>No documents yet.</div>
-                ) : (
-                  browseDocs.map((doc) => (
-                    <button
-                      key={doc.id}
-                      className={UI.CARD}
-                      onClick={() => {
-                        const u = doc.url || "";
-                        const needsGView = /\.(pdf|docx?|pptx?)($|[?#])/i.test(u);
-                        const embed = needsGView
-                          ? `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(u)}`
-                          : u;
-                        setSelectedDoc({ ...doc, embedUrl: embed });
-                      }}
-                      title="View"
-                    >
-                      <div className="font-bold text-left">{doc.title}</div>
-                      <div className="text-sm opacity-80 text-left">{doc.description}</div>
-                    </button>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-        ) : mode === "meeting" ? (
-          <div className="grid gap-3">
-            {agents.length === 0 ? (
-              <div className={UI.CARD}>No agents available.</div>
-            ) : (
-              agents.map((a) => (
-                <a key={a.id} href={a.meeting_url} target="_blank" rel="noreferrer" className={UI.CARD}>
-                  <div className="font-bold">{a.name}</div>
-                  <div className="text-sm opacity-80">{a.title || ""}</div>
-                </a>
-              ))
-            )}
-          </div>
-        ) : (
-          <div className="grid gap-3">
-            {browseItems.length === 0 ? (
-              <div className={UI.CARD}>No demos yet.</div>
-            ) : (
-              browseItems.map((d) => (
-                <button
-                  key={d.id}
-                  className={UI.CARD}
-                  onClick={() => window.open(d.url, "_blank", "noopener,noreferrer")}
-                >
-                  <div className="font-bold text-left">{d.title}</div>
-                  <div className="text-sm opacity-80 text-left">{d.description}</div>
-                </button>
-              ))
-            )}
           </div>
         )}
       </div>
-
-      {themeLabOn ? (
-        <ColorBox apiBase={apiBase} botId={botId} frameRef={frameRef} onVars={setPickerVars} />
-      ) : null}
     </div>
   );
 }
