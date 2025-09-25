@@ -167,11 +167,11 @@ export default function Welcome() {
 
   // URL → alias / bot_id / themelab
   const { alias, botIdFromUrl } = useMemo(() => {
-  const qs = new URLSearchParams(window.location.search);
-  const a = (qs.get("alias") || qs.get("alais") || "").trim();
-  const b = (qs.get("bot_id") || "").trim();
-  return { alias: a, botIdFromUrl: b };
-}, []);
+    const qs = new URLSearchParams(window.location.search);
+    const a = (qs.get("alias") || qs.get("alais") || "").trim();
+    const b = (qs.get("bot_id") || "").trim();
+    return { alias: a, botIdFromUrl: b };
+  }, []);
 
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
 
@@ -653,7 +653,7 @@ export default function Welcome() {
           "w-screen min-h-[100dvh] flex items-center justify-center bg-[var(--page-bg)] p-4 transition-opacity duration-200",
           brandReady ? "opacity-100" : "opacity-0"
         )}
-        style={liveTheme}
+        style={themeVars}
       >
         <div className="text-gray-800 text-center space-y-2">
           <div className="text-lg font-semibold">No bot selected</div>
@@ -693,7 +693,7 @@ export default function Welcome() {
         "w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center transition-opacity duration-200",
         brandReady ? "opacity-100" : "opacity-0"
       )}
-      style={liveTheme}
+      style={themeVars}
     >
       <div
         ref={frameRef}
