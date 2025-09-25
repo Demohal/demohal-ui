@@ -93,7 +93,7 @@ export function inverseBW(hex) {
  *  UI PRIMITIVES             *
  * ========================== */
 export const UI = {
-  CARD: "rounded-[0.75rem] p-4 bg-white [box-shadow:var(--shadow-elevation)]",
+  CARD: "rounded-[0.75rem] p-4 bg-[var(--card-bg)] [box-shadow:var(--shadow-elevation)]",
   BTN_DEMO:
     "w-full text-center rounded-[0.75rem] px-4 py-3 transition " +
     "text-[var(--demo-button-fg)] bg-[var(--demo-button-bg)] hover:brightness-110 active:brightness-95",
