@@ -1152,7 +1152,6 @@ export default function Welcome() {
                                         <div className="text-base font-bold whitespace-pre-line">
                                             {responseText}
                                         </div>
-                                        <DebugPanel debug={debugInfo} />
                                         {showIntroVideo && introVideoUrl ? (
                                             <div style={{ position: "relative", paddingTop: "56.25%" }}>
                                                 <iframe
