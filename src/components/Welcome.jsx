@@ -118,118 +118,7 @@ const UI = {
     "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] hover:brightness-110",
 };
 
-function Row({ item, onPick, kind = "demo" }) {
-  const btnClass =
-    kind === "doc"
-      ? UI.BTN_DOC
-      : kind === "price"
-      ? UI.BTN_PRICE
-      : UI.BTN_DEMO;
-  return (
-    <button
-      data-patch="row-button"
-      onClick={() => onPick(item)}
-      className={btnClass}
-      title={item.description || ""}
-    >
-      <div className="font-extrabold text-xs sm:text-sm">{item.title}</div>
-      {item.description ? (
-        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">
-          {item.description}
-        </div>
-      ) : item.functions_text ? (
-        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">
-          {item.functions_text}
-        </div>
-      ) : null}
-    </button>
-  );
-}
 
-function OptionButton({ opt, selected, onClick }) {
-  return (
-    <button
-      data-patch="option-button"
-      onClick={() => onClick(opt)}
-      className={classNames(UI.BTN_PRICE, selected && "ring-2 ring-black/20")}
-      title={opt.tooltip || ""}
-    >
-      <div className="font-extrabold text-xs sm:text-sm">{opt.label}</div>
-      {opt.tooltip ? (
-        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">
-          {opt.tooltip}
-        </div>
-      ) : null}
-    </button>
-  );
-}
-
-function PriceMirror({ lines }) {
-  if (!lines?.length) return null;
-  return (
-    <div data-patch="price-mirror" className="mb-3">
-      {lines.map((ln, i) => (
-        <div
-          key={i}
-          className="text-base italic whitespace-pre-line text-[var(--mirror-fg)]"
-        >
-          {ln}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function EstimateCard({ estimate, outroText }) {
-  if (!estimate) return null;
-
-  const items = Array.isArray(estimate.line_items) ? estimate.line_items : [];
-
-  const fmtAmount = (ccy, v) => `${ccy} ${Number(v).toLocaleString()}`;
-  const fmtRange = (ccy, min, max) =>
-    Number(min) === Number(max) ? fmtAmount(ccy, max) : `${fmtAmount(ccy, min)} – ${fmtAmount(ccy, max)}`;
-
-  const totalText = fmtRange(estimate.currency_code, estimate.total_min, estimate.total_max);
-
-  return (
-    <div data-patch="estimate-card">
-      <div className={UI.CARD}>
-        <div className="flex items-center justify-between mb-3">
-          <div className="font-bold text-lg">Your Estimate</div>
-          <div className="font-bold text-lg text-right [font-variant-numeric:tabular-nums]">
-            {totalText}
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          {items.map((li, idx) => {
-            const name = li?.product?.name ?? li?.label ?? "Item";
-            const key = li?.product?.id ?? `${name}-${idx}`;
-            const ccy = li?.currency_code || estimate.currency_code || "";
-            const lineText = fmtRange(ccy, li?.price_min, li?.price_max);
-
-            return (
-              <div key={key} className="rounded-[0.75rem] p-3 bg-white">
-                <div className="grid grid-cols-[1fr_auto] items-center gap-3">
-                  <div className="font-bold">{name}</div>
-                  <div className="font-bold text-lg text-right [font-variant-numeric:tabular-nums]">
-                    {lineText}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {outroText ? (
-        <div className="mt-3 text-base font-bold whitespace-pre-line">
-          {outroText}
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 /* ---------- Options normalizer (accepts many backend shapes) ---------- */
 function normalizeOptions(q) {
@@ -554,7 +443,7 @@ export default function Welcome() {
           });
         }
         if (id) setBotId(id);
-      } catch {}
+      } catch { }
     })();
     return () => {
       cancel = true;
@@ -597,7 +486,7 @@ export default function Welcome() {
           });
         }
         if (data?.ok && data?.bot?.id) setBotId(data.bot.id);
-      } catch {}
+      } catch { }
     })();
     return () => {
       cancel = true;
@@ -676,7 +565,7 @@ export default function Welcome() {
             custom_notice: b.pricing_custom_notice || "",
           });
         }
-      } catch {}
+      } catch { }
     })();
     return () => {
       cancel = true;
@@ -691,13 +580,13 @@ export default function Welcome() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-/* ================================================================================= *
- *  END SECTION 2                                                                  *
- * ================================================================================= */
-  
-/* ================================================================================= *
- *  BEGIN SECTION 3                                                                  *
- * ================================================================================= */
+  /* ================================================================================= *
+   *  END SECTION 2                                                                  *
+   * ================================================================================= */
+
+  /* ================================================================================= *
+   *  BEGIN SECTION 3                                                                  *
+   * ================================================================================= */
   // release sticky when scrolling
   useEffect(() => {
     const el = contentRef.current;
@@ -709,55 +598,55 @@ export default function Welcome() {
     return () => el.removeEventListener("scroll", onScroll);
   }, [selected, isAnchored]);
 
-// Calendly booking listener — send rich payload to backend (no Calendly fetch)
-useEffect(() => {
-  if (mode !== "meeting" || !botId || !sessionId || !visitorId) return;
+  // Calendly booking listener — send rich payload to backend (no Calendly fetch)
+  useEffect(() => {
+    if (mode !== "meeting" || !botId || !sessionId || !visitorId) return;
 
-  function onCalendlyMessage(e) {
-    try {
-      const m = e?.data;
-      if (!m || typeof m !== "object") return;
+    function onCalendlyMessage(e) {
+      try {
+        const m = e?.data;
+        if (!m || typeof m !== "object") return;
 
-      // We only care about these two events
-      if (m.event !== "calendly.event_scheduled" && m.event !== "calendly.event_canceled") return;
+        // We only care about these two events
+        if (m.event !== "calendly.event_scheduled" && m.event !== "calendly.event_canceled") return;
 
-      const p = m.payload || {};
+        const p = m.payload || {};
 
-      // Build a rich, self-contained payload from the postMessage
-      const payloadOut = {
-        event: m.event, // e.g., "calendly.event_scheduled"
-        scheduled_event: p.event || p.scheduled_event || null, // mirrors what Calendly sends
-        invitee: {
-          uri: p.invitee?.uri ?? null,
-          email: p.invitee?.email ?? null,
-          name: p.invitee?.full_name ?? p.invitee?.name ?? null,
-        },
-        questions_and_answers:
-          p.questions_and_answers ??
-          p.invitee?.questions_and_answers ??
-          [],
-        tracking: p.tracking || {}, // utm_* fields if present
-      };
+        // Build a rich, self-contained payload from the postMessage
+        const payloadOut = {
+          event: m.event, // e.g., "calendly.event_scheduled"
+          scheduled_event: p.event || p.scheduled_event || null, // mirrors what Calendly sends
+          invitee: {
+            uri: p.invitee?.uri ?? null,
+            email: p.invitee?.email ?? null,
+            name: p.invitee?.full_name ?? p.invitee?.name ?? null,
+          },
+          questions_and_answers:
+            p.questions_and_answers ??
+            p.invitee?.questions_and_answers ??
+            [],
+          tracking: p.tracking || {}, // utm_* fields if present
+        };
 
-      // Forward to backend (no Calendly API calls in the browser)
-      fetch(`${apiBase}/calendly/js-event`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bot_id: botId,
-          session_id: sessionId,
-          visitor_id: visitorId,
-          payload: payloadOut,
-        }),
-      }).catch(() => {});
-    } catch {
-      // swallow — non-blocking telemetry
+        // Forward to backend (no Calendly API calls in the browser)
+        fetch(`${apiBase}/calendly/js-event`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            bot_id: botId,
+            session_id: sessionId,
+            visitor_id: visitorId,
+            payload: payloadOut,
+          }),
+        }).catch(() => { });
+      } catch {
+        // swallow — non-blocking telemetry
+      }
     }
-  }
 
-  window.addEventListener("message", onCalendlyMessage);
-  return () => window.removeEventListener("message", onCalendlyMessage);
-}, [mode, botId, sessionId, visitorId, apiBase]);
+    window.addEventListener("message", onCalendlyMessage);
+    return () => window.removeEventListener("message", onCalendlyMessage);
+  }, [mode, botId, sessionId, visitorId, apiBase]);
 
   async function normalizeAndSelectDemo(item) {
     try {
@@ -809,11 +698,11 @@ useEffect(() => {
         try {
           {
             const base = ag.calendar_link || "";
-            const withQS = `${base}${base.includes('?') ? '&' : '?'}session_id=${encodeURIComponent(sessionId||'')}&visitor_id=${encodeURIComponent(visitorId||'')}&bot_id=${encodeURIComponent(botId||'')}&utm_source=${encodeURIComponent(botId||'')}&utm_medium=${encodeURIComponent(sessionId||'')}&utm_campaign=${encodeURIComponent(visitorId||'')}`;
+            const withQS = `${base}${base.includes('?') ? '&' : '?'}session_id=${encodeURIComponent(sessionId || '')}&visitor_id=${encodeURIComponent(visitorId || '')}&bot_id=${encodeURIComponent(botId || '')}&utm_source=${encodeURIComponent(botId || '')}&utm_medium=${encodeURIComponent(sessionId || '')}&utm_campaign=${encodeURIComponent(visitorId || '')}`;
             window.open(withQS, "_blank", "noopener,noreferrer");
 
           }
-        } catch {}
+        } catch { }
       }
       requestAnimationFrame(() =>
         contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
@@ -880,7 +769,7 @@ useEffect(() => {
   }
 
 
-  
+
   // Pricing loader
   const priceScrollRef = useRef(null);
   useEffect(() => {
@@ -1078,11 +967,11 @@ useEffect(() => {
   /* ================================================================================= *
    * END SECTION 3                                                                     *
    * ================================================================================= */
-  
-    /* ================================================================================= *
-   *  BEGIN SECTION 4                                                                  *
-   * ================================================================================= */
-  
+
+  /* ================================================================================= *
+ *  BEGIN SECTION 4                                                                  *
+ * ================================================================================= */
+
   function handlePickOption(q, opt) {
     const isMulti = String(q?.type || "").toLowerCase().includes("multi");
     setPriceAnswers((prev) => {
@@ -1100,7 +989,7 @@ useEffect(() => {
   async function sendMessage() {
     if (!input.trim() || !botId) return;
     const outgoing = input.trim();
-    
+
     // Capture screen-scoped context synchronously at submit time
     const commitScope = (() => {
       let scope = "standard";
@@ -1135,8 +1024,8 @@ useEffect(() => {
       const recSource = Array.isArray(data?.items)
         ? data.items
         : Array.isArray(data?.buttons)
-        ? data.buttons
-        : [];
+          ? data.buttons
+          : [];
 
       const recs = (Array.isArray(recSource) ? recSource : [])
         .map((it) => {
@@ -1294,7 +1183,7 @@ useEffect(() => {
         className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all duration-300"
       >
         {/* Header */}
-        <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)]"> 
+        <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)]">
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
               <img src={logoSrc} alt="Brand logo" className="h-10 object-contain" />
@@ -1303,14 +1192,14 @@ useEffect(() => {
               {selected
                 ? selected.title
                 : mode === "browse"
-                ? "Browse Demos"
-                : mode === "docs"
-                ? "Browse Documents"
-                : mode === "price"
-                ? "Price Estimate"
-                : mode === "meeting"
-                ? "Schedule Meeting"
-                : "Ask the Assistant"}
+                  ? "Browse Demos"
+                  : mode === "docs"
+                    ? "Browse Documents"
+                    : mode === "price"
+                      ? "Price Estimate"
+                      : mode === "meeting"
+                        ? "Schedule Meeting"
+                        : "Ask the Assistant"}
             </div>
           </div>
           <TabsNav mode={mode} tabs={tabs} />
@@ -1364,15 +1253,15 @@ useEffect(() => {
             </div>
           </>
         ) : (
-  
-/* ================================================================================= *
-* END SECTION 4                                                                     *
-* ================================================================================= */
 
-/* ================================================================================= *
-*  BEGIN SECTION 5                                                                  *
-* ================================================================================= */          
-        
+          /* ================================================================================= *
+          * END SECTION 4                                                                     *
+          * ================================================================================= */
+
+          /* ================================================================================= *
+          *  BEGIN SECTION 5                                                                  *
+          * ================================================================================= */
+
           /* OTHER MODES */
           <div
             ref={contentRef}
@@ -1396,7 +1285,7 @@ useEffect(() => {
                     agent.calendar_link ? (
                     <iframe
                       title="Schedule a Meeting"
-                      src={`${agent.calendar_link}${agent.calendar_link.includes('?') ? '&' : '?'}embed_domain=${embedDomain}&embed_type=Inline&session_id=${encodeURIComponent(sessionId||'')}&visitor_id=${encodeURIComponent(visitorId||'')}&bot_id=${encodeURIComponent(botId||'')}&utm_source=${encodeURIComponent(botId||'')}&utm_medium=${encodeURIComponent(sessionId||'')}&utm_campaign=${encodeURIComponent(visitorId||'')}`}
+                      src={`${agent.calendar_link}${agent.calendar_link.includes('?') ? '&' : '?'}embed_domain=${embedDomain}&embed_type=Inline&session_id=${encodeURIComponent(sessionId || '')}&visitor_id=${encodeURIComponent(visitorId || '')}&bot_id=${encodeURIComponent(botId || '')}&utm_source=${encodeURIComponent(botId || '')}&utm_medium=${encodeURIComponent(sessionId || '')}&utm_campaign=${encodeURIComponent(visitorId || '')}`}
                       style={{
                         width: "100%",
                         height: "60vh",
@@ -1407,7 +1296,7 @@ useEffect(() => {
                     />
                   ) : agent.calendar_link_type &&
                     String(agent.calendar_link_type).toLowerCase() ===
-                      "external" &&
+                    "external" &&
                     agent.calendar_link ? (
                     <div className="text-sm text-gray-700">
                       We opened the scheduling page in a new tab. If it didn’t
