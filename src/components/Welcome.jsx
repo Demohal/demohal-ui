@@ -121,6 +121,46 @@ const UI = {
 
 
 
+function TabsNav({ mode, tabs }) {
+  return (
+    <div
+      className="w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      data-patch="tabs-nav"
+    >
+      <nav
+        className="inline-flex min-w-max items-center gap-0.5 overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        role="tablist"
+      >
+        {tabs.map((t) => {
+          const active =
+            (mode === "browse" && t.key === "demos") ||
+            (mode === "docs" && t.key === "docs") ||
+            (mode === "price" && t.key === "price") ||
+            (mode === "meeting" && t.key === "meeting");
+          return (
+            <button
+              key={t.key}
+              onClick={t.onClick}
+              role="tab"
+              aria-selected={active}
+              className={active ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}
+              style={
+                active
+                  ? { background: "var(--card-bg)", color: "var(--tab-active-fg)" }
+                  : { background: "var(--tab-bg)", color: "var(--tab-fg)" }
+              }
+              type="button"
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}
+
+
 export default function Welcome() {
   const apiBase =
     import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
@@ -484,6 +524,9 @@ export default function Welcome() {
     return () => el.removeEventListener("scroll", onScroll);
   }, [selected, isAnchored]);
 
+
+
+
   // Ask flow
   async function sendMessage() {
     if (!input.trim() || !botId) return;
@@ -588,9 +631,77 @@ export default function Welcome() {
     }
   }
 
- 
-  
-  
+  const listSource = mode === "browse" ? browseItems : items;
+  const askUnderVideo = useMemo(() => {
+    if (!selected) return items;
+    const selKey = selected.id ?? selected.url ?? selected.title;
+    return (items || []).filter(
+      (it) => (it.id ?? it.url ?? it.title) !== selKey
+    );
+  }, [selected, items]);
+  const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
+
+  const tabs = useMemo(() => {
+    const out = [];
+    if (tabsEnabled.demos)
+      out.push({ key: "demos", label: "Browse Demos", onClick: openBrowse });
+    if (tabsEnabled.docs)
+      out.push({
+        key: "docs",
+        label: "Browse Documents",
+        onClick: openBrowseDocs,
+      });
+    if (tabsEnabled.price)
+      out.push({
+        key: "price",
+        label: "Price Estimate",
+        onClick: () => {
+          setSelected(null);
+          setMode("price");
+        },
+      });
+    if (tabsEnabled.meeting)
+      out.push({ key: "meeting", label: "Schedule Meeting", onClick: openMeeting });
+    return out;
+  }, [tabsEnabled]);
+
+  if (fatal) {
+    return (
+      <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
+        <div className="text-red-600 font-semibold">{fatal}</div>
+      </div>
+    );
+  }
+  if (!botId) {
+    return (
+      <div
+        className={classNames(
+          "w-screen min-h-[100dvh] flex items-center justify-center bg-[var(--page-bg)] p-4 transition-opacity duration-200",
+          brandReady ? "opacity-100" : "opacity-0"
+        )}
+        style={liveTheme}
+      >
+        <div className="text-gray-800 text-center space-y-2">
+          <div className="text-lg font-semibold">No bot selected</div>
+          {alias ? (
+            <div className="text-sm text-gray-600">
+              Resolving alias “{alias}”…
+            </div>
+          ) : (
+            <div className="text-sm text-gray-600">
+              Provide a <code>?bot_id=…</code> or <code>?alias=…</code> in the
+              URL
+              {defaultAlias ? (
+                <> (trying default alias “{defaultAlias}”)</>
+              ) : null}
+              .
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   const showAskBottom = mode !== "price" || !!priceEstimate;
   const embedDomain =
     typeof window !== "undefined" ? window.location.hostname : "";
@@ -633,6 +744,7 @@ export default function Welcome() {
                         : "Ask the Assistant"}
             </div>
           </div>
+          <TabsNav mode={mode} tabs={tabs} />
         </div>
 
         {/* PRICE MODE */}
@@ -684,7 +796,13 @@ export default function Welcome() {
           </>
         ) : (
 
-          
+          /* ================================================================================= *
+          * END SECTION 4                                                                     *
+          * ================================================================================= */
+
+          /* ================================================================================= *
+          *  BEGIN SECTION 5                                                                  *
+          * ================================================================================= */
 
           /* OTHER MODES */
           <div
