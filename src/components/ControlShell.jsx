@@ -1,8 +1,10 @@
-// src/components/ControlShell.jsx
+// ------------------------------------------------------
+// File: src/components/ControlShell.jsx  (shell + Welcome)
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import { DEFAULT_THEME_VARS, inverseBW, UI } from "./AskAssistant/AskAssistant.ui";
-import ColorBox from "./AskAssistant/ColorBox"; // optional (themelab)
+import ColorBox from "./AskAssistant/ColorBox"; // optional
+import WelcomeView from "./views/WelcomeView";
 
 export default function ControlShell() {
   const apiBase = import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
@@ -21,52 +23,43 @@ export default function ControlShell() {
 
   // Core
   const [botId, setBotId] = useState(botIdFromUrl || "");
-  const [fatal, setFatal] = useState("");
   const [resolved, setResolved] = useState(false);
-  const [mode, setMode] = useState("ask");
-  const [input, setInput] = useState("");
-  const [responseText, setResponseText] = useState("");
+  const [mode, setMode] = useState("welcome"); // default to Welcome view
 
-  // Theme / brand
+  // Branding / theme
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
   const derivedTheme = useMemo(() => {
     const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
     return { ...themeVars, "--tab-active-fg": activeFg };
   }, [themeVars]);
-
   const [brandAssets, setBrandAssets] = useState({ logo_url: null });
 
-  // Intro
+  // Welcome content
+  const [welcomeText, setWelcomeText] = useState("");
   const [introVideoUrl, setIntroVideoUrl] = useState("");
   const [showIntroVideo, setShowIntroVideo] = useState(false);
 
   // Tabs from server
-  const [tabsEnabled, setTabsEnabled] = useState({
-    demos: false, docs: false, meeting: false, price: false,
-  });
+  const [tabsEnabled, setTabsEnabled] = useState({ demos: false, docs: false, meeting: false, price: false });
 
   // Ask box autosize (1→3 lines)
+  const [input, setInput] = useState("");
   const inputRef = useRef(null);
   useEffect(() => {
     const el = inputRef.current; if (!el) return;
-    const lineH = 22;
-    const max = lineH * 3;
+    const lineH = 22; const max = lineH * 3;
     el.style.height = "auto";
     el.style.maxHeight = `${max}px`;
     el.style.overflowY = el.scrollHeight > max ? "auto" : "hidden";
     el.style.height = `${Math.min(el.scrollHeight, max)}px`;
   }, [input]);
 
-  // Resolve bot (same flow as prod)
+  // Resolve bot (production flow)
   useEffect(() => {
     async function loadBy(url) {
       const res = await fetch(url);
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || data?.ok === false || !data?.bot?.id) {
-        setFatal("Invalid or inactive alias.");
-        setResolved(false);
-        return;
-      }
+      if (!res.ok || data?.ok === false || !data?.bot?.id) { setResolved(false); return; }
       const b = data.bot;
       setTabsEnabled({
         demos: !!b.show_browse_demos,
@@ -74,7 +67,7 @@ export default function ControlShell() {
         meeting: !!b.show_schedule_meeting,
         price: !!b.show_price_estimate,
       });
-      setResponseText(b.welcome_message || "");
+      setWelcomeText(b.welcome_message || "");
       setIntroVideoUrl(b.intro_video_url || "");
       setShowIntroVideo(!!b.show_intro_video);
       setBotId(b.id);
@@ -89,23 +82,20 @@ export default function ControlShell() {
     })();
   }, [alias, defaultAlias, botIdFromUrl, apiBase]);
 
-  // Brand tokens / assets (same as prod)
+  // Brand tokens / assets
   useEffect(() => {
     if (!resolved || !botId) return;
     (async () => {
       try {
         const res = await fetch(`${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`);
         const data = await res.json().catch(() => ({}));
-        if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
-          setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
-        }
-        if (data?.ok && data?.assets?.logo_url) {
-          setBrandAssets({ logo_url: data.assets.logo_url });
-        }
+        if (data?.ok && data?.css_vars && typeof data.css_vars === "object") setThemeVars((p) => ({ ...p, ...data.css_vars }));
+        if (data?.ok && data?.assets?.logo_url) setBrandAssets({ logo_url: data.assets.logo_url });
       } catch {}
     })();
   }, [resolved, botId, apiBase]);
 
+  // Tabs (same labels as prod)
   const tabs = [
     tabsEnabled.demos && { key: "demos", label: "Browse Demos" },
     tabsEnabled.docs && { key: "docs", label: "Browse Documents" },
@@ -113,11 +103,11 @@ export default function ControlShell() {
     tabsEnabled.meeting && { key: "meeting", label: "Schedule Meeting" },
   ].filter(Boolean);
 
-  // Fixed metrics (from prod)
+  // Fixed card metrics — use the same shell box; adjust if you need 48rem
   const CARD_W = "56rem";
   const CARD_H = "44rem";
 
-  const send = () => {}; // wired later
+  const send = () => {};
 
   if (!resolved) {
     return (
@@ -136,55 +126,34 @@ export default function ControlShell() {
         className="mx-auto mt-8 mb-10 rounded-2xl overflow-hidden"
         style={{ width: CARD_W, height: CARD_H, boxShadow: "var(--shadow-elevation, 0 10px 30px rgba(0,0,0,.08))" }}
       >
-        {/* Banner inside the card */}
+        {/* Banner INSIDE card */}
         <div className="bg-black text-white px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               {brandAssets.logo_url ? (
-                <img src={brandAssets.logo_url} alt="logo" className="h-10 w-auto" /> // match prod sizing
+                <img src={brandAssets.logo_url} alt="logo" className="h-8 w-auto" />
               ) : (
-                <div className="font-extrabold text-lg">DemoHAL</div>
+                <div className="font-extrabold">DemoHAL</div>
               )}
             </div>
-            <div className="text-base font-semibold" style={{ color: "#22c55e" }}>
-              Ask the Assistant
-            </div>
+            <div className="text-sm font-semibold" style={{ color: "#22c55e" }}>Ask the Assistant</div>
           </div>
+          {/* Centered tabs */}
           <div className="flex justify-center gap-2 pt-3">
             {tabs.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setMode(t.key)}
-                className={mode === t.key ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}
-              >
+              <button key={t.key} onClick={() => setMode(t.key)} className={mode === t.key ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}>
                 {t.label}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Body (fixed height with internal scroll) */}
+        {/* Body (content area) */}
         <div className="px-4 pb-4 overflow-auto" style={{ height: `calc(${CARD_H} - 6.5rem)` }}>
           <div className={UI.CARD}>
-            {responseText ? (
-              <div className="text-base font-semibold whitespace-pre-line text-[var(--message-fg)]">
-                {responseText}
-              </div>
-            ) : null}
+            <WelcomeView welcomeText={welcomeText} introVideoUrl={introVideoUrl} showIntroVideo={showIntroVideo} />
 
-            {showIntroVideo && introVideoUrl ? (
-              <div className="mt-3">
-                <iframe
-                  title="intro"
-                  src={introVideoUrl}
-                  className="w-full aspect-video rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                />
-              </div>
-            ) : null}
-
-            {/* Footer: divider + ask box + centered send */}
+            {/* Footer: divider + ask box */}
             <div className="mt-3 pt-3 border-t border-[var(--border-color,#e5e7eb)] relative">
               <textarea
                 ref={inputRef}
@@ -210,12 +179,7 @@ export default function ControlShell() {
 
       {/* ThemeLab (optional) */}
       {themeLabOn && botId ? (
-        <ColorBox
-          apiBase={apiBase}
-          botId={botId}
-          frameRef={null}
-          onVars={(vars) => setThemeVars((prev) => ({ ...prev, ...vars }))}
-        />
+        <ColorBox apiBase={apiBase} botId={botId} frameRef={null} onVars={(vars) => setThemeVars((prev) => ({ ...prev, ...vars }))} />
       ) : null}
     </div>
   );
