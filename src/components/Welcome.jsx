@@ -166,17 +166,12 @@ export default function Welcome() {
     import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
   // URL → alias / bot_id / themelab
-  const { alias, botIdFromUrl, themeLabOn } = useMemo(() => {
-    const qs = new URLSearchParams(window.location.search);
-    const a = (qs.get("alias") || qs.get("alais") || "").trim();
-    const b = (qs.get("bot_id") || "").trim();
-    const th = (qs.get("themelab") || "").trim();
-    return {
-      alias: a,
-      botIdFromUrl: b,
-      themeLabOn: th === "1" || th.toLowerCase() === "true",
-    };
-  }, []);
+  const { alias, botIdFromUrl } = useMemo(() => {
+  const qs = new URLSearchParams(window.location.search);
+  const a = (qs.get("alias") || qs.get("alais") || "").trim();
+  const b = (qs.get("bot_id") || "").trim();
+  return { alias: a, botIdFromUrl: b };
+}, []);
 
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
 
@@ -209,19 +204,8 @@ export default function Welcome() {
   const [visitorId, setVisitorId] = useState("");
   const [sessionId, setSessionId] = useState("");
 
-  // Theme vars (DB → in-memory → derived → live with picker overrides)
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
-  const derivedTheme = useMemo(() => {
-    const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
-    return { ...themeVars, "--tab-active-fg": activeFg };
-  }, [themeVars]);
 
-  // picker overrides (live preview)
-  const [pickerVars, setPickerVars] = useState({});
-  const liveTheme = useMemo(
-    () => ({ ...derivedTheme, ...pickerVars }),
-    [derivedTheme, pickerVars]
-  );
 
   const [brandAssets, setBrandAssets] = useState({
     logo_url: null,
@@ -513,7 +497,7 @@ export default function Welcome() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-    // release sticky when scrolling
+  // release sticky when scrolling
   useEffect(() => {
     const el = contentRef.current;
     if (!el || !selected) return;
@@ -641,7 +625,7 @@ export default function Welcome() {
   }, [selected, items]);
   const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
 
- const tabs = useMemo(() => {
+  const tabs = useMemo(() => {
     const out = [];
     if (tabsEnabled.demos)
       out.push({ key: "demos", label: "Browse Demos" });
@@ -652,7 +636,7 @@ export default function Welcome() {
     if (tabsEnabled.meeting)
       out.push({ key: "meeting", label: "Schedule Meeting" });
     return out;
-}, [tabsEnabled]);
+  }, [tabsEnabled]);
 
 
   if (fatal) {
@@ -692,7 +676,8 @@ export default function Welcome() {
     );
   }
 
-  const showAskBottom = mode !== "price" || !!priceEstimate;
+  const showAskBottom = true;
+
   const embedDomain =
     typeof window !== "undefined" ? window.location.hostname : "";
 
@@ -721,17 +706,7 @@ export default function Welcome() {
               <img src={logoSrc} alt="Brand logo" className="h-10 object-contain" />
             </div>
             <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
-              {selected
-                ? selected.title
-                : mode === "browse"
-                  ? "Browse Demos"
-                  : mode === "docs"
-                    ? "Browse Documents"
-                    : mode === "price"
-                      ? "Price Estimate"
-                      : mode === "meeting"
-                        ? "Schedule Meeting"
-                        : "Ask the Assistant"}
+              Ask the Assistant
             </div>
           </div>
           <TabsNav mode={mode} tabs={tabs} />
@@ -740,12 +715,12 @@ export default function Welcome() {
         {/* PRICE MODE */}
         {mode === "price" ? (
           <>
-           
-            
+
+
           </>
         ) : (
 
-         
+
 
           /* OTHER MODES */
           <div
@@ -848,7 +823,7 @@ export default function Welcome() {
               <div className="w-full flex-1 flex flex-col">
                 {(browseItems || []).length > 0 && (
                   <>
-                    
+
                   </>
                 )}
               </div>
@@ -856,8 +831,8 @@ export default function Welcome() {
               <div className="w-full flex-1 flex flex-col">
                 {(browseDocs || []).length > 0 && (
                   <>
-                    
-                    
+
+
                   </>
                 )}
               </div>
