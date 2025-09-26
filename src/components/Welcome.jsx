@@ -1,9 +1,11 @@
-/* Welcome.jsx — mocked FormFill wiring (fname, lname, email)
-   Specs implemented:
-   - Trigger on the first Ask or first tab click; after submit, don't show again (persisted in sessionStorage per-bot).
-   - Clear the content area and show intro + a card with fields and tooltips.
-   - Validate by type; submit continues the originally selected action.
-   - Banner title during form: “Tell us about yourself”.
+/* Welcome.jsx — FULL FILE (patched)
+   - Tabs (Demos, Docs, Meeting); Ask is not a tab
+   - Dynamic FormFill fetched from backend (/formfill-config)
+     * Honors bots_v2.show_formfill and bots_v2.formfill_fields
+     * Prefills from visitors_v2.formfill_fields and URL params (field_key)
+     * Shows once on first Ask/Tab click; hidden after submit for the session
+     * Bypasses entirely when disabled or no collectable fields
+   - Demo (video) & Doc iframe viewers preserved
 */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -25,44 +27,32 @@ const DEFAULT_THEME_VARS = {
   "--banner-fg": "#ffffff",
   "--page-bg": "#e6e6e6",
   "--card-bg": "#ffffff",
-  "--shadow-elevation":
-    "0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.10)",
-
+  "--shadow-elevation": "0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.10)",
   // Text roles
   "--message-fg": "#000000",
   "--helper-fg": "#4b5563",
   "--mirror-fg": "#4b5563",
-
   // Tabs (inactive)
   "--tab-bg": "#303030",
   "--tab-fg": "#ffffff",
-  "--tab-active-fg": "#ffffff", // derived at runtime
-
-  // Buttons (explicit types)
+  "--tab-active-fg": "#ffffff", // computed at runtime
+  // Buttons
   "--demo-button-bg": "#3a4554",
   "--demo-button-fg": "#ffffff",
-  "--doc.button.background": "#000000", // legacy mapping guard (no-op)
+  "--doc.button.background": "#000000", // legacy no-op
   "--doc-button-bg": "#000000",
   "--doc-button-fg": "#ffffff",
-
   // Send icon
   "--send-color": "#000000",
-
-  // Default faint gray border (used only where allowed)
+  // Borders
   "--border-default": "#9ca3af",
 };
 
 const classNames = (...xs) => xs.filter(Boolean).join(" ");
-
-// compute contrasting active fg based on tab fg
 function inverseBW(hex) {
-  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(
-    String(hex || "").trim()
-  );
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(String(hex || "").trim());
   if (!m) return "#000000";
-  const r = parseInt(m[1], 16),
-    g = parseInt(m[2], 16),
-    b = parseInt(m[3], 16);
+  const r = parseInt(m[1], 16), g = parseInt(m[2], 16), b = parseInt(m[3], 16);
   const L = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   return L > 0.5 ? "#000000" : "#ffffff";
 }
@@ -80,6 +70,16 @@ export default function Welcome() {
   }, []);
 
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
+
+  // URL params (used to prefill form fields by field_key)
+  const urlParams = useMemo(() => {
+    const q = new URLSearchParams(window.location.search);
+    const o = {};
+    q.forEach((v, k) => {
+      o[k] = v;
+    });
+    return o;
+  }, []);
 
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [fatal, setFatal] = useState("");
@@ -135,6 +135,12 @@ export default function Welcome() {
     meeting: false,
   });
 
+  // --- FormFill server-driven config/state ---
+  const [showFormfill, setShowFormfill] = useState(true); // server can disable per-bot
+  const [formFields, setFormFields] = useState([]); // bots_v2.formfill_fields
+  const [visitorDefaults, setVisitorDefaults] = useState({}); // visitors_v2.formfill_fields map
+
+
   // === Mocked FormFill session flags ===
   const [formShown, setFormShown] = useState(false); // first interaction opens it
   const [formCompleted, setFormCompleted] = useState(false); // never show again after submit
@@ -185,6 +191,7 @@ export default function Welcome() {
         );
         const data = await res.json();
         if (cancel) return;
+
         const id = data?.ok ? data?.bot?.id : null;
 
         if (data?.ok) {
@@ -254,7 +261,7 @@ export default function Welcome() {
     };
   }, [botId, alias, defaultAlias, apiBase]);
 
-  // If we start with bot_id in URL, load settings that way (and init visitor/session)
+  // If we start with bot_id in URL
   useEffect(() => {
     if (!botIdFromUrl) return;
     let cancel = false;
@@ -294,10 +301,9 @@ export default function Welcome() {
     if (!botId && !alias && !brandReady) setBrandReady(true);
   }, [botId, alias, brandReady]);
 
-  // Brand: css vars + assets
+  // Brand assets + css vars
   const [introVideoUrl, setIntroVideoUrl] = useState("");
   const [showIntroVideo, setShowIntroVideo] = useState(false);
-
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
@@ -319,8 +325,8 @@ export default function Welcome() {
             logo_dark_url: data.assets.logo_dark_url || null,
           });
         }
-      } catch {
-      } finally {
+      } catch {}
+      finally {
         if (!cancel) setBrandReady(true);
       }
     })();
@@ -328,6 +334,62 @@ export default function Welcome() {
       cancel = true;
     };
   }, [botId, apiBase]);
+
+  /* ============================= *
+   *   FormFill config fetcher     *
+   * ============================= */
+  async function fetchFormfillConfigBy(botIdArg, aliasArg) {
+    try {
+      const params = new URLSearchParams();
+      if (botIdArg) params.set("bot_id", botIdArg);
+      else if (aliasArg) params.set("alias", aliasArg);
+      if (visitorId) params.set("visitor_id", visitorId);
+      if ([...params.keys()].length === 0) return;
+      const res = await fetch(
+        `${apiBase}/formfill-config?${params.toString()}`
+      );
+      const data = await res.json();
+      if (data?.ok) {
+        setShowFormfill(!!data.show_formfill);
+        setFormFields(Array.isArray(data.fields) ? data.fields : []);
+        if (data.visitor_values && typeof data.visitor_values === "object") {
+          setVisitorDefaults(data.visitor_values);
+        }
+      }
+    } catch {}
+  }
+
+  // Fetch when botId resolves
+  useEffect(() => {
+    if (botId) fetchFormfillConfigBy(botId, null);
+  }, [botId]);
+
+  // If operating by alias before botId exists
+  useEffect(() => {
+    if (!botId && alias) fetchFormfillConfigBy(null, alias);
+  }, [alias, botId]);
+
+  // When visitorId appears, refresh to include visitor defaults
+  useEffect(() => {
+    if (botId && visitorId) fetchFormfillConfigBy(botId, null);
+  }, [visitorId]);
+
+  // Filter to collectable fields (is_standard overrides is_collected)
+  const activeFormFields = useMemo(() => {
+    const arr = Array.isArray(formFields) ? formFields : [];
+    return arr.filter((f) => f && (f.is_standard || f.is_collected));
+  }, [formFields]);
+
+  // Defaults: visitor values merged with URL overrides (URL wins)
+  const formDefaults = useMemo(() => {
+    const o = { ...(visitorDefaults || {}) };
+    activeFormFields.forEach((f) => {
+      const k = f.field_key;
+      const urlV = urlParams[k];
+      if (typeof urlV === "string" && urlV.length) o[k] = urlV;
+    });
+    return o;
+  }, [activeFormFields, visitorDefaults, urlParams]);
 
   /* ============ *
    *   Ask Flow   *
@@ -340,16 +402,19 @@ export default function Welcome() {
     setResponseText("");
     setItems([]);
     setLoading(true);
-
     try {
       const res = await axios.post(
         `${apiBase}/demo-hal`,
-        withIdsBody({ bot_id: botId, user_question: outgoing, scope: "standard", debug: true }),
+        withIdsBody({
+          bot_id: botId,
+          user_question: outgoing,
+          scope: "standard",
+          debug: true,
+        }),
         { timeout: 30000, headers: withIdsHeaders() }
       );
       const data = res?.data || {};
       const text = data?.response_text || "";
-
       try {
         const src = Array.isArray(data?.items)
           ? data.items
@@ -360,14 +425,13 @@ export default function Welcome() {
           id: it.id ?? it.value ?? it.url ?? it.title ?? String(idx),
           title: it.title ?? it.button_title ?? it.label ?? "",
           url: it.url ?? it.value ?? it.button_value ?? "",
-          description: it.description ?? it.summary ?? it.functions_text ?? "",
+          description:
+            it.description ?? it.summary ?? it.functions_text ?? "",
         }));
         setItems(mapped.filter(Boolean));
       } catch {}
-
       setResponseText(text);
       setLoading(false);
-
       requestAnimationFrame(() =>
         contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
       );
@@ -380,6 +444,11 @@ export default function Welcome() {
 
   // Show-once helper (also consult sessionStorage defensively)
   function maybeOpenForm(next) {
+    // Bypass if backend disabled or nothing to collect
+    if (!showFormfill || activeFormFields.length === 0) {
+      return false;
+    }
+
     // Prevent re-trigger if already completed this session
     try {
       if (sessionStorage.getItem(FORM_KEY) === "1") {
@@ -496,8 +565,8 @@ export default function Welcome() {
     await _openBrowseDocs();
   }
 
-  const embedDomain =
-    typeof window !== "undefined" ? window.location.hostname : "";
+  const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
+
   async function _openMeeting() {
     if (!botId) return;
     setMode("meeting");
@@ -536,7 +605,7 @@ export default function Welcome() {
     await _openMeeting();
   }
 
-  // Listen for Calendly postMessage and forward to backend
+  // Calendly JS event relay (optional)
   useEffect(() => {
     if (mode !== "meeting" || !botId || !sessionId || !visitorId) return;
     function onCalendlyMessage(e) {
@@ -588,15 +657,22 @@ export default function Welcome() {
   /* ============ *
    *   Render     *
    * ============ */
-
   const tabs = useMemo(() => {
     const out = [];
     if (tabsEnabled.demos)
       out.push({ key: "demos", label: "Browse Demos", onClick: openBrowse });
     if (tabsEnabled.docs)
-      out.push({ key: "docs", label: "Browse Documents", onClick: openBrowseDocs });
+      out.push({
+        key: "docs",
+        label: "Browse Documents",
+        onClick: openBrowseDocs,
+      });
     if (tabsEnabled.meeting)
-      out.push({ key: "meeting", label: "Schedule Meeting", onClick: openMeeting });
+      out.push({
+        key: "meeting",
+        label: "Schedule Meeting",
+        onClick: openMeeting,
+      });
     return out;
   }, [tabsEnabled]);
 
@@ -619,11 +695,17 @@ export default function Welcome() {
         <div className="text-gray-800 text-center space-y-2">
           <div className="text-lg font-semibold">No bot selected</div>
           {alias ? (
-            <div className="text-sm text-gray-600">Resolving alias “{alias}”…</div>
+            <div className="text-sm text-gray-600">
+              Resolving alias “{alias}”…
+            </div>
           ) : (
             <div className="text-sm text-gray-600">
-              Provide a <code>?bot_id=…</code> or <code>?alias=…</code> in the URL
-              {defaultAlias ? <> (trying default alias “{defaultAlias}”)</> : null}.
+              Provide a <code>?bot_id=…</code> or <code>?alias=…</code> in the
+              URL
+              {defaultAlias ? (
+                <> (trying default alias “{defaultAlias}”)</>
+              ) : null}
+              .
             </div>
           )}
         </div>
@@ -681,18 +763,34 @@ export default function Welcome() {
           {mode === "formfill" ? (
             <div className="space-y-4">
               <div className="text-base font-semibold">
-                Before we get started, please take a minute to tell us a little about yourself so that we can give you the best experience possible.
+                Before we get started, please take a minute to tell us a little
+                about yourself so that we can give you the best experience
+                possible.
               </div>
               <FormFillCard
+                fields={activeFormFields}
+                defaults={formDefaults}
                 onSubmit={async (vals) => {
-                  // mark complete (persist in session) and continue pending action
+                  // persist to visitor profile
+                  try {
+                    await fetch(`${apiBase}/visitor-formfill`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        visitor_id: visitorId,
+                        values: vals,
+                      }),
+                    });
+                  } catch {}
+                  // mark session complete & continue pending action
                   try {
                     sessionStorage.setItem(FORM_KEY, "1");
                   } catch {}
                   setFormCompleted(true);
                   const p = pending;
                   setPending(null);
-                  if (p?.type === "ask" && p.payload?.text) await doSend(p.payload.text);
+                  if (p?.type === "ask" && p.payload?.text)
+                    await doSend(p.payload.text);
                   else if (p?.type === "demos") await _openBrowse();
                   else if (p?.type === "docs") await _openBrowseDocs();
                   else if (p?.type === "meeting") await _openMeeting();
@@ -712,8 +810,8 @@ export default function Welcome() {
                 <iframe
                   title="Schedule a Meeting"
                   src={`${agent.calendar_link}${
-                    agent.calendar_link.includes("?") ? "&" : "?"}
-                  embed_domain=${embedDomain}&embed_type=Inline&session_id=${encodeURIComponent(
+                    agent.calendar_link.includes("?") ? "&" : "?"
+                  }embed_domain=${embedDomain}&embed_type=Inline&session_id=${encodeURIComponent(
                     sessionId || ""
                   )}&visitor_id=${encodeURIComponent(
                     visitorId || ""
@@ -730,7 +828,8 @@ export default function Welcome() {
                 String(agent.calendar_link_type).toLowerCase() === "external" &&
                 agent.calendar_link ? (
                 <div className="text-sm text-gray-700">
-                  We opened the scheduling page in a new tab. If it didn’t open,&nbsp;
+                  We opened the scheduling page in a new tab. If it didn’t
+                  open,&nbsp;
                   <a
                     href={agent.calendar_link}
                     target="_blank"
@@ -820,18 +919,21 @@ export default function Welcome() {
                         kind="doc"
                         onPick={async (val) => {
                           try {
-                            const r = await fetch(`${apiBase}/render-doc-iframe`, {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify(
-                                withIdsBody({
-                                  bot_id: botId,
-                                  doc_id: val.id || "",
-                                  title: val.title || "",
-                                  url: val.url || "",
-                                })
-                              ),
-                            });
+                            const r = await fetch(
+                              `${apiBase}/render-doc-iframe`,
+                              {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify(
+                                  withIdsBody({
+                                    bot_id: botId,
+                                    doc_id: val.id || "",
+                                    title: val.title || "",
+                                    url: val.url || "",
+                                  })
+                                ),
+                              }
+                            );
                             const j = await r.json();
                             setSelected({
                               ...val,
@@ -881,7 +983,6 @@ export default function Welcome() {
                   ) : null}
                 </div>
               )}
-
               {lastQuestion ? (
                 <p className="text-base italic text-center mb-2 text-[var(--helper-fg)]">
                   "{lastQuestion}"
@@ -898,7 +999,6 @@ export default function Welcome() {
                   </p>
                 ) : null}
               </div>
-
               {(items || []).length > 0 && (
                 <>
                   <div className="flex items-center justify-between mt-3 mb-2">
