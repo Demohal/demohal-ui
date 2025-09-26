@@ -1,6 +1,11 @@
-/* Welcome.jsx — trimmed to init app, paint shell, welcome, Q&A only */
+/* Welcome.jsx — updated per request
+   - [TABS] Chrome-style tabs anchored inside banner bottom (from old AskAssistant)
+   - [VIEWERS] Demo & Doc iframe viewers like the old code
+   - [NO-ASK-TAB] Ask is NOT a tab; tabs only for Demos / Docs / Schedule Meeting
+   - [MEETING] Schedule Meeting tab behavior (embed or external) like old code
+*/
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import fallbackLogo from "../assets/logo.png";
@@ -10,598 +15,853 @@ import fallbackLogo from "../assets/logo.png";
  * =============================== */
 
 const DEFAULT_THEME_VARS = {
-    "--banner-bg": "#000000",
-    "--banner-fg": "#ffffff",
-    "--page-bg": "#e6e6e6",
-    "--card-bg": "#ffffff",
-    "--shadow-elevation":
-        "0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.10)",
-    "--message-fg": "#000000",
-    "--helper-fg": "#4b5563",
-    "--mirror-fg": "#4b5563",
-    "--tab-bg": "#303030",
-    "--tab-fg": "#ffffff",
-    "--tab-active-fg": "#ffffff",
-    "--demo-button-bg": "#3a4554",
-    "--demo-button-fg": "#ffffff",
-    "--doc.button.background": "#000000",
-    "--doc-button-bg": "#000000",
-    "--doc-button-fg": "#ffffff",
-    "--price-button-bg": "#1a1a1a",
-    "--price-button-fg": "#ffffff",
-    "--send-color": "#000000",
-    "--border-default": "#9ca3af",
+  "--banner-bg": "#000000",
+  "--banner-fg": "#ffffff",
+  "--page-bg": "#e6e6e6",
+  "--card-bg": "#ffffff",
+  "--shadow-elevation":
+    "0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.10)",
+
+  // Text roles
+  "--message-fg": "#000000",
+  "--helper-fg": "#4b5563",
+  "--mirror-fg": "#4b5563",
+
+  // Tabs (inactive)
+  "--tab-bg": "#303030",
+  "--tab-fg": "#ffffff",
+  "--tab-active-fg": "#ffffff", // [TABS] derived at runtime too
+
+  // Buttons (explicit types)
+  "--demo-button-bg": "#3a4554",
+  "--demo-button-fg": "#ffffff",
+  "--doc.button.background": "#000000", // legacy mapping guard (no-op)
+  "--doc-button-bg": "#000000",
+  "--doc-button-fg": "#ffffff",
+
+  // Send icon
+  "--send-color": "#000000",
+
+  // Default faint gray border (used only where allowed)
+  "--border-default": "#9ca3af",
 };
 
 const classNames = (...xs) => xs.filter(Boolean).join(" ");
 
-// [PATCH 2]: Dumb UI components (tabs + list pane) inserted above component export
-function TabBar({ tabs, active, onChange }) {
-    return (
-        <div className="px-4 sm:px-6 border-b border-[var(--border-default)] bg-[var(--card-bg)]">
-            <div className="flex gap-2 py-2">
-                {tabs.map((t) => (
-                    <button
-                        key={t.key}
-                        onClick={() => onChange(t.key)}
-                        className={`px-3 py-1.5 rounded-lg text-sm ${active === t.key ? "bg-[var(--tab-bg)] text-[var(--tab-fg)]" : "hover:bg-black/5"}`}
-                    >
-                        {t.label}
-                    </button>
-                ))}
-            </div>
-        </div>
-    );
+// [TABS] compute contrasting active fg based on tab fg
+function inverseBW(hex) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(
+    String(hex || "").trim()
+  );
+  if (!m) return "#000000";
+  const r = parseInt(m[1], 16),
+    g = parseInt(m[2], 16),
+    b = parseInt(m[3], 16);
+  const L = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return L > 0.5 ? "#000000" : "#ffffff";
 }
 
-const VARIANT_TOKENS = {
-    demos: { "--btn-bg": "var(--demo-button-bg)", "--btn-fg": "var(--demo-button-fg)" },
-    docs:  { "--btn-bg": "var(--doc-button-bg)",  "--btn-fg": "var(--doc-button-fg)"  },
-    recs:  { "--btn-bg": "var(--tab-bg)",         "--btn-fg": "var(--tab-fg)"         },
+/* ========================== *
+ *  UI PRIMITIVES [TABS]      *
+ * ========================== */
+
+const UI = {
+  CARD: "rounded-[0.75rem] p-4 bg-white [box-shadow:var(--shadow-elevation)]",
+  BTN_DEMO:
+    "w-full text-center rounded-[0.75rem] px-4 py-3 transition " +
+    "text-[var(--demo-button-fg)] bg-[var(--demo-button-bg)] hover:brightness-110 active:brightness-95",
+  BTN_DOC:
+    "w-full text-center rounded-[0.75rem] px-4 py-3 transition " +
+    "text-[var(--doc-button-fg)] bg-[var(--doc-button-bg)] hover:brightness-110 active:brightness-95",
+  TAB_ACTIVE:
+    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] " +
+    "[box-shadow:var(--shadow-elevation)]",
+  TAB_INACTIVE:
+    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] hover:brightness-110",
 };
 
-function ChoiceListPane({ title, variant, items }) {
-    const tokens = VARIANT_TOKENS[variant] || {};
-    return (
-        <section className="flex-1 flex flex-col gap-4" style={tokens}>
-            {title ? <div className="text-sm text-[var(--helper-fg)]">{title}</div> : null}
-            <div className="flex flex-col gap-3">
-                {items.map((it) => (
-                    <button
-                        key={it.id}
-                        onClick={it.action}
-                        className="w-full text-left rounded-xl border border-[var(--border-default)] px-4 py-3 bg-[var(--btn-bg)] text-[var(--btn-fg)] hover:opacity-95"
-                    >
-                        <div className="font-semibold">{it.label}</div>
-                        {it.description ? <div className="text-sm opacity-90">{it.description}</div> : null}
-                    </button>
-                ))}
-            </div>
-        </section>
-    );
-}
-export default function Welcome() {
-    const apiBase =
-        import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
-
-    // URL → alias / bot_id
-    const { alias, botIdFromUrl } = useMemo(() => {
-        const qs = new URLSearchParams(window.location.search);
-        const a = (qs.get("alias") || qs.get("alais") || "").trim();
-        const b = (qs.get("bot_id") || "").trim();
-        return { alias: a, botIdFromUrl: b };
-    }, []);
-
-    const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
-
-    const [botId, setBotId] = useState(botIdFromUrl || "");
-    const [fatal, setFatal] = useState("");
-
-    // Q&A state
-    const [input, setInput] = useState("");
-    const [lastQuestion, setLastQuestion] = useState("");
-    const [responseText, setResponseText] = useState("");
-    const [loading, setLoading] = useState(false);
-
-    // [PATCH 4]: Unified list data + tiny view controller
-    const [demoItems, setDemoItems] = useState([]);
-    const [docItems, setDocItems] = useState([]);
-    const [recs, setRecs] = useState(null);
-
-    const [view, setView] = useState("ask"); // 'ask' | 'recs' | 'demos' | 'docs'
-    const setViewSafe = useCallback((next) => {
-        if (next === "ask") requestAnimationFrame(() => inputRef.current?.focus());
-        setView(next);
-    }, []);
-
-    // Welcome media
-    const [introVideoUrl, setIntroVideoUrl] = useState("");
-    const [showIntroVideo, setShowIntroVideo] = useState(false);
-
-    // Refs
-    const contentRef = useRef(null);
-    const inputRef = useRef(null);
-
-    // Visitor/session identity
-    const [visitorId, setVisitorId] = useState("");
-    const [sessionId, setSessionId] = useState("");
-
-    // Theme & brand
-    const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
-    const [brandAssets, setBrandAssets] = useState({
-        logo_url: null,
-        logo_light_url: null,
-        logo_dark_url: null,
-    });
-
-    // [PATCH 3]: Feature flags (from /bot-settings)
-    const [featureFlags, setFeatureFlags] = useState({
-        show_browse_demos: false,
-        show_browse_docs: false,
-    });
-
-
-    const initialBrandReady = useMemo(
-        () => !(botIdFromUrl || alias),
-        [botIdFromUrl, alias]
-    );
-    const [brandReady, setBrandReady] = useState(initialBrandReady);
-
-    // Helpers to attach identity in requests
-    const withIdsBody = (obj) => ({
-        ...obj,
-        ...(sessionId ? { session_id: sessionId } : {}),
-        ...(visitorId ? { visitor_id: visitorId } : {}),
-    });
-    const withIdsHeaders = () => ({
-        ...(sessionId ? { "X-Session-Id": sessionId } : {}),
-        ...(visitorId ? { "X-Visitor-Id": visitorId } : {}),
-    });
-
-    /* ============================= *
-     *   Bot resolution & branding   *
-     * ============================= */
-
-    // Resolve bot by alias
-    useEffect(() => {
-        if (botId || !alias) return;
-        let cancel = false;
-        (async () => {
-            try {
-                const res = await fetch(
-                    `${apiBase}/bot-settings?alias=${encodeURIComponent(alias)}`
-                );
-                const data = await res.json();
-                if (cancel) return;
-                const id = data?.ok ? data?.bot?.id : null;
-
-                if (data?.ok) {
-                    setVisitorId(data.visitor_id || "");
-                    setSessionId(data.session_id || "");
-                }
-
-                const b = data?.ok ? data?.bot : null;
-                if (b) {
-                    setResponseText(b.welcome_message || "");
-                    setIntroVideoUrl(b.intro_video_url || "");
-                    setShowIntroVideo(!!b.show_intro_video);
-            // [PATCH 5]: capture feature flags for tabs
-            setFeatureFlags({
-                show_browse_demos: !!b.show_browse_demos,
-                show_browse_docs: !!b.show_browse_docs,
-            });
-                }
-                if (id) {
-                    setBotId(id);
-                    setFatal("");
-                } else if (!res.ok || data?.ok === false) {
-                    setFatal("Invalid or inactive alias.");
-                }
-            } catch {
-                if (!cancel) setFatal("Invalid or inactive alias.");
-            }
-        })();
-        return () => {
-            cancel = true;
-        };
-    }, [alias, apiBase, botId]);
-
-    // Try default alias if needed
-    useEffect(() => {
-        if (botId || alias || !defaultAlias) return;
-        let cancel = false;
-        (async () => {
-            try {
-                const res = await fetch(
-                    `${apiBase}/bot-settings?alias=${encodeURIComponent(defaultAlias)}`
-                );
-                const data = await res.json();
-                if (cancel) return;
-
-                if (data?.ok) {
-                    setVisitorId(data.visitor_id || "");
-                    setSessionId(data.session_id || "");
-                }
-
-                const b = data?.ok ? data?.bot : null;
-                if (b) {
-                    setResponseText(b.welcome_message || "");
-                    setIntroVideoUrl(b.intro_video_url || "");
-                    setShowIntroVideo(!!b.show_intro_video);
-            // [PATCH 5]: capture feature flags for tabs
-            setFeatureFlags({
-                show_browse_demos: !!b.show_browse_demos,
-                show_browse_docs: !!b.show_browse_docs,
-            });
-                }
-                if (data?.ok && data?.bot?.id) setBotId(data.bot.id);
-            } catch { }
-        })();
-        return () => {
-            cancel = true;
-        };
-    }, [botId, alias, defaultAlias, apiBase]);
-
-    // If we start with bot_id in URL, load settings that way (and init visitor/session)
-    useEffect(() => {
-        if (!botIdFromUrl) return;
-        let cancel = false;
-        (async () => {
-            try {
-                const res = await fetch(
-                    `${apiBase}/bot-settings?bot_id=${encodeURIComponent(botIdFromUrl)}`
-                );
-                const data = await res.json();
-                if (cancel) return;
-
-                if (data?.ok) {
-                    setVisitorId(data.visitor_id || "");
-                    setSessionId(data.session_id || "");
-                }
-
-                const b = data?.ok ? data?.bot : null;
-                if (b) {
-                    setResponseText(b.welcome_message || "");
-                    setIntroVideoUrl(b.intro_video_url || "");
-                    setShowIntroVideo(!!b.show_intro_video);
-            // [PATCH 5]: capture feature flags for tabs
-            setFeatureFlags({
-                show_browse_demos: !!b.show_browse_demos,
-                show_browse_docs: !!b.show_browse_docs,
-            });
-                }
-                if (data?.ok && data?.bot?.id) setBotId(data.bot.id);
-            } catch { }
-        })();
-        return () => {
-            cancel = true;
-        };
-    }, [botIdFromUrl, apiBase]);
-
-    useEffect(() => {
-        if (!botId && !alias && !brandReady) setBrandReady(true);
-    }, [botId, alias, brandReady]);
-
-    // Brand: css vars + assets
-    useEffect(() => {
-        if (!botId) return;
-        let cancel = false;
-        (async () => {
-            try {
-                const res = await fetch(
-                    `${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`
-                );
-                const data = await res.json();
-                if (cancel) return;
-
-                if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
-                    setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
-                }
-                if (data?.ok && data?.assets) {
-                    setBrandAssets({
-                        logo_url: data.assets.logo_url || null,
-                        logo_light_url: data.assets.logo_light_url || null,
-                        logo_dark_url: data.assets.logo_dark_url || null,
-                    });
-                }
-            } catch {
-            } finally {
-                if (!cancel) setBrandReady(true);
-            }
-        })();
-        return () => {
-            cancel = true;
-        };
-    }, [botId, apiBase]);
-
-    // [PATCH 6]: Load demos when enabled
-useEffect(() => {
-    if (!botId || !featureFlags.show_browse_demos) return;
-    let cancel = false;
-    (async () => {
-        try {
-            const res = await fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`);
-            const data = await res.json();
-            if (cancel) return;
-            const arr = Array.isArray(data?.items) ? data.items : (Array.isArray(data?.demos) ? data.demos : []);
-            setDemoItems(
-                arr.map((d, i) => ({
-                    id: d.id || `demo-${i}`,
-                    label: d.title || d.label || "Demo",
-                    description: d.description || "",
-                    action: () => {
-                        const url = d.url || `${apiBase}/render-video-iframe?bot_id=${encodeURIComponent(botId)}&demo_id=${encodeURIComponent(d.id || "")}`;
-                        window.open(url, "_blank", "noopener,noreferrer");
-                    },
-                }))
-            );
-        } catch {}
-    })();
-    return () => { cancel = true; };
-}, [botId, featureFlags.show_browse_demos, apiBase]);
-
-// [PATCH 7]: Load docs when enabled
-useEffect(() => {
-    if (!botId || !featureFlags.show_browse_docs) return;
-    let cancel = false;
-    (async () => {
-        try {
-            const res = await fetch(`${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`);
-            const data = await res.json();
-            if (cancel) return;
-            const arr = Array.isArray(data?.items) ? data.items : (Array.isArray(data?.documents) ? data.documents : []);
-            setDocItems(
-                arr.map((doc, i) => ({
-                    id: doc.id || `doc-${i}`,
-                    label: doc.title || doc.label || "Document",
-                    description: doc.description || "",
-                    action: () => {
-                        const url = doc.url || `${apiBase}/render-doc-iframe?bot_id=${encodeURIComponent(botId)}&doc_id=${encodeURIComponent(doc.id || "")}`;
-                        window.open(url, "_blank", "noopener,noreferrer");
-                    },
-                }))
-            );
-        } catch {}
-    })();
-    return () => { cancel = true; };
-}, [botId, featureFlags.show_browse_docs, apiBase]);
-
-    // Autosize ask box
-    useEffect(() => {
-        const el = inputRef.current;
-        if (!el) return;
-        el.style.height = "auto";
-        el.style.height = `${el.scrollHeight}px`;
-    }, [input]);
-
-    /* ============ *
-     *   Ask Flow   *
-     * ============ */
-    async function sendMessage() {
-        if (!input.trim() || !botId) return;
-        const outgoing = input.trim();
-
-        setLastQuestion(outgoing);
-        setInput("");
-        setResponseText("");
-        setLoading(true);
-
-        try {
-            const res = await axios.post(
-                `${apiBase}/demo-hal`,
-                withIdsBody({
-                    bot_id: botId,
-                    user_question: outgoing,
-                    scope: "standard",
-                    debug: true,
-                }),
-                { timeout: 30000, headers: withIdsHeaders() }
-            );
-            const data = res?.data || {};
-            const text = data?.response_text || "";
-
-            
-// [PATCH 11]: Map optional recommendations from ask/answer
-try {
-    const recsRaw = Array.isArray(data?.recommendations) ? data.recommendations : [];
-    const mapped = recsRaw.map((r, idx) => ({
-        id: `${r.type || (r.url?.includes('/doc') ? 'doc' : 'demo')}:${r.id ?? idx}`,
-        label: r.title || r.label || 'Recommended',
-        description: r.description || r.reason || '',
-        action: () => {
-            if ((r.type === 'doc') || r.url?.includes('/doc')) {
-                const url = r.url || `${apiBase}/render-doc-iframe?bot_id=${encodeURIComponent(botId)}&doc_id=${encodeURIComponent(r.id || '')}`;
-                window.open(url, "_blank", "noopener,noreferrer");
-            } else {
-                const url = r.url || `${apiBase}/render-video-iframe?bot_id=${encodeURIComponent(botId)}&demo_id=${encodeURIComponent(r.id || '')}`;
-                window.open(url, "_blank", "noopener,noreferrer");
-            }
-        },
-    }));
-    setRecs(mapped.length ? mapped : null);
-} catch {}
-setResponseText(text);
-            setLoading(false);
-
-            requestAnimationFrame(() =>
-                contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-            );
-        } catch {
-            setLoading(false);
-            setResponseText("Sorry—something went wrong.");
-        }
-    }
-
-    /* ============ *
-     *   Render     *
-     * ============ */
-// [PATCH 8]: Data-driven tabs model
-const tabs = useMemo(() => [
-    { key: "ask",   label: "Ask" },
-    { key: "recs",  label: "Recommendations", hidden: !(recs && recs.length) },
-    { key: "demos", label: "Demos",     hidden: !featureFlags.show_browse_demos },
-    { key: "docs",  label: "Documents", hidden: !featureFlags.show_browse_docs },
-].filter(t => !t.hidden), [recs, featureFlags]);
-
-
-
-    if (fatal) {
-        return (
-            <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
-                <div className="text-red-600 font-semibold">{fatal}</div>
-            </div>
-        );
-    }
-
-    if (!botId) {
-        return (
-            <div
-                className={classNames(
-                    "w-screen min-h-[100dvh] flex items-center justify-center bg-[var(--page-bg)] p-4 transition-opacity duration-200",
-                    brandReady ? "opacity-100" : "opacity-0"
-                )}
-                style={themeVars}
-            >
-                <div className="text-gray-800 text-center space-y-2">
-                    <div className="text-lg font-semibold">No bot selected</div>
-                    {alias ? (
-                        <div className="text-sm text-gray-600">
-                            Resolving alias “{alias}”…
-                        </div>
-                    ) : (
-                        <div className="text-sm text-gray-600">
-                            Provide a <code>?bot_id=…</code> or <code>?alias=…</code> in the
-                            URL
-                            {defaultAlias ? <> (trying default alias “{defaultAlias}”)</> : null}.
-                        </div>
-                    )}
-                </div>
-            </div>
-        );
-    }
-
-    const logoSrc =
-        brandAssets.logo_url ||
-        brandAssets.logo_light_url ||
-        brandAssets.logo_dark_url ||
-        fallbackLogo;
-
-    return (
-        <div
-            className={classNames(
-                "w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center transition-opacity duration-200",
-                brandReady ? "opacity-100" : "opacity-0"
-            )}
-            style={themeVars}
-        >
-            <div
-                className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all duration-300"
-            >
-                {/* Header */}
-                <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)]">
-                    <div className="flex items-center justify-between w-full py-3">
-                        <div className="flex items-center gap-3">
-                            <img src={logoSrc} alt="Brand logo" className="h-10 object-contain" />
-                        </div>
-                        <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
-                            Ask the Assistant
-                        </div>
-                    </div>
-                </div>
-
-                {/* Tabs [PATCH 9] */}
-                <TabBar tabs={tabs} active={view} onChange={setViewSafe} />
-
-                {/* Content [PATCH 10]: view switch */}
-{view === 'ask' && (
-  <div
-    ref={contentRef}
-    className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto"
-  >
-    {!lastQuestion && !loading && (
-      <div className="space-y-3">
-        <div className="text-base font-bold whitespace-pre-line">
-          {responseText}
-        </div>
-        {showIntroVideo && introVideoUrl ? (
-          <div style={{ position: "relative", paddingTop: "56.25%" }}>
-            <iframe
-              src={introVideoUrl}
-              title="Intro Video"
-              frameBorder="0"
-              allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
-              referrerPolicy="strict-origin-when-cross-origin"
-              style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
-              className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
-            />
-          </div>
-        ) : null}
-      </div>
-    )}
-
-    {lastQuestion ? (
-      <p className="text-base italic text-center mb-2 text-[var(--helper-fg)]">"{lastQuestion}"</p>
-    ) : null}
-
-    <div className="text-left mt-2">
-      {loading ? (
-        <p className="font-semibold animate-pulse text-[var(--helper-fg)]">Thinking…</p>
-      ) : lastQuestion ? (
-        <p className="text-base font-bold whitespace-pre-line">{responseText}</p>
+function Row({ item, onPick, kind = "demo" }) {
+  const btnClass = kind === "doc" ? UI.BTN_DOC : UI.BTN_DEMO;
+  return (
+    <button onClick={() => onPick(item)} className={btnClass} title={item.description || ""}>
+      <div className="font-extrabold text-xs sm:text-sm">{item.title}</div>
+      {item.description ? (
+        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">{item.description}</div>
       ) : null}
-    </div>
-  </div>
-)}
-{view === 'recs' && (
-  <div className="px-6 pt-3 pb-6 flex-1 flex flex-col overflow-y-auto">
-    <ChoiceListPane title="Recommended next steps" variant="recs" items={recs || []} />
-  </div>
-)}
-{view === 'demos' && (
-  <div className="px-6 pt-3 pb-6 flex-1 flex flex-col overflow-y-auto">
-    <ChoiceListPane title="Pick a demo" variant="demos" items={demoItems} />
-  </div>
-)}
-{view === 'docs' && (
-  <div className="px-6 pt-3 pb-6 flex-1 flex flex-col overflow-y-auto">
-    <ChoiceListPane title="Browse documents" variant="docs" items={docItems} />
-  </div>
-)}
+    </button>
+  );
+}
 
-                {/* Bottom Ask Bar */}
-                <div
-                    className="px-4 py-3 border-t border-[var(--border-default)]"
-                    data-patch="ask-bottom-bar"
-                >
-                    <div className="relative w-full">
-                        <textarea
-                            ref={inputRef}
-                            rows={1}
-                            className="w-full rounded-[0.75rem] px-4 py-2 pr-14 text-base placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px] bg-[var(--card-bg)] border border-[var(--border-default)] focus:border-[var(--border-default)] focus:ring-1 focus:ring-[var(--border-default)] outline-none"
-                            placeholder="Ask your question here"
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            onInput={(e) => {
-                                e.currentTarget.style.height = "auto";
-                                e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
-                            }}
-                            onKeyDown={(e) => {
-                                if (e.key === "Enter" && !e.shiftKey) {
-                                    e.preventDefault();
-                                    sendMessage();
-                                }
-                            }}
-                        />
-                        <button
-                            aria-label="Send"
-                            onClick={sendMessage}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
-                        >
-                            <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:brightness-110" />
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
+// [TABS] Chrome-style tabs anchored to bottom of banner
+function TabsNav({ mode, tabs, themeVars }) {
+  return (
+    <div className="w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <nav
+        className="inline-flex min-w-max items-center gap-0.5 overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        role="tablist"
+      >
+        {tabs.map((t) => {
+          const active =
+            (mode === "browse" && t.key === "demos") ||
+            (mode === "docs" && t.key === "docs") ||
+            (mode === "meeting" && t.key === "meeting");
+          return (
+            <button
+              key={t.key}
+              onClick={t.onClick}
+              role="tab"
+              aria-selected={active}
+              className={active ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}
+              style={
+                active
+                  ? { background: "var(--card-bg)", color: "var(--tab-active-fg)" }
+                  : { background: "var(--tab-bg)", color: "var(--tab-fg)" }
+              }
+              type="button"
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}
+
+/* =================== *
+ *  Doc iframe wrapper  [VIEWERS]
+ * =================== */
+function DocIframe({ doc }) {
+  // Server may return full HTML; extract src if present
+  const iframeSrc = React.useMemo(() => {
+    const html = doc?._iframe_html || "";
+    if (!html) return null;
+    const m = html.match(/src=\"([^\"]+)\"/i) || html.match(/src='([^']+)'/i);
+    return m ? m[1] : null;
+  }, [doc?._iframe_html]);
+
+  const src = iframeSrc || doc?.url || "";
+
+  return (
+    <div className="bg-[var(--card-bg)] pt-2 pb-2">
+      <iframe
+        className="w-full h-[65vh] md:h-[78vh] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
+        src={src}
+        title={doc?.title || "Document"}
+        loading="lazy"
+        referrerPolicy="strict-origin-when-cross-origin"
+        allow="fullscreen"
+      />
+    </div>
+  );
+}
+
+/* =================== *
+ *  MAIN APP COMPONENT *
+ * =================== */
+
+export default function Welcome() {
+  const apiBase =
+    import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
+
+  // URL → alias / bot_id
+  const { alias, botIdFromUrl } = useMemo(() => {
+    const qs = new URLSearchParams(window.location.search);
+    const a = (qs.get("alias") || qs.get("alais") || "").trim();
+    const b = (qs.get("bot_id") || "").trim();
+    return { alias: a, botIdFromUrl: b };
+  }, []);
+
+  const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
+
+  const [botId, setBotId] = useState(botIdFromUrl || "");
+  const [fatal, setFatal] = useState("");
+
+  // Mode controller (Ask is not a tab) [NO-ASK-TAB]
+  const [mode, setMode] = useState("ask"); // 'ask' | 'browse' | 'docs' | 'meeting'
+
+  // Q&A state
+  const [input, setInput] = useState("");
+  const [lastQuestion, setLastQuestion] = useState("");
+  const [responseText, setResponseText] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // Recommendations / browse state
+  const [items, setItems] = useState([]);
+  const [browseItems, setBrowseItems] = useState([]);
+  const [browseDocs, setBrowseDocs] = useState([]);
+  const [selected, setSelected] = useState(null);
+
+  // Meeting [MEETING]
+  const [agent, setAgent] = useState(null);
+
+  // Refs
+  const contentRef = useRef(null);
+  const inputRef = useRef(null);
+
+  // Visitor/session identity
+  const [visitorId, setVisitorId] = useState("");
+  const [sessionId, setSessionId] = useState("");
+
+  // Theme & brand
+  const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
+  const [brandAssets, setBrandAssets] = useState({
+    logo_url: null,
+    logo_light_url: null,
+    logo_dark_url: null,
+  });
+  // [TABS] derive active tab fg for contrast
+  const liveTheme = useMemo(() => {
+    const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
+    return { ...themeVars, "--tab-active-fg": activeFg };
+  }, [themeVars]);
+
+  const initialBrandReady = useMemo(
+    () => !(botIdFromUrl || alias),
+    [botIdFromUrl, alias]
+  );
+  const [brandReady, setBrandReady] = useState(initialBrandReady);
+
+  // Tabs enabled (from /bot-settings) [TABS]
+  const [tabsEnabled, setTabsEnabled] = useState({ demos: false, docs: false, meeting: false });
+
+  // Helpers to attach identity in requests
+  const withIdsBody = (obj) => ({
+    ...obj,
+    ...(sessionId ? { session_id: sessionId } : {}),
+    ...(visitorId ? { visitor_id: visitorId } : {}),
+  });
+  const withIdsHeaders = () => ({
+    ...(sessionId ? { "X-Session-Id": sessionId } : {}),
+    ...(visitorId ? { "X-Visitor-Id": visitorId } : {}),
+  });
+  const withIdsQS = (url) => {
+    const u = new URL(url, window.location.origin);
+    if (sessionId) u.searchParams.set("session_id", sessionId);
+    if (visitorId) u.searchParams.set("visitor_id", visitorId);
+    return u.toString();
+  };
+
+  /* ============================= *
+   *   Bot resolution & branding   *
+   * ============================= */
+
+  // Resolve bot by alias
+  useEffect(() => {
+    if (botId || !alias) return;
+    let cancel = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `${apiBase}/bot-settings?alias=${encodeURIComponent(alias)}`
+        );
+        const data = await res.json();
+        if (cancel) return;
+        const id = data?.ok ? data?.bot?.id : null;
+
+        if (data?.ok) {
+          setVisitorId(data.visitor_id || "");
+          setSessionId(data.session_id || "");
+        }
+
+        const b = data?.ok ? data?.bot : null;
+        if (b) {
+          setResponseText(b.welcome_message || "");
+          // welcome video
+          setIntroVideoUrl(b.intro_video_url || "");
+          setShowIntroVideo(!!b.show_intro_video);
+          // [TABS]
+          setTabsEnabled({
+            demos: !!b.show_browse_demos,
+            docs: !!b.show_browse_docs,
+            meeting: !!b.show_schedule_meeting,
+          });
+        }
+        if (id) {
+          setBotId(id);
+          setFatal("");
+        } else if (!res.ok || data?.ok === false) {
+          setFatal("Invalid or inactive alias.");
+        }
+      } catch {
+        if (!cancel) setFatal("Invalid or inactive alias.");
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [alias, apiBase, botId]);
+
+  // Try default alias if needed
+  useEffect(() => {
+    if (botId || alias || !defaultAlias) return;
+    let cancel = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `${apiBase}/bot-settings?alias=${encodeURIComponent(defaultAlias)}`
+        );
+        const data = await res.json();
+        if (cancel) return;
+
+        if (data?.ok) {
+          setVisitorId(data.visitor_id || "");
+          setSessionId(data.session_id || "");
+        }
+
+        const b = data?.ok ? data?.bot : null;
+        if (b) {
+          setResponseText(b.welcome_message || "");
+          setIntroVideoUrl(b.intro_video_url || "");
+          setShowIntroVideo(!!b.show_intro_video);
+          setTabsEnabled({
+            demos: !!b.show_browse_demos,
+            docs: !!b.show_browse_docs,
+            meeting: !!b.show_schedule_meeting,
+          });
+        }
+        if (data?.ok && data?.bot?.id) setBotId(data.bot.id);
+      } catch {}
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [botId, alias, defaultAlias, apiBase]);
+
+  // If we start with bot_id in URL, load settings that way (and init visitor/session)
+  useEffect(() => {
+    if (!botIdFromUrl) return;
+    let cancel = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `${apiBase}/bot-settings?bot_id=${encodeURIComponent(botIdFromUrl)}`
+        );
+        const data = await res.json();
+        if (cancel) return;
+
+        if (data?.ok) {
+          setVisitorId(data.visitor_id || "");
+          setSessionId(data.session_id || "");
+        }
+
+        const b = data?.ok ? data?.bot : null;
+        if (b) {
+          setResponseText(b.welcome_message || "");
+          setIntroVideoUrl(b.intro_video_url || "");
+          setShowIntroVideo(!!b.show_intro_video);
+          setTabsEnabled({
+            demos: !!b.show_browse_demos,
+            docs: !!b.show_browse_docs,
+            meeting: !!b.show_schedule_meeting,
+          });
+        }
+        if (data?.ok && data?.bot?.id) setBotId(data.bot.id);
+      } catch {}
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [botIdFromUrl, apiBase]);
+
+  useEffect(() => {
+    if (!botId && !alias && !brandReady) setBrandReady(true);
+  }, [botId, alias, brandReady]);
+
+  // Brand: css vars + assets
+  const [introVideoUrl, setIntroVideoUrl] = useState("");
+  const [showIntroVideo, setShowIntroVideo] = useState(false);
+
+  useEffect(() => {
+    if (!botId) return;
+    let cancel = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`
+        );
+        const data = await res.json();
+        if (cancel) return;
+
+        if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
+          setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
+        }
+        if (data?.ok && data?.assets) {
+          setBrandAssets({
+            logo_url: data.assets.logo_url || null,
+            logo_light_url: data.assets.logo_light_url || null,
+            logo_dark_url: data.assets.logo_dark_url || null,
+          });
+        }
+      } catch {
+      } finally {
+        if (!cancel) setBrandReady(true);
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [botId, apiBase]);
+
+  /* ============ *
+   *   Ask Flow   *
+   * ============ */
+  async function sendMessage() {
+    if (!input.trim() || !botId) return;
+    const outgoing = input.trim();
+
+    setMode("ask"); // [NO-ASK-TAB] stay in Ask view
+    setLastQuestion(outgoing);
+    setInput("");
+    setSelected(null);
+    setResponseText("");
+    setItems([]);
+    setLoading(true);
+
+    try {
+      const res = await axios.post(
+        `${apiBase}/demo-hal`,
+        withIdsBody({ bot_id: botId, user_question: outgoing, scope: "standard", debug: true }),
+        { timeout: 30000, headers: withIdsHeaders() }
+      );
+      const data = res?.data || {};
+      const text = data?.response_text || "";
+
+      // Map optional recommendations (unified buttons under Ask)
+      try {
+        const src = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
+        const mapped = src.map((it, idx) => ({
+          id: it.id ?? it.value ?? it.url ?? it.title ?? String(idx),
+          title: it.title ?? it.button_title ?? it.label ?? "",
+          url: it.url ?? it.value ?? it.button_value ?? "",
+          description: it.description ?? it.summary ?? it.functions_text ?? "",
+        }));
+        setItems(mapped.filter(Boolean));
+      } catch {}
+
+      setResponseText(text);
+      setLoading(false);
+
+      requestAnimationFrame(() =>
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+      );
+    } catch {
+      setLoading(false);
+      setResponseText("Sorry—something went wrong.");
+      setItems([]);
+    }
+  }
+
+  /* ============================= *
+   *   Demo/Doc browse + viewers   * [VIEWERS]
+   * ============================= */
+  async function normalizeAndSelectDemo(item) {
+    try {
+      const r = await fetch(`${apiBase}/render-video-iframe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...withIdsHeaders() },
+        body: JSON.stringify(withIdsBody({
+          bot_id: botId,
+          demo_id: item.id || "",
+          title: item.title || "",
+          video_url: item.url || "",
+        })),
+      });
+      const j = await r.json();
+      const embed = j?.video_url || item.url;
+      setSelected({ ...item, url: embed });
+      requestAnimationFrame(() =>
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+      );
+    } catch {
+      setSelected(item);
+      requestAnimationFrame(() =>
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+      );
+    }
+  }
+
+  async function openBrowse() {
+    if (!botId) return;
+    setMode("browse");
+    setSelected(null);
+    try {
+      const url = withIdsQS(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`);
+      const res = await fetch(url, { headers: withIdsHeaders() });
+      const data = await res.json();
+      const src = Array.isArray(data?.items) ? data.items : [];
+      setBrowseItems(
+        src.map((it) => ({
+          id: it.id ?? it.value ?? it.url ?? it.title,
+          title: it.title ?? it.button_title ?? it.label ?? "",
+          url: it.url ?? it.value ?? it.button_value ?? "",
+          description: it.description ?? it.summary ?? it.functions_text ?? "",
+        }))
+      );
+      requestAnimationFrame(() =>
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+      );
+    } catch {
+      setBrowseItems([]);
+    }
+  }
+
+  async function openBrowseDocs() {
+    if (!botId) return;
+    setMode("docs");
+    setSelected(null);
+    try {
+      const url = withIdsQS(`${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`);
+      const res = await fetch(url, { headers: withIdsHeaders() });
+      const data = await res.json();
+      const src = Array.isArray(data?.items) ? data.items : [];
+      setBrowseDocs(
+        src.map((it) => ({
+          id: it.id ?? it.value ?? it.url ?? it.title,
+          title: it.title ?? it.button_title ?? it.label ?? "",
+          url: it.url ?? it.value ?? it.button_value ?? "",
+          description: it.description ?? it.summary ?? it.functions_text ?? "",
+        }))
+      );
+      requestAnimationFrame(() =>
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+      );
+    } catch {
+      setBrowseDocs([]);
+    }
+  }
+
+  /* ============================= *
+   *   Schedule meeting [MEETING]  *
+   * ============================= */
+  const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
+  async function openMeeting() {
+    if (!botId) return;
+    setMode("meeting");
+    try {
+      const res = await fetch(`${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`);
+      const data = await res.json();
+      const ag = data?.ok ? data.agent : null;
+      setAgent(ag);
+      if (
+        ag &&
+        ag.calendar_link_type &&
+        String(ag.calendar_link_type).toLowerCase() === "external" &&
+        ag.calendar_link
+      ) {
+        try {
+          const base = ag.calendar_link || "";
+          const withQS = `${base}${base.includes('?') ? '&' : '?'}session_id=${encodeURIComponent(sessionId||'')}&visitor_id=${encodeURIComponent(visitorId||'')}&bot_id=${encodeURIComponent(botId||'')}`;
+          window.open(withQS, "_blank", "noopener,noreferrer");
+        } catch {}
+      }
+      requestAnimationFrame(() =>
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+      );
+    } catch {
+      setAgent(null);
+    }
+  }
+
+  // Listen for Calendly postMessage and forward to backend [MEETING]
+  useEffect(() => {
+    if (mode !== "meeting" || !botId || !sessionId || !visitorId) return;
+    function onCalendlyMessage(e) {
+      try {
+        const m = e?.data;
+        if (!m || typeof m !== "object") return;
+        if (m.event !== "calendly.event_scheduled" && m.event !== "calendly.event_canceled") return;
+        const p = m.payload || {};
+        const payloadOut = {
+          event: m.event,
+          scheduled_event: p.event || p.scheduled_event || null,
+          invitee: {
+            uri: p.invitee?.uri ?? null,
+            email: p.invitee?.email ?? null,
+            name: p.invitee?.full_name ?? p.invitee?.name ?? null,
+          },
+          questions_and_answers: p.questions_and_answers ?? p.invitee?.questions_and_answers ?? [],
+          tracking: p.tracking || {},
+        };
+        fetch(`${apiBase}/calendly/js-event`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bot_id: botId, session_id: sessionId, visitor_id: visitorId, payload: payloadOut }),
+        }).catch(() => {});
+      } catch {}
+    }
+    window.addEventListener("message", onCalendlyMessage);
+    return () => window.removeEventListener("message", onCalendlyMessage);
+  }, [mode, botId, sessionId, visitorId, apiBase]);
+
+  // Autosize ask box
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [input]);
+
+  /* ============ *
+   *   Render     *
+   * ============ */
+
+  if (fatal) {
+    return (
+      <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
+        <div className="text-red-600 font-semibold">{fatal}</div>
+      </div>
     );
+  }
+  if (!botId) {
+    return (
+      <div
+        className={classNames(
+          "w-screen min-h-[100dvh] flex items-center justify-center bg-[var(--page-bg)] p-4 transition-opacity duration-200",
+          brandReady ? "opacity-100" : "opacity-0"
+        )}
+        style={liveTheme}
+      >
+        <div className="text-gray-800 text-center space-y-2">
+          <div className="text-lg font-semibold">No bot selected</div>
+          {alias ? (
+            <div className="text-sm text-gray-600">Resolving alias “{alias}”…</div>
+          ) : (
+            <div className="text-sm text-gray-600">
+              Provide a <code>?bot_id=…</code> or <code>?alias=…</code> in the URL
+              {defaultAlias ? <> (trying default alias “{defaultAlias}”)</> : null}.
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const logoSrc =
+    brandAssets.logo_url || brandAssets.logo_light_url || brandAssets.logo_dark_url || fallbackLogo;
+
+  const tabs = useMemo(() => {
+    // [NO-ASK-TAB] Ask is not part of the tabs
+    const out = [];
+    if (tabsEnabled.demos) out.push({ key: "demos", label: "Browse Demos", onClick: openBrowse });
+    if (tabsEnabled.docs) out.push({ key: "docs", label: "Browse Documents", onClick: openBrowseDocs });
+    if (tabsEnabled.meeting) out.push({ key: "meeting", label: "Schedule Meeting", onClick: openMeeting });
+    return out;
+  }, [tabsEnabled]);
+
+  const listSource = mode === "browse" ? browseItems : items;
+  const visibleUnderVideo = selected ? (mode === "ask" ? items : []) : listSource;
+
+  return (
+    <div
+      className={classNames(
+        "w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center transition-opacity duration-200",
+        brandReady ? "opacity-100" : "opacity-0"
+      )}
+      style={liveTheme}
+    >
+      <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all duration-300">
+        {/* Header */}
+        <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)]">
+          <div className="flex items-center justify-between w-full py-3">
+            <div className="flex items-center gap-3">
+              <img src={logoSrc} alt="Brand logo" className="h-10 object-contain" />
+            </div>
+            <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
+              {selected
+                ? selected.title
+                : mode === "browse"
+                ? "Browse Demos"
+                : mode === "docs"
+                ? "Browse Documents"
+                : mode === "meeting"
+                ? "Schedule Meeting"
+                : "Ask the Assistant"}
+            </div>
+          </div>
+          {/* [TABS] Chrome-style tabs anchored to banner bottom */}
+          <TabsNav mode={mode} tabs={tabs} themeVars={liveTheme} />
+        </div>
+
+        {/* BODY */}
+        <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
+          {mode === "meeting" ? (
+            // [MEETING]
+            <div className="w-full flex-1 flex flex-col">
+              {!agent ? (
+                <div className="text-sm text-[var(--helper-fg)]">Loading scheduling…</div>
+              ) : agent.calendar_link_type && String(agent.calendar_link_type).toLowerCase() === "embed" && agent.calendar_link ? (
+                <iframe
+                  title="Schedule a Meeting"
+                  src={`${agent.calendar_link}${agent.calendar_link.includes('?') ? '&' : '?'}embed_domain=${embedDomain}&embed_type=Inline&session_id=${encodeURIComponent(sessionId||'')}&visitor_id=${encodeURIComponent(visitorId||'')}&bot_id=${encodeURIComponent(botId||'')}`}
+                  style={{ width: "100%", height: "60vh", maxHeight: "640px", background: "var(--card-bg)" }}
+                  className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
+                />
+              ) : agent.calendar_link_type && String(agent.calendar_link_type).toLowerCase() === "external" && agent.calendar_link ? (
+                <div className="text-sm text-gray-700">
+                  We opened the scheduling page in a new tab. If it didn’t open,&nbsp;
+                  <a href={agent.calendar_link} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">click here to open it</a>.
+                </div>
+              ) : (
+                <div className="text-sm text-[var(--helper-fg)]">No scheduling link is configured.</div>
+              )}
+            </div>
+          ) : selected ? (
+            // [VIEWERS] Selected demo/doc
+            <div className="w-full flex-1 flex flex-col">
+              {mode === "docs" ? (
+                <DocIframe doc={selected} />
+              ) : (
+                <div className="bg-[var(--card-bg)] pt-2 pb-2">
+                  <iframe
+                    style={{ width: "100%", aspectRatio: "471 / 272" }}
+                    src={selected.url}
+                    title={selected.title}
+                    className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              )}
+              {mode === "ask" && (visibleUnderVideo || []).length > 0 && (
+                <>
+                  <div className="flex items-center justify-between mt-1 mb-3">
+                    <p className="italic text-[var(--helper-fg)]">Recommended demos</p>
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    {visibleUnderVideo.map((it) => (
+                      <Row key={it.id || it.url || it.title} item={it} onPick={(val) => normalizeAndSelectDemo(val)} />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : mode === "browse" ? (
+            // [VIEWERS] Demo browse list
+            <div className="w-full flex-1 flex flex-col">
+              {(browseItems || []).length > 0 && (
+                <>
+                  <div className="flex items-center justify-between mt-2 mb-3">
+                    <p className="italic text-[var(--helper-fg)]">Select a demo to view it</p>
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    {browseItems.map((it) => (
+                      <Row key={it.id || it.url || it.title} item={it} onPick={(val) => normalizeAndSelectDemo(val)} />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : mode === "docs" ? (
+            // [VIEWERS] Docs browse list
+            <div className="w-full flex-1 flex flex-col">
+              {(browseDocs || []).length > 0 && (
+                <>
+                  <div className="flex items-center justify-between mt-2 mb-3">
+                    <p className="italic text-[var(--helper-fg)]">Select a document to view it</p>
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    {browseDocs.map((it) => (
+                      <Row
+                        key={it.id || it.url || it.title}
+                        item={it}
+                        kind="doc"
+                        onPick={async (val) => {
+                          try {
+                            const r = await fetch(`${apiBase}/render-doc-iframe`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify(withIdsBody({ bot_id: botId, doc_id: val.id || "", title: val.title || "", url: val.url || "" })),
+                            });
+                            const j = await r.json();
+                            setSelected({ ...val, _iframe_html: j?.iframe_html || null });
+                          } catch {
+                            setSelected(val);
+                          }
+                          requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+                        }}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            // Ask view (welcome + answers)
+            <div className="w-full flex-1 flex flex-col">
+              {!lastQuestion && !loading && (
+                <div className="space-y-3">
+                  <div className="text-base font-bold whitespace-pre-line">{responseText}</div>
+                  {showIntroVideo && introVideoUrl ? (
+                    <div style={{ position: "relative", paddingTop: "56.25%" }}>
+                      <iframe
+                        src={introVideoUrl}
+                        title="Intro Video"
+                        frameBorder="0"
+                        allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
+                        referrerPolicy="strict-origin-when-cross-origin"
+                        style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
+                        className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              )}
+
+              {lastQuestion ? (
+                <p className="text-base italic text-center mb-2 text-[var(--helper-fg)]">"{lastQuestion}"</p>
+              ) : null}
+              <div className="text-left mt-2">
+                {loading ? (
+                  <p className="font-semibold animate-pulse text-[var(--helper-fg)]">Thinking…</p>
+                ) : lastQuestion ? (
+                  <p className="text-base font-bold whitespace-pre-line">{responseText}</p>
+                ) : null}
+              </div>
+
+              {(items || []).length > 0 && (
+                <>
+                  <div className="flex items-center justify-between mt-3 mb-2">
+                    <p className="italic text-[var(--helper-fg)]">Recommended demos</p>
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    {items.map((it) => (
+                      <Row key={it.id || it.url || it.title} item={it} onPick={(val) => normalizeAndSelectDemo(val)} />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Bottom Ask Bar */}
+        <div className="px-4 py-3 border-t border-[var(--border-default)]">
+          <div className="relative w-full">
+            <textarea
+              ref={inputRef}
+              rows={1}
+              className="w-full rounded-[0.75rem] px-4 py-2 pr-14 text-base placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px] bg-[var(--card-bg)] border border-[var(--border-default)] focus:border-[var(--border-default)] focus:ring-1 focus:ring-[var(--border-default)] outline-none"
+              placeholder="Ask your question here"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onInput={(e) => {
+                e.currentTarget.style.height = "auto";
+                e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage();
+                }
+              }}
+            />
+            <button aria-label="Send" onClick={sendMessage} className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95">
+              <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:brightness-110" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
