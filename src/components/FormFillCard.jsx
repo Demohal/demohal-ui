@@ -1,12 +1,14 @@
 // FormFillCard.jsx — mocked FormFill UI (fname, lname, email)
-// Restored to the original compact visual sizing. Full file provided.
+// - Uses Heroicons QuestionMarkCircle for field tooltips
+// - Replaces "Continue" with circular arrow button (matches Ask send affordance)
+// - Adds a more prominent border around the card
 // Props:
 //   onSubmit(values: { fname: string; lname: string; email: string }): void
 //   onCancel?: () => void
 //   defaults?: { fname?: string; lname?: string; email?: string }
 
 import React from "react";
-import { QuestionMarkCircleIcon } from "@heroicons/react/24/outline";
+import { QuestionMarkCircleIcon } from "@heroicons/react/24/outline"; // ensure package installed: npm i @heroicons/react
 
 function FieldRow({ id, label, type = "text", tooltip, value, onChange, error, placeholder }) {
   return (
@@ -17,9 +19,10 @@ function FieldRow({ id, label, type = "text", tooltip, value, onChange, error, p
         </label>
         {tooltip ? (
           <div className="relative group inline-flex items-center" aria-label={`Why we ask for ${label}`}>
-            {/* Heroicon “?” */}
-            <QuestionMarkCircleIcon className="h-4 w-4 text-gray-500" />
-            <div className="absolute z-10 hidden group-hover:block bg-black text-white text-xs rounded px-2 py-1 left-5 -top-2 whitespace-nowrap [box-shadow:var(--shadow-elevation)]">
+            {/* Heroicon */}
+            <QuestionMarkCircleIcon className="h-5 w-5 text-[var(--helper-fg)] shrink-0" />
+            {/* Tooltip */}
+            <div className="absolute z-10 hidden group-hover:block bg-black text-white text-xs rounded px-2 py-1 left-6 -top-2 whitespace-nowrap [box-shadow:var(--shadow-elevation)]">
               {tooltip}
             </div>
           </div>
@@ -62,7 +65,7 @@ export default function FormFillCard({ onSubmit, onCancel, defaults }) {
   }
 
   return (
-    <div className="w-full bg-[var(--card-bg)] rounded-2xl p-4 md:p-5 [box-shadow:var(--shadow-elevation)]">
+    <div className="w-full bg-[var(--card-bg)] rounded-2xl p-4 md:p-5 border-2 border-[var(--border-default)] [box-shadow:var(--shadow-elevation)]">
       <div className="space-y-4">
         <FieldRow
           id="ff_fname"
@@ -103,12 +106,17 @@ export default function FormFillCard({ onSubmit, onCancel, defaults }) {
             Cancel
           </button>
         ) : null}
+        {/* Circular arrow submit (mirrors AskInputBar affordance) */}
         <button
           type="button"
+          aria-label="Continue"
           onClick={submit}
-          className="px-4 py-2 rounded-lg text-sm text-[var(--tab-active-fg)] bg-[var(--tab-bg)] hover:brightness-110"
+          className="h-10 w-10 rounded-full bg-[var(--send-color)] text-white flex items-center justify-center shadow hover:opacity-90"
         >
-          Continue
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+            <path d="M5 12h14" />
+            <path d="M13 5l7 7-7 7" />
+          </svg>
         </button>
       </div>
     </div>
