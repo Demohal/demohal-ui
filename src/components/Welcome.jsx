@@ -1,15 +1,17 @@
-/* Welcome.jsx — updated per request + fix for React error #310 (hooks order)
-   - [FIX310] Move useMemo(tabs) ABOVE any early returns so hooks order is stable
-   - [TABS] Chrome-style tabs anchored inside banner bottom
-   - [VIEWERS] Demo & Doc iframe viewers
-   - [NO-ASK-TAB] Ask is NOT a tab; tabs = Demos / Docs / Schedule Meeting
-   - [MEETING] Schedule Meeting tab
+/* Welcome.jsx — Phase 1 refactor: extract presentational components
+   - Extracted TabsNav, Row, DocIframe, AskInputBar into sibling files
+   - No behavior change
 */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
-import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import fallbackLogo from "../assets/logo.png";
+
+// PRESENTATIONAL (local imports)
+import TabsNav from "./TabsNav";
+import Row from "./Row";
+import DocIframe from "./DocIframe";
+import AskInputBar from "./AskInputBar";
 
 /* =============================== *
  *  CLIENT-CONTROLLED CSS TOKENS   *
@@ -31,7 +33,7 @@ const DEFAULT_THEME_VARS = {
   // Tabs (inactive)
   "--tab-bg": "#303030",
   "--tab-fg": "#ffffff",
-  "--tab-active-fg": "#ffffff", // [TABS] derived at runtime too
+  "--tab-active-fg": "#ffffff", // derived at runtime
 
   // Buttons (explicit types)
   "--demo-button-bg": "#3a4554",
@@ -49,7 +51,7 @@ const DEFAULT_THEME_VARS = {
 
 const classNames = (...xs) => xs.filter(Boolean).join(" ");
 
-// [TABS] compute contrasting active fg based on tab fg
+// compute contrasting active fg based on tab fg
 function inverseBW(hex) {
   const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(
     String(hex || "").trim()
@@ -61,105 +63,6 @@ function inverseBW(hex) {
   const L = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   return L > 0.5 ? "#000000" : "#ffffff";
 }
-
-/* ========================== *
- *  UI PRIMITIVES [TABS]      *
- * ========================== */
-
-const UI = {
-  CARD: "rounded-[0.75rem] p-4 bg-white [box-shadow:var(--shadow-elevation)]",
-  BTN_DEMO:
-    "w-full text-center rounded-[0.75rem] px-4 py-3 transition " +
-    "text-[var(--demo-button-fg)] bg-[var(--demo-button-bg)] hover:brightness-110 active:brightness-95",
-  BTN_DOC:
-    "w-full text-center rounded-[0.75rem] px-4 py-3 transition " +
-    "text-[var(--doc-button-fg)] bg-[var(--doc-button-bg)] hover:brightness-110 active:brightness-95",
-  TAB_ACTIVE:
-    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] " +
-    "[box-shadow:var(--shadow-elevation)]",
-  TAB_INACTIVE:
-    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] hover:brightness-110",
-};
-
-function Row({ item, onPick, kind = "demo" }) {
-  const btnClass = kind === "doc" ? UI.BTN_DOC : UI.BTN_DEMO;
-  return (
-    <button onClick={() => onPick(item)} className={btnClass} title={item.description || ""}>
-      <div className="font-extrabold text-xs sm:text-sm">{item.title}</div>
-      {item.description ? (
-        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">{item.description}</div>
-      ) : null}
-    </button>
-  );
-}
-
-// [TABS] Chrome-style tabs anchored to bottom of banner
-function TabsNav({ mode, tabs, themeVars }) {
-  return (
-    <div className="w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <nav
-        className="inline-flex min-w-max items-center gap-0.5 overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        role="tablist"
-      >
-        {tabs.map((t) => {
-          const active =
-            (mode === "browse" && t.key === "demos") ||
-            (mode === "docs" && t.key === "docs") ||
-            (mode === "meeting" && t.key === "meeting");
-          return (
-            <button
-              key={t.key}
-              onClick={t.onClick}
-              role="tab"
-              aria-selected={active}
-              className={active ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}
-              style={
-                active
-                  ? { background: "var(--card-bg)", color: "var(--tab-active-fg)" }
-                  : { background: "var(--tab-bg)", color: "var(--tab-fg)" }
-              }
-              type="button"
-            >
-              {t.label}
-            </button>
-          );
-        })}
-      </nav>
-    </div>
-  );
-}
-
-/* =================== *
- *  Doc iframe wrapper  [VIEWERS]
- * =================== */
-function DocIframe({ doc }) {
-  // Server may return full HTML; extract src if present
-  const iframeSrc = React.useMemo(() => {
-    const html = doc?._iframe_html || "";
-    if (!html) return null;
-    const m = html.match(/src=\"([^\"]+)\"/i) || html.match(/src='([^']+)'/i);
-    return m ? m[1] : null;
-  }, [doc?._iframe_html]);
-
-  const src = iframeSrc || doc?.url || "";
-
-  return (
-    <div className="bg-[var(--card-bg)] pt-2 pb-2">
-      <iframe
-        className="w-full h-[65vh] md:h-[78vh] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
-        src={src}
-        title={doc?.title || "Document"}
-        loading="lazy"
-        referrerPolicy="strict-origin-when-cross-origin"
-        allow="fullscreen"
-      />
-    </div>
-  );
-}
-
-/* =================== *
- *  MAIN APP COMPONENT *
- * =================== */
 
 export default function Welcome() {
   const apiBase =
@@ -178,7 +81,7 @@ export default function Welcome() {
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [fatal, setFatal] = useState("");
 
-  // Mode controller (Ask is not a tab) [NO-ASK-TAB]
+  // Mode controller (Ask is not a tab)
   const [mode, setMode] = useState("ask"); // 'ask' | 'browse' | 'docs' | 'meeting'
 
   // Q&A state
@@ -193,7 +96,7 @@ export default function Welcome() {
   const [browseDocs, setBrowseDocs] = useState([]);
   const [selected, setSelected] = useState(null);
 
-  // Meeting [MEETING]
+  // Meeting
   const [agent, setAgent] = useState(null);
 
   // Refs
@@ -211,7 +114,6 @@ export default function Welcome() {
     logo_light_url: null,
     logo_dark_url: null,
   });
-  // [TABS] derive active tab fg for contrast
   const liveTheme = useMemo(() => {
     const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
     return { ...themeVars, "--tab-active-fg": activeFg };
@@ -223,7 +125,7 @@ export default function Welcome() {
   );
   const [brandReady, setBrandReady] = useState(initialBrandReady);
 
-  // Tabs enabled (from /bot-settings) [TABS]
+  // Tabs enabled (from /bot-settings)
   const [tabsEnabled, setTabsEnabled] = useState({ demos: false, docs: false, meeting: false });
 
   // Helpers to attach identity in requests
@@ -268,10 +170,8 @@ export default function Welcome() {
         const b = data?.ok ? data?.bot : null;
         if (b) {
           setResponseText(b.welcome_message || "");
-          // welcome video
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
-          // [TABS]
           setTabsEnabled({
             demos: !!b.show_browse_demos,
             docs: !!b.show_browse_docs,
@@ -411,7 +311,7 @@ export default function Welcome() {
     if (!input.trim() || !botId) return;
     const outgoing = input.trim();
 
-    setMode("ask"); // [NO-ASK-TAB] stay in Ask view
+    setMode("ask");
     setLastQuestion(outgoing);
     setInput("");
     setSelected(null);
@@ -428,7 +328,6 @@ export default function Welcome() {
       const data = res?.data || {};
       const text = data?.response_text || "";
 
-      // Map optional recommendations (unified buttons under Ask)
       try {
         const src = Array.isArray(data?.items) ? data.items : Array.isArray(data?.buttons) ? data.buttons : [];
         const mapped = src.map((it, idx) => ({
@@ -454,7 +353,7 @@ export default function Welcome() {
   }
 
   /* ============================= *
-   *   Demo/Doc browse + viewers   * [VIEWERS]
+   *   Demo/Doc browse + viewers   *
    * ============================= */
   async function normalizeAndSelectDemo(item) {
     try {
@@ -533,7 +432,7 @@ export default function Welcome() {
   }
 
   /* ============================= *
-   *   Schedule meeting [MEETING]  *
+   *   Schedule meeting
    * ============================= */
   const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
   async function openMeeting() {
@@ -564,7 +463,7 @@ export default function Welcome() {
     }
   }
 
-  // Listen for Calendly postMessage and forward to backend [MEETING]
+  // Listen for Calendly postMessage and forward to backend
   useEffect(() => {
     if (mode !== "meeting" || !botId || !sessionId || !visitorId) return;
     function onCalendlyMessage(e) {
@@ -607,9 +506,7 @@ export default function Welcome() {
    *   Render     *
    * ============ */
 
-  // [FIX310] All hooks must run before any conditional return. Compute tabs here.
   const tabs = useMemo(() => {
-    // [NO-ASK-TAB] Ask is not part of the tabs
     const out = [];
     if (tabsEnabled.demos) out.push({ key: "demos", label: "Browse Demos", onClick: openBrowse });
     if (tabsEnabled.docs) out.push({ key: "docs", label: "Browse Documents", onClick: openBrowseDocs });
@@ -681,21 +578,20 @@ export default function Welcome() {
                 : "Ask the Assistant"}
             </div>
           </div>
-          {/* [TABS] Chrome-style tabs anchored to banner bottom */}
-          <TabsNav mode={mode} tabs={tabs} themeVars={liveTheme} />
+          {/* Tabs */}
+          <TabsNav mode={mode} tabs={tabs} />
         </div>
 
         {/* BODY */}
         <div ref={contentRef} className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto">
           {mode === "meeting" ? (
-            // [MEETING]
             <div className="w-full flex-1 flex flex-col">
               {!agent ? (
                 <div className="text-sm text-[var(--helper-fg)]">Loading scheduling…</div>
               ) : agent.calendar_link_type && String(agent.calendar_link_type).toLowerCase() === "embed" && agent.calendar_link ? (
                 <iframe
                   title="Schedule a Meeting"
-                  src={`${agent.calendar_link}${agent.calendar_link.includes('?') ? '&' : '?'}embed_domain=${embedDomain}&embed_type=Inline&session_id=${encodeURIComponent(sessionId||'')}&visitor_id=${encodeURIComponent(visitorId||'')}&bot_id=${encodeURIComponent(botId||'')}`}
+                  src={`${agent.calendar_link}${agent.calendar_link.includes('?') ? '&' : '?'}embed_domain=${typeof window!=="undefined"?window.location.hostname:''}&embed_type=Inline&session_id=${encodeURIComponent(sessionId||'')}&visitor_id=${encodeURIComponent(visitorId||'')}&bot_id=${encodeURIComponent(botId||'')}`}
                   style={{ width: "100%", height: "60vh", maxHeight: "640px", background: "var(--card-bg)" }}
                   className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
                 />
@@ -709,7 +605,6 @@ export default function Welcome() {
               )}
             </div>
           ) : selected ? (
-            // [VIEWERS] Selected demo/doc
             <div className="w-full flex-1 flex flex-col">
               {mode === "docs" ? (
                 <DocIframe doc={selected} />
@@ -739,7 +634,6 @@ export default function Welcome() {
               )}
             </div>
           ) : mode === "browse" ? (
-            // [VIEWERS] Demo browse list
             <div className="w-full flex-1 flex flex-col">
               {(browseItems || []).length > 0 && (
                 <>
@@ -755,7 +649,6 @@ export default function Welcome() {
               )}
             </div>
           ) : mode === "docs" ? (
-            // [VIEWERS] Docs browse list
             <div className="w-full flex-1 flex flex-col">
               {(browseDocs || []).length > 0 && (
                 <>
@@ -789,7 +682,6 @@ export default function Welcome() {
               )}
             </div>
           ) : (
-            // Ask view (welcome + answers)
             <div className="w-full flex-1 flex flex-col">
               {!lastQuestion && !loading && (
                 <div className="space-y-3">
@@ -838,31 +730,12 @@ export default function Welcome() {
         </div>
 
         {/* Bottom Ask Bar */}
-        <div className="px-4 py-3 border-t border-[var(--border-default)]">
-          <div className="relative w-full">
-            <textarea
-              ref={inputRef}
-              rows={1}
-              className="w-full rounded-[0.75rem] px-4 py-2 pr-14 text-base placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px] bg-[var(--card-bg)] border border-[var(--border-default)] focus:border-[var(--border-default)] focus:ring-1 focus:ring-[var(--border-default)] outline-none"
-              placeholder="Ask your question here"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onInput={(e) => {
-                e.currentTarget.style.height = "auto";
-                e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  sendMessage();
-                }
-              }}
-            />
-            <button aria-label="Send" onClick={sendMessage} className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95">
-              <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:brightness-110" />
-            </button>
-          </div>
-        </div>
+        <AskInputBar
+          value={input}
+          onChange={setInput}
+          onSend={sendMessage}
+          inputRef={inputRef}
+        />
       </div>
     </div>
   );
