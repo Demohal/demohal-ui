@@ -1,8 +1,9 @@
-/* Welcome.jsx — updated per request
-   - [TABS] Chrome-style tabs anchored inside banner bottom (from old AskAssistant)
-   - [VIEWERS] Demo & Doc iframe viewers like the old code
-   - [NO-ASK-TAB] Ask is NOT a tab; tabs only for Demos / Docs / Schedule Meeting
-   - [MEETING] Schedule Meeting tab behavior (embed or external) like old code
+/* Welcome.jsx — updated per request + fix for React error #310 (hooks order)
+   - [FIX310] Move useMemo(tabs) ABOVE any early returns so hooks order is stable
+   - [TABS] Chrome-style tabs anchored inside banner bottom
+   - [VIEWERS] Demo & Doc iframe viewers
+   - [NO-ASK-TAB] Ask is NOT a tab; tabs = Demos / Docs / Schedule Meeting
+   - [MEETING] Schedule Meeting tab
 */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -606,6 +607,16 @@ export default function Welcome() {
    *   Render     *
    * ============ */
 
+  // [FIX310] All hooks must run before any conditional return. Compute tabs here.
+  const tabs = useMemo(() => {
+    // [NO-ASK-TAB] Ask is not part of the tabs
+    const out = [];
+    if (tabsEnabled.demos) out.push({ key: "demos", label: "Browse Demos", onClick: openBrowse });
+    if (tabsEnabled.docs) out.push({ key: "docs", label: "Browse Documents", onClick: openBrowseDocs });
+    if (tabsEnabled.meeting) out.push({ key: "meeting", label: "Schedule Meeting", onClick: openMeeting });
+    return out;
+  }, [tabsEnabled]);
+
   if (fatal) {
     return (
       <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
@@ -639,15 +650,6 @@ export default function Welcome() {
 
   const logoSrc =
     brandAssets.logo_url || brandAssets.logo_light_url || brandAssets.logo_dark_url || fallbackLogo;
-
-  const tabs = useMemo(() => {
-    // [NO-ASK-TAB] Ask is not part of the tabs
-    const out = [];
-    if (tabsEnabled.demos) out.push({ key: "demos", label: "Browse Demos", onClick: openBrowse });
-    if (tabsEnabled.docs) out.push({ key: "docs", label: "Browse Documents", onClick: openBrowseDocs });
-    if (tabsEnabled.meeting) out.push({ key: "meeting", label: "Schedule Meeting", onClick: openMeeting });
-    return out;
-  }, [tabsEnabled]);
 
   const listSource = mode === "browse" ? browseItems : items;
   const visibleUnderVideo = selected ? (mode === "ask" ? items : []) : listSource;
