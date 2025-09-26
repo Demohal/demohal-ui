@@ -1,6 +1,6 @@
 /* Welcome.jsx — trimmed to init app, paint shell, welcome, Q&A only */
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import fallbackLogo from "../assets/logo.png";
@@ -35,6 +35,51 @@ const DEFAULT_THEME_VARS = {
 
 const classNames = (...xs) => xs.filter(Boolean).join(" ");
 
+// [PATCH 2]: Dumb UI components (tabs + list pane) inserted above component export
+function TabBar({ tabs, active, onChange }) {
+    return (
+        <div className="px-4 sm:px-6 border-b border-[var(--border-default)] bg-[var(--card-bg)]">
+            <div className="flex gap-2 py-2">
+                {tabs.map((t) => (
+                    <button
+                        key={t.key}
+                        onClick={() => onChange(t.key)}
+                        className={`px-3 py-1.5 rounded-lg text-sm ${active === t.key ? "bg-[var(--tab-bg)] text-[var(--tab-fg)]" : "hover:bg-black/5"}`}
+                    >
+                        {t.label}
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+const VARIANT_TOKENS = {
+    demos: { "--btn-bg": "var(--demo-button-bg)", "--btn-fg": "var(--demo-button-fg)" },
+    docs:  { "--btn-bg": "var(--doc-button-bg)",  "--btn-fg": "var(--doc-button-fg)"  },
+    recs:  { "--btn-bg": "var(--tab-bg)",         "--btn-fg": "var(--tab-fg)"         },
+};
+
+function ChoiceListPane({ title, variant, items }) {
+    const tokens = VARIANT_TOKENS[variant] || {};
+    return (
+        <section className="flex-1 flex flex-col gap-4" style={tokens}>
+            {title ? <div className="text-sm text-[var(--helper-fg)]">{title}</div> : null}
+            <div className="flex flex-col gap-3">
+                {items.map((it) => (
+                    <button
+                        key={it.id}
+                        onClick={it.action}
+                        className="w-full text-left rounded-xl border border-[var(--border-default)] px-4 py-3 bg-[var(--btn-bg)] text-[var(--btn-fg)] hover:opacity-95"
+                    >
+                        <div className="font-semibold">{it.label}</div>
+                        {it.description ? <div className="text-sm opacity-90">{it.description}</div> : null}
+                    </button>
+                ))}
+            </div>
+        </section>
+    );
+}
 export default function Welcome() {
     const apiBase =
         import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
@@ -58,6 +103,17 @@ export default function Welcome() {
     const [responseText, setResponseText] = useState("");
     const [loading, setLoading] = useState(false);
 
+    // [PATCH 4]: Unified list data + tiny view controller
+    const [demoItems, setDemoItems] = useState([]);
+    const [docItems, setDocItems] = useState([]);
+    const [recs, setRecs] = useState(null);
+
+    const [view, setView] = useState("ask"); // 'ask' | 'recs' | 'demos' | 'docs'
+    const setViewSafe = useCallback((next) => {
+        if (next === "ask") requestAnimationFrame(() => inputRef.current?.focus());
+        setView(next);
+    }, []);
+
     // Welcome media
     const [introVideoUrl, setIntroVideoUrl] = useState("");
     const [showIntroVideo, setShowIntroVideo] = useState(false);
@@ -77,6 +133,13 @@ export default function Welcome() {
         logo_light_url: null,
         logo_dark_url: null,
     });
+
+    // [PATCH 3]: Feature flags (from /bot-settings)
+    const [featureFlags, setFeatureFlags] = useState({
+        show_browse_demos: false,
+        show_browse_docs: false,
+    });
+
 
     const initialBrandReady = useMemo(
         () => !(botIdFromUrl || alias),
@@ -122,6 +185,11 @@ export default function Welcome() {
                     setResponseText(b.welcome_message || "");
                     setIntroVideoUrl(b.intro_video_url || "");
                     setShowIntroVideo(!!b.show_intro_video);
+            // [PATCH 5]: capture feature flags for tabs
+            setFeatureFlags({
+                show_browse_demos: !!b.show_browse_demos,
+                show_browse_docs: !!b.show_browse_docs,
+            });
                 }
                 if (id) {
                     setBotId(id);
@@ -160,6 +228,11 @@ export default function Welcome() {
                     setResponseText(b.welcome_message || "");
                     setIntroVideoUrl(b.intro_video_url || "");
                     setShowIntroVideo(!!b.show_intro_video);
+            // [PATCH 5]: capture feature flags for tabs
+            setFeatureFlags({
+                show_browse_demos: !!b.show_browse_demos,
+                show_browse_docs: !!b.show_browse_docs,
+            });
                 }
                 if (data?.ok && data?.bot?.id) setBotId(data.bot.id);
             } catch { }
@@ -191,6 +264,11 @@ export default function Welcome() {
                     setResponseText(b.welcome_message || "");
                     setIntroVideoUrl(b.intro_video_url || "");
                     setShowIntroVideo(!!b.show_intro_video);
+            // [PATCH 5]: capture feature flags for tabs
+            setFeatureFlags({
+                show_browse_demos: !!b.show_browse_demos,
+                show_browse_docs: !!b.show_browse_docs,
+            });
                 }
                 if (data?.ok && data?.bot?.id) setBotId(data.bot.id);
             } catch { }
@@ -236,6 +314,58 @@ export default function Welcome() {
         };
     }, [botId, apiBase]);
 
+    // [PATCH 6]: Load demos when enabled
+useEffect(() => {
+    if (!botId || !featureFlags.show_browse_demos) return;
+    let cancel = false;
+    (async () => {
+        try {
+            const res = await fetch(`${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`);
+            const data = await res.json();
+            if (cancel) return;
+            const arr = Array.isArray(data?.items) ? data.items : (Array.isArray(data?.demos) ? data.demos : []);
+            setDemoItems(
+                arr.map((d, i) => ({
+                    id: d.id || `demo-${i}`,
+                    label: d.title || d.label || "Demo",
+                    description: d.description || "",
+                    action: () => {
+                        const url = d.url || `${apiBase}/render-video-iframe?bot_id=${encodeURIComponent(botId)}&demo_id=${encodeURIComponent(d.id || "")}`;
+                        window.open(url, "_blank", "noopener,noreferrer");
+                    },
+                }))
+            );
+        } catch {}
+    })();
+    return () => { cancel = true; };
+}, [botId, featureFlags.show_browse_demos, apiBase]);
+
+// [PATCH 7]: Load docs when enabled
+useEffect(() => {
+    if (!botId || !featureFlags.show_browse_docs) return;
+    let cancel = false;
+    (async () => {
+        try {
+            const res = await fetch(`${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`);
+            const data = await res.json();
+            if (cancel) return;
+            const arr = Array.isArray(data?.items) ? data.items : (Array.isArray(data?.documents) ? data.documents : []);
+            setDocItems(
+                arr.map((doc, i) => ({
+                    id: doc.id || `doc-${i}`,
+                    label: doc.title || doc.label || "Document",
+                    description: doc.description || "",
+                    action: () => {
+                        const url = doc.url || `${apiBase}/render-doc-iframe?bot_id=${encodeURIComponent(botId)}&doc_id=${encodeURIComponent(doc.id || "")}`;
+                        window.open(url, "_blank", "noopener,noreferrer");
+                    },
+                }))
+            );
+        } catch {}
+    })();
+    return () => { cancel = true; };
+}, [botId, featureFlags.show_browse_docs, apiBase]);
+
     // Autosize ask box
     useEffect(() => {
         const el = inputRef.current;
@@ -270,7 +400,27 @@ export default function Welcome() {
             const data = res?.data || {};
             const text = data?.response_text || "";
 
-            setResponseText(text);
+            
+// [PATCH 11]: Map optional recommendations from ask/answer
+try {
+    const recsRaw = Array.isArray(data?.recommendations) ? data.recommendations : [];
+    const mapped = recsRaw.map((r, idx) => ({
+        id: `${r.type || (r.url?.includes('/doc') ? 'doc' : 'demo')}:${r.id ?? idx}`,
+        label: r.title || r.label || 'Recommended',
+        description: r.description || r.reason || '',
+        action: () => {
+            if ((r.type === 'doc') || r.url?.includes('/doc')) {
+                const url = r.url || `${apiBase}/render-doc-iframe?bot_id=${encodeURIComponent(botId)}&doc_id=${encodeURIComponent(r.id || '')}`;
+                window.open(url, "_blank", "noopener,noreferrer");
+            } else {
+                const url = r.url || `${apiBase}/render-video-iframe?bot_id=${encodeURIComponent(botId)}&demo_id=${encodeURIComponent(r.id || '')}`;
+                window.open(url, "_blank", "noopener,noreferrer");
+            }
+        },
+    }));
+    setRecs(mapped.length ? mapped : null);
+} catch {}
+setResponseText(text);
             setLoading(false);
 
             requestAnimationFrame(() =>
@@ -285,6 +435,15 @@ export default function Welcome() {
     /* ============ *
      *   Render     *
      * ============ */
+// [PATCH 8]: Data-driven tabs model
+const tabs = useMemo(() => [
+    { key: "ask",   label: "Ask" },
+    { key: "recs",  label: "Recommendations", hidden: !(recs && recs.length) },
+    { key: "demos", label: "Demos",     hidden: !featureFlags.show_browse_demos },
+    { key: "docs",  label: "Documents", hidden: !featureFlags.show_browse_docs },
+].filter(t => !t.hidden), [recs, featureFlags]);
+
+
 
     if (fatal) {
         return (
@@ -350,56 +509,64 @@ export default function Welcome() {
                     </div>
                 </div>
 
-                {/* Content */}
-                <div
-                    ref={contentRef}
-                    className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto"
-                >
-                    {!lastQuestion && !loading && (
-                        <div className="space-y-3">
-                            <div className="text-base font-bold whitespace-pre-line">
-                                {responseText}
-                            </div>
-                            {showIntroVideo && introVideoUrl ? (
-                                <div style={{ position: "relative", paddingTop: "56.25%" }}>
-                                    <iframe
-                                        src={introVideoUrl}
-                                        title="Intro Video"
-                                        frameBorder="0"
-                                        allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
-                                        referrerPolicy="strict-origin-when-cross-origin"
-                                        style={{
-                                            position: "absolute",
-                                            top: 0,
-                                            left: 0,
-                                            width: "100%",
-                                            height: "100%",
-                                        }}
-                                        className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
-                                    />
-                                </div>
-                            ) : null}
-                        </div>
-                    )}
+                {/* Tabs [PATCH 9] */}
+                <TabBar tabs={tabs} active={view} onChange={setViewSafe} />
 
-                    {lastQuestion ? (
-                        <p className="text-base italic text-center mb-2 text-[var(--helper-fg)]">
-                            "{lastQuestion}"
-                        </p>
-                    ) : null}
+                {/* Content [PATCH 10]: view switch */}
+{view === 'ask' && (
+  <div
+    ref={contentRef}
+    className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto"
+  >
+    {!lastQuestion && !loading && (
+      <div className="space-y-3">
+        <div className="text-base font-bold whitespace-pre-line">
+          {responseText}
+        </div>
+        {showIntroVideo && introVideoUrl ? (
+          <div style={{ position: "relative", paddingTop: "56.25%" }}>
+            <iframe
+              src={introVideoUrl}
+              title="Intro Video"
+              frameBorder="0"
+              allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
+              referrerPolicy="strict-origin-when-cross-origin"
+              style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
+              className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
+            />
+          </div>
+        ) : null}
+      </div>
+    )}
 
-                    <div className="text-left mt-2">
-                        {loading ? (
-                            <p className="font-semibold animate-pulse text-[var(--helper-fg)]">
-                                Thinking…
-                            </p>
-                        ) : lastQuestion ? (
-                            <p className="text-base font-bold whitespace-pre-line">
-                                {responseText}
-                            </p>
-                        ) : null}
-                    </div>
-                </div>
+    {lastQuestion ? (
+      <p className="text-base italic text-center mb-2 text-[var(--helper-fg)]">"{lastQuestion}"</p>
+    ) : null}
+
+    <div className="text-left mt-2">
+      {loading ? (
+        <p className="font-semibold animate-pulse text-[var(--helper-fg)]">Thinking…</p>
+      ) : lastQuestion ? (
+        <p className="text-base font-bold whitespace-pre-line">{responseText}</p>
+      ) : null}
+    </div>
+  </div>
+)}
+{view === 'recs' && (
+  <div className="px-6 pt-3 pb-6 flex-1 flex flex-col overflow-y-auto">
+    <ChoiceListPane title="Recommended next steps" variant="recs" items={recs || []} />
+  </div>
+)}
+{view === 'demos' && (
+  <div className="px-6 pt-3 pb-6 flex-1 flex flex-col overflow-y-auto">
+    <ChoiceListPane title="Pick a demo" variant="demos" items={demoItems} />
+  </div>
+)}
+{view === 'docs' && (
+  <div className="px-6 pt-3 pb-6 flex-1 flex flex-col overflow-y-auto">
+    <ChoiceListPane title="Browse documents" variant="docs" items={docItems} />
+  </div>
+)}
 
                 {/* Bottom Ask Bar */}
                 <div
