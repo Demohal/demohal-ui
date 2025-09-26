@@ -378,7 +378,15 @@ export default function Welcome() {
     }
   }
 
+  // Show-once helper (also consult sessionStorage defensively)
   function maybeOpenForm(next) {
+    // Prevent re-trigger if already completed this session
+    try {
+      if (sessionStorage.getItem(FORM_KEY) === "1") {
+        if (!formCompleted) setFormCompleted(true);
+        return false;
+      }
+    } catch {}
     if (!formCompleted && !formShown) {
       setFormShown(true);
       setPending(next);
@@ -510,9 +518,9 @@ export default function Welcome() {
           const base = ag.calendar_link || "";
           const withQS = `${base}${base.includes("?") ? "&" : "?"}session_id=${encodeURIComponent(
             sessionId || ""
-          )}&visitor_id=${encodeURIComponent(visitorId || "")}&bot_id=${encodeURIComponent(
-            botId || ""
-          )}`;
+          )}&visitor_id=${encodeURIComponent(
+            visitorId || ""
+          )}&bot_id=${encodeURIComponent(botId || "")}`;
           window.open(withQS, "_blank", "noopener,noreferrer");
         } catch {}
       }
@@ -704,8 +712,8 @@ export default function Welcome() {
                 <iframe
                   title="Schedule a Meeting"
                   src={`${agent.calendar_link}${
-                    agent.calendar_link.includes("?") ? "&" : "?"
-                  }embed_domain=${embedDomain}&embed_type=Inline&session_id=${encodeURIComponent(
+                    agent.calendar_link.includes("?") ? "&" : "?"}
+                  embed_domain=${embedDomain}&embed_type=Inline&session_id=${encodeURIComponent(
                     sessionId || ""
                   )}&visitor_id=${encodeURIComponent(
                     visitorId || ""
