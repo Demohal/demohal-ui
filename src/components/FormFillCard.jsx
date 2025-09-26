@@ -1,5 +1,5 @@
 // FormFillCard.jsx — mocked FormFill UI (fname, lname, email)
-// Presentational component; validates locally and emits values on submit.
+// Restored to the original compact visual sizing. Full file provided.
 // Props:
 //   onSubmit(values: { fname: string; lname: string; email: string }): void
 //   onCancel?: () => void
@@ -8,16 +8,7 @@
 import React from "react";
 import { QuestionMarkCircleIcon } from "@heroicons/react/24/outline";
 
-function FieldRow({
-  id,
-  label,
-  type = "text",
-  tooltip,
-  value,
-  onChange,
-  error,
-  placeholder,
-}) {
+function FieldRow({ id, label, type = "text", tooltip, value, onChange, error, placeholder }) {
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-2">
@@ -25,9 +16,10 @@ function FieldRow({
           {label}
         </label>
         {tooltip ? (
-          <div className="relative group inline-flex items-center">
+          <div className="relative group inline-flex items-center" aria-label={`Why we ask for ${label}`}>
+            {/* Heroicon “?” */}
             <QuestionMarkCircleIcon className="h-4 w-4 text-gray-500" />
-            <div className="absolute z-10 hidden group-hover:block bg-black text-white text-xs rounded px-2 py-1 left-5 -top-2 whitespace-nowrap">
+            <div className="absolute z-10 hidden group-hover:block bg-black text-white text-xs rounded px-2 py-1 left-5 -top-2 whitespace-nowrap [box-shadow:var(--shadow-elevation)]">
               {tooltip}
             </div>
           </div>
@@ -39,7 +31,7 @@ function FieldRow({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-[0.75rem] px-3 py-2 border border-[var(--border-default)] bg-[var(--card-bg)] focus:outline-none focus:ring-1 focus:ring-[var(--border-default)]"
+        className="w-full rounded-[0.75rem] px-3 py-2 text-sm border border-[var(--border-default)] bg-[var(--card-bg)] focus:outline-none focus:ring-1 focus:ring-[var(--border-default)]"
       />
       {error ? <div className="text-xs text-red-600">{error}</div> : null}
     </div>
@@ -106,7 +98,7 @@ export default function FormFillCard({ onSubmit, onCancel, defaults }) {
           <button
             type="button"
             onClick={onCancel}
-            className="px-3 py-2 rounded-lg border border-[var(--border-default)] hover:bg-black/5"
+            className="px-3 py-2 rounded-lg text-sm border border-[var(--border-default)] hover:bg-black/5"
           >
             Cancel
           </button>
@@ -114,7 +106,7 @@ export default function FormFillCard({ onSubmit, onCancel, defaults }) {
         <button
           type="button"
           onClick={submit}
-          className="px-4 py-2 rounded-lg text-[var(--tab-active-fg)] bg-[var(--tab-bg)] hover:brightness-110"
+          className="px-4 py-2 rounded-lg text-sm text-[var(--tab-active-fg)] bg-[var(--tab-bg)] hover:brightness-110"
         >
           Continue
         </button>
