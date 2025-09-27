@@ -394,53 +394,45 @@ export default function Welcome() {
   /* ============ *
    *   Ask Flow   *
    * ============ */
-  async function doSend(outgoing) {
-    setMode("ask");
-    setLastQuestion(outgoing);
-    setInput("");
-    setSelected(null);
-    setResponseText("");
+ // --- PATCH: Welcome.jsx — replace entire doSend to use demo_buttons only ---
+async function doSend(outgoing) {
+  setMode("ask");
+  setLastQuestion(outgoing);
+  setInput("");
+  setSelected(null);
+  setResponseText("");
+  setItems([]);
+  setLoading(true);
+  try {
+    const res = await axios.post(
+      `${apiBase}/demo-hal`,
+      withIdsBody({ bot_id: botId, user_question: outgoing, scope: "standard", debug: true }),
+      { timeout: 30000, headers: withIdsHeaders() }
+    );
+
+    const data = res?.data || {};
+    const text = data?.response_text || "";
+
+    // NEW: map only demo recommendations (no docs, no fallbacks)
+    const src = Array.isArray(data?.demo_buttons) ? data.demo_buttons : [];
+    const mapped = src.map((it, idx) => ({
+      id: it.id ?? it.value ?? it.url ?? it.title ?? String(idx),
+      title: it.title ?? it.button_title ?? it.label ?? "",
+      url: it.url ?? it.value ?? it.button_value ?? "",
+      description: it.description ?? it.summary ?? it.functions_text ?? "",
+    }));
+    setItems(mapped.filter(Boolean));
+
+    setResponseText(text);
+    setLoading(false);
+    requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+  } catch (err) {
+    setLoading(false);
+    setResponseText("Sorry—something went wrong.");
     setItems([]);
-    setLoading(true);
-    try {
-      const res = await axios.post(
-        `${apiBase}/demo-hal`,
-        withIdsBody({
-          bot_id: botId,
-          user_question: outgoing,
-          scope: "standard",
-          debug: true,
-        }),
-        { timeout: 30000, headers: withIdsHeaders() }
-      );
-      const data = res?.data || {};
-      const text = data?.response_text || "";
-      try {
-        const src = Array.isArray(data?.items)
-          ? data.items
-          : Array.isArray(data?.buttons)
-          ? data.buttons
-          : [];
-        const mapped = src.map((it, idx) => ({
-          id: it.id ?? it.value ?? it.url ?? it.title ?? String(idx),
-          title: it.title ?? it.button_title ?? it.label ?? "",
-          url: it.url ?? it.value ?? it.button_value ?? "",
-          description:
-            it.description ?? it.summary ?? it.functions_text ?? "",
-        }));
-        setItems(mapped.filter(Boolean));
-      } catch {}
-      setResponseText(text);
-      setLoading(false);
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
-    } catch {
-      setLoading(false);
-      setResponseText("Sorry—something went wrong.");
-      setItems([]);
-    }
   }
+}
+// --- END PATCH ---
 
   // Show-once helper (also consult sessionStorage defensively)
   function maybeOpenForm(next) {
