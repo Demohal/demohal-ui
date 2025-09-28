@@ -93,6 +93,8 @@ export default function Welcome() {
   const [lastQuestion, setLastQuestion] = useState("");
   const [responseText, setResponseText] = useState("");
   const [loading, setLoading] = useState(false);
+  const priceBusy = loading;
+  const appBusy = loading; 
 
   // Recommendations / browse state
   const [items, setItems] = useState([]);
