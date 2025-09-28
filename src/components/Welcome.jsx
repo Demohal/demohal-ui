@@ -155,6 +155,10 @@ export default function Welcome() {
   const [formCompleted, setFormCompleted] = useState(false); // never show again after submit
   const [pending, setPending] = useState(null); // { type: 'ask'|'demos'|'docs'|'meeting', payload? }
 
+  // Viewers (needed by the iframe sections)
+  const [activeDemo, setActiveDemo] = useState(null);
+  const [activeDoc, setActiveDoc] = useState(null);
+
   // Session persistence key so we never reshow after submit (per bot)
   const FORM_KEY = useMemo(
     () => `formfill_completed:${botId || alias || "_"}`,
