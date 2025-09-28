@@ -714,7 +714,26 @@ async function doSend(outgoing) {
     );
   }
 
-  const logoSrc =
+   // Compose a safe "bot" view so JSX like bot?.logo_url never throws
+   const bot = {
+     logo_url:
+       (brandAssets && (brandAssets.logo_url || brandAssets.logo_light_url || brandAssets.logo_dark_url)) ||
+       null,
+     company_name: (brandAssets && brandAssets.company_name) || null,
+     description: (brandAssets && brandAssets.description) || null,
+     intro_video_url: introVideoUrl || null,
+     show_intro_video: !!showIntroVideo,
+     show_browse_demos: !!(tabsEnabled && tabsEnabled.demos),
+     show_browse_docs: !!(tabsEnabled && tabsEnabled.docs),
+     show_schedule_meeting: !!(tabsEnabled && tabsEnabled.meeting),
+     // pricing text if you have it in state; otherwise null is fine
+     pricing_intro: null,
+     pricing_outro: null,
+     welcome_message: responseText || null,
+   };
+ 
+   
+   const logoSrc =
     brandAssets.logo_url ||
     brandAssets.logo_light_url ||
     brandAssets.logo_dark_url ||
