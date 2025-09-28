@@ -159,6 +159,10 @@ export default function Welcome() {
   const [activeDemo, setActiveDemo] = useState(null);
   const [activeDoc, setActiveDoc] = useState(null);
 
+  // Shim so page renders even if AskExamples isn't available
+  const AskExamples = ({ onPick }) => null;
+
+
   // Session persistence key so we never reshow after submit (per bot)
   const FORM_KEY = useMemo(
     () => `formfill_completed:${botId || alias || "_"}`,
