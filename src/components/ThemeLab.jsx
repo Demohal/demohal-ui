@@ -55,14 +55,21 @@ export default function ColorBox({ apiBase, botId, frameRef, onVars }) {
 
   async function checkStatusAndMaybeLoad() {
     try {
-      setAuthError(""); setAuthState("checking");
-      const res = await fetch(`${apiBase}/themelab/status?bot_id=${encodeURIComponent(botId)}`);
+      setAuthError("");
+      setAuthState("checking");
+      const res = await fetch(
+        `${apiBase}/themelab/status?bot_id=${encodeURIComponent(botId)}`,
+        { credentials: "include" } // ensure cookie is sent if already logged in
+      );
       if (res.status === 200) { setAuthState("ok"); await load(); }
       else if (res.status === 401) setAuthState("need_password");
       else if (res.status === 403) setAuthState("disabled");
       else setAuthState("error");
-    } catch { setAuthState("error"); }
+    } catch {
+      setAuthState("error");
+    }
   }
+
   useEffect(() => { checkStatusAndMaybeLoad(); /* eslint-disable-next-line */ }, [apiBase, botId]);
 
   async function load() {
