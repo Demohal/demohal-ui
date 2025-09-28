@@ -714,6 +714,9 @@ async function doSend(outgoing) {
     );
   }
 
+   // Safe client shim so JSX like client?.name never throws
+   const client = { name: null };
+   
    // Compose a safe "bot" view so JSX like bot?.logo_url never throws
    const bot = {
      logo_url:
