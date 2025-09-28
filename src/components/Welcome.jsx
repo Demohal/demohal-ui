@@ -719,7 +719,7 @@ async function doSend(outgoing) {
     <div
       className={classNames(
         "min-h-screen w-full bg-background text-foreground",
-        (busy || priceBusy) ? "pointer-events-none select-none opacity-70" : "opacity-100",
+        priceBusy ? "pointer-events-none select-none opacity-70" : "opacity-100",
       )}
       style={liveTheme}
       ref={contentRef}
@@ -1075,7 +1075,7 @@ async function doSend(outgoing) {
                   <ChatWindow
                     messages={messages}
                     onRetry={onRetry}
-                    busy={busy}
+                    busy={false}
                   />
                 </div>
               </div>
