@@ -82,6 +82,12 @@ export default function Welcome() {
     return o;
   }, []);
 
+  // URL flag to enable ThemeLab editor
+  const themeLabEnabled = useMemo(() => {
+    const qs = new URLSearchParams(window.location.search);
+    return qs.get("themelab") === "1";
+  }, []);
+   
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [fatal, setFatal] = useState("");
 
@@ -1096,13 +1102,19 @@ async function doSend(outgoing) {
         </div>
       </div>
 
-      {/* ThemeLab floating color editor (password-gated) */}
-      {botId ? (
+      {/* ThemeLab floating color editor (password-gated, only via ?themelab=1) */}
+      {themeLabEnabled && botId ? (
         <ColorBox
           apiBase={apiBase}
           botId={botId}
           frameRef={contentRef}
-          onVars={setThemeVars}
+          // IMPORTANT: merge, don't replace, so defaults stay intact
+          onVars={(patch) =>
+            setThemeVars((prev) => ({
+              ...prev,
+              ...(typeof patch === "function" ? patch(prev) : patch),
+            }))
+          }
         />
       ) : null}
     </div>
