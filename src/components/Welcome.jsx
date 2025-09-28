@@ -753,6 +753,22 @@ async function doSend(outgoing) {
   const listSource = mode === "browse" ? browseItems : items;
   const visibleUnderVideo = selected ? (mode === "ask" ? items : []) : listSource;
 
+  // ---- temporary shims to unblock rendering ----
+  const AskExamples = ({ onPick }) => null; // keep if not importing real one
+  const ChatWindow = ({ messages, onRetry, busy }) => null;
+  const DemoCard = ({ demo, onOpen }) => (
+    <button onClick={onOpen} className="px-2 py-1 border rounded">
+      {demo?.title || "Open demo"}
+    </button>
+  );
+  const DocCard = ({ doc, onOpen }) => (
+    <button onClick={onOpen} className="px-2 py-1 border rounded">
+      {doc?.title || "Open doc"}
+    </button>
+  );
+  const PriceQuestion = ({ question, value, onChange }) => null;
+  // ---- end shims ----
+
   return (
     <div
       className={classNames(
