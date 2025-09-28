@@ -1,5 +1,29 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { TOKEN_TO_CSS, SCREEN_ORDER } from "./AskAssistant.ui";
+
+const TOKEN_TO_CSS = {
+  "color.background": "--background",
+  "color.foreground": "--foreground",
+  "color.muted": "--muted",
+  "color.mutedForeground": "--muted-foreground",
+  "color.accent": "--accent",
+  "color.accentForeground": "--accent-foreground",
+  "color.border": "--border",
+  "color.card": "--card",
+  "color.cardForeground": "--card-foreground",
+  "color.primary": "--primary",
+  "color.primaryForeground": "--primary-foreground",
+  "color.secondary": "--secondary",
+  "color.secondaryForeground": "--secondary-foreground",
+};
+
+const SCREEN_ORDER = [
+  { key: "welcome", label: "Welcome" },
+  { key: "ask", label: "Ask" },
+  { key: "demos", label: "Demos" },
+  { key: "docs", label: "Docs" },
+  { key: "pricing", label: "Pricing" },
+  { key: "meeting", label: "Schedule" },
+];
 
 export default function ColorBox({ apiBase, botId, frameRef, onVars }) {
   const [rows, setRows] = useState([]);
