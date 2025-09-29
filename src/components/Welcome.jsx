@@ -59,33 +59,33 @@ function inverseBW(hex) {
   return L > 0.5 ? "#000000" : "#ffffff";
 }
 
-   // ================== ThemeLabInline (embedded) ==================
-   const TOKEN_TO_CSS = {
-     "banner.background":            "--banner-bg",
-     "banner.foreground":            "--banner-fg",
-     "page.background":              "--page-bg",
-     "content.area.background":      "--card-bg",
-   
-     "message.text.foreground":      "--message-fg",
-     "helper.text.foreground":       "--helper-fg",
-     "mirror.text.foreground":       "--mirror-fg",
-   
-     "tab.background":               "--tab-bg",
-     "tab.foreground":               "--tab-fg",
-   
-     "demo.button.background":       "--demo-button-bg",
-     "demo.button.foreground":       "--demo-button-fg",
-   
-     "doc.button.background":        "--doc-button-bg",
-     "doc.button.foreground":        "--doc-button-fg",
-   
-     "price.button.background":      "--price-button-bg",
-     "price.button.foreground":      "--price-button-fg",
-   
-     "send.button.background":       "--send-color",
-   
-     "border.default":               "--border-default",
-   };
+// ================== ThemeLabInline (embedded) ==================
+const TOKEN_TO_CSS = {
+  "banner.background":            "--banner-bg",
+  "banner.foreground":            "--banner-fg",
+  "page.background":              "--page-bg",
+  "content.area.background":      "--card-bg",
+
+  "message.text.foreground":      "--message-fg",
+  "helper.text.foreground":       "--helper-fg",
+  "mirror.text.foreground":       "--mirror-fg",
+
+  "tab.background":               "--tab-bg",
+  "tab.foreground":               "--tab-fg",
+
+  "demo.button.background":       "--demo-button-bg",
+  "demo.button.foreground":       "--demo-button-fg",
+
+  "doc.button.background":        "--doc-button-bg",
+  "doc.button.foreground":        "--doc-button-fg",
+
+  "price.button.background":      "--price-button-bg",
+  "price.button.foreground":      "--price-button-fg",
+
+  "send.button.background":       "--send-color",
+
+  "border.default":               "--border-default",
+};
 
   const SCREEN_ORDER = [
     { key: "welcome", label: "Welcome" },
