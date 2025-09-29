@@ -159,6 +159,54 @@ export default function Welcome() {
   const [activeDemo, setActiveDemo] = useState(null);
   const [activeDoc, setActiveDoc] = useState(null);
 
+  // ==== Shims & safe defaults to satisfy all references ====
+  // Chat window
+  const [messages, setMessages] = useState([]);
+  const onRetry = () => {};
+
+  // Pricing (no-op defaults)
+  const [priceQuestions, setPriceQuestions] = useState([]);
+  const [priceAnswers, setPriceAnswers] = useState({});
+  const [priceBands, setPriceBands] = useState([]);
+  const onPriceAnswer = () => {};
+  const calculatePrice = () => {};
+
+  // Demos browse/filter
+  const [demoFilter, setDemoFilter] = useState("");
+  const filteredDemos = useMemo(() => {
+    // if you want real filtering, change `items` to your source;
+    // this keeps UI stable without errors.
+    return Array.isArray(items)
+      ? items.filter((d) =>
+          (d.title || "").toLowerCase().includes(demoFilter.toLowerCase())
+        )
+      : [];
+  }, [items, demoFilter]);
+  function openDemo(d) {
+    setActiveDemo(d || null);
+    setMode("demos");
+  }
+
+  // Docs browse/filter
+  const [docFilter, setDocFilter] = useState("");
+  const filteredDocs = useMemo(() => {
+   return Array.isArray(browseDocs)
+      ? browseDocs.filter((d) =>
+          (d.title || "").toLowerCase().includes(docFilter.toLowerCase())
+        )
+      : [];
+  }, [browseDocs, docFilter]);
+  function openDoc(d) {
+    setActiveDoc(d || null);
+    setMode("docs");
+  }
+
+  // FormFill visibility flags
+  const [formVisible, setFormVisible] = useState(false);
+  const [formTrigger, setFormTrigger] = useState("");
+  // =========================================================
+
+
   // Session persistence key so we never reshow after submit (per bot)
   const FORM_KEY = useMemo(
     () => `formfill_completed:${botId || alias || "_"}`,
