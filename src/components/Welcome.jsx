@@ -1,12 +1,4 @@
-/* Welcome.jsx — FULL FILE (patched with Option A: legacy SCREEN_ORDER)
-   - Tabs (Demos, Docs, Meeting); Ask is not a tab
-   - Dynamic FormFill fetched from backend (/formfill-config)
-     * Honors bots_v2.show_formfill and bots_v2.formfill_fields
-     * Prefills from visitors_v2.formfill_fields and URL params (field_key)
-     * Shows once on first Ask/Tab click; hidden after submit for the session
-     * Bypasses entirely when disabled or no collectable fields
-   - Demo (video) & Doc iframe viewers preserved
-*/
+/* Welcome.jsx — FULL FILE (Option A applied: legacy SCREEN_ORDER) */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -28,23 +20,18 @@ const DEFAULT_THEME_VARS = {
   "--page-bg": "#e6e6e6",
   "--card-bg": "#ffffff",
   "--shadow-elevation": "0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.10)",
-  // Text roles
   "--message-fg": "#000000",
   "--helper-fg": "#4b5563",
   "--mirror-fg": "#4b5563",
-  // Tabs (inactive)
   "--tab-bg": "#303030",
   "--tab-fg": "#ffffff",
-  "--tab-active-fg": "#ffffff", // computed at runtime
-  // Buttons
+  "--tab-active-fg": "#ffffff",
   "--demo-button-bg": "#3a4554",
   "--demo-button-fg": "#ffffff",
-  "--doc.button.background": "#000000", // legacy no-op
+  "--doc.button.background": "#000000",
   "--doc-button-bg": "#000000",
   "--doc-button-fg": "#ffffff",
-  // Send icon
   "--send-color": "#000000",
-  // Borders
   "--border-default": "#9ca3af",
 };
 
@@ -52,49 +39,43 @@ const classNames = (...xs) => xs.filter(Boolean).join(" ");
 function inverseBW(hex) {
   const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(String(hex || "").trim());
   if (!m) return "#000000";
-  const r = parseInt(m[1], 16), g = parseInt(m[2], 16), b = parseInt(m[3], 16);
+  const r = parseInt(m[1], 16),
+    g = parseInt(m[2], 16),
+    b = parseInt(m[3], 16);
   const L = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   return L > 0.5 ? "#000000" : "#ffffff";
 }
 
 // ================== ThemeLabInline (embedded) ==================
 function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
-  // token -> CSS var map (matches brand_tokens_v2 keys)
   const TOKEN_TO_CSS = {
-    "banner.background":            "--banner-bg",
-    "banner.foreground":            "--banner-fg",
-    "page.background":              "--page-bg",
-    "content.area.background":      "--card-bg",
-
-    "message.text.foreground":      "--message-fg",
-    "helper.text.foreground":       "--helper-fg",
-    "mirror.text.foreground":       "--mirror-fg",
-
-    "tab.background":               "--tab-bg",
-    "tab.foreground":               "--tab-fg",
-
-    "demo.button.background":       "--demo-button-bg",
-    "demo.button.foreground":       "--demo-button-fg",
-
-    "doc.button.background":        "--doc-button-bg",
-    "doc.button.foreground":        "--doc-button-fg",
-
-    "price.button.background":      "--price-button-bg",
-    "price.button.foreground":      "--price-button-fg",
-
-    "send.button.background":       "--send-color",
-
-    "border.default":               "--border-default",
+    "banner.background": "--banner-bg",
+    "banner.foreground": "--banner-fg",
+    "page.background": "--page-bg",
+    "content.area.background": "--card-bg",
+    "message.text.foreground": "--message-fg",
+    "helper.text.foreground": "--helper-fg",
+    "mirror.text.foreground": "--mirror-fg",
+    "tab.background": "--tab-bg",
+    "tab.foreground": "--tab-fg",
+    "demo.button.background": "--demo-button-bg",
+    "demo.button.foreground": "--demo-button-fg",
+    "doc.button.background": "--doc-button-bg",
+    "doc.button.foreground": "--doc-button-fg",
+    "price.button.background": "--price-button-bg",
+    "price.button.foreground": "--price-button-fg",
+    "send.button.background": "--send-color",
+    "border.default": "--border-default",
   };
 
-  // OPTION A: Reverted to legacy screen_key values used in DB so all tokens appear.
+  // Option A legacy screen keys (must match DB screen_key values)
   const SCREEN_ORDER = [
-    { key: "welcome",       label: "Welcome" },
-    { key: "bot_response",  label: "Bot Response" },
-    { key: "browse_demos",  label: "Browse Demos" },
-    { key: "browse_docs",   label: "Browse Documents" },
-    { key: "price",         label: "Price Estimate" },
-    { key: "meeting",       label: "Schedule" }, // keep if meeting tokens exist
+    { key: "welcome", label: "Welcome" },
+    { key: "bot_response", label: "Bot Response" },
+    { key: "browse_demos", label: "Browse Demos" },
+    { key: "browse_docs", label: "Browse Documents" },
+    { key: "price", label: "Price Estimate" },
+    { key: "meeting", label: "Schedule" },
   ];
 
   const [rows, setRows] = useState([]);
@@ -102,11 +83,10 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
-  const [authState, setAuthState] = useState("checking"); // checking | need_password | disabled | ok | error
+  const [authState, setAuthState] = useState("checking");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
 
-  // Float box near the main content area
   const [pos, setPos] = useState({ left: 16, top: 16, width: 460 });
   useEffect(() => {
     function updatePos() {
@@ -129,7 +109,6 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
     };
   }, [frameRef]);
 
-  // --- Auth gate & initial load ---
   async function checkStatusAndMaybeLoad() {
     try {
       setAuthError(""); setAuthState("checking");
@@ -149,7 +128,6 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
     if (apiBase && botId) checkStatusAndMaybeLoad();
   }, [apiBase, botId]); // eslint-disable-line
 
-  // --- Load tokens from DB ---
   async function load() {
     const res = await fetch(
       `${apiBase}/brand/client-tokens?bot_id=${encodeURIComponent(botId)}`,
@@ -159,7 +137,6 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
     const toks = (data?.ok ? data.tokens : []) || [];
     setRows(toks);
 
-    // build values + live-apply to page
     const v = {};
     toks.forEach(t => { v[t.token_key] = t.value || "#000000"; });
     setValues(v);
@@ -172,19 +149,13 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
     onVars && onVars(cssPatch);
   }
 
-  // --- Local edit -> live preview ---
   function updateToken(tokenKey, value) {
     const v = value || "";
     setValues(prev => ({ ...prev, [tokenKey]: v }));
-
     const cssVar = TOKEN_TO_CSS[tokenKey];
-    if (cssVar && onVars) {
-      // send only the delta so Welcome can merge
-      onVars({ [cssVar]: v });
-    }
+    if (cssVar && onVars) onVars({ [cssVar]: v });
   }
 
-  // --- Save / Reset / Login ---
   async function doSave() {
     try {
       setBusy(true);
@@ -197,9 +168,11 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
       });
       const data = await res.json();
       if (!data?.ok) throw new Error();
-      setMsg(`Saved ${data.updated} token(s).`); setTimeout(() => setMsg(""), 1600);
+      setMsg(`Saved ${data.updated} token(s).`);
+      setTimeout(() => setMsg(""), 1600);
     } catch {
-      setMsg("Save failed."); setTimeout(() => setMsg(""), 1800);
+      setMsg("Save failed.");
+      setTimeout(() => setMsg(""), 1800);
     } finally {
       setBusy(false);
     }
@@ -231,14 +204,12 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
       if (!by.has(k)) by.set(k, []);
       by.get(k).push(r);
     }
-    // Stable order + label sort per screen
     SCREEN_ORDER.forEach(({ key }) => {
       if (by.has(key)) by.get(key).sort((a,b) => String(a.label||"").localeCompare(String(b.label||"")));
     });
     return by;
   }, [rows]);
 
-  // --- UI ---
   return (
     <div style={{
       position: "fixed", left: pos.left, top: pos.top, width: pos.width,
@@ -309,7 +280,6 @@ export default function Welcome() {
   const apiBase =
     import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-  // URL → alias / bot_id
   const { alias, botIdFromUrl } = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     const a = (qs.get("alias") || qs.get("alais") || "").trim();
@@ -319,18 +289,15 @@ export default function Welcome() {
 
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
 
-  // URL params (used to prefill form fields by field_key)
   const urlParams = useMemo(() => {
     const q = new URLSearchParams(window.location.search);
     const o = {};
-    q.forEach((v, k) => {
-      o[k] = v;
-    });
+    q.forEach((v, k) => { o[k] = v; });
     return o;
   }, []);
 
   const [botId, setBotId] = useState(botIdFromUrl || "");
-  the [fatal, setFatal] = useState("");
+  const [fatal, setFatal] = useState("");   // FIXED: removed stray 'the'
 
   // Modes: 'ask' | 'browse' | 'docs' | 'meeting' | 'formfill'
   const [mode, setMode] = useState("ask");
@@ -354,24 +321,17 @@ export default function Welcome() {
   const contentRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Visitor/session identity
+  // Visitor/session
   const [visitorId, setVisitorId] = useState("");
   const [sessionId, setSessionId] = useState("");
 
-  // Theme & brand
-  // Base theme from server
+  // Theme
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
-
-  // Derived base vars (e.g., compute active tab fg from tab-fg)
   const derivedTheme = useMemo(() => {
     const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
     return { ...themeVars, "--tab-active-fg": activeFg };
   }, [themeVars]);
-
-  // LIVE preview overlay from the color picker (does not mutate base)
   const [pickerVars, setPickerVars] = useState({});
-
-  // What actually paints the UI: base+derived, overlaid with picker deltas
   const liveTheme = useMemo(
     () => ({ ...derivedTheme, ...pickerVars }),
     [derivedTheme, pickerVars]
@@ -382,32 +342,28 @@ export default function Welcome() {
     logo_light_url: null,
     logo_dark_url: null,
   });
-  
+
   const initialBrandReady = useMemo(
     () => !(botIdFromUrl || alias),
     [botIdFromUrl, alias]
   );
   const [brandReady, setBrandReady] = useState(initialBrandReady);
 
-  // Tabs enabled (from /bot-settings)
   const [tabsEnabled, setTabsEnabled] = useState({
     demos: false,
     docs: false,
     meeting: false,
   });
 
-  // --- FormFill server-driven config/state ---
-  const [showFormfill, setShowFormfill] = useState(true); // server can disable per-bot
-  const [formFields, setFormFields] = useState([]); // bots_v2.formfill_fields
-  const [visitorDefaults, setVisitorDefaults] = useState({}); // visitors_v2.formfill_fields map
+  // FormFill
+  const [showFormfill, setShowFormfill] = useState(true);
+  const [formFields, setFormFields] = useState([]);
+  const [visitorDefaults, setVisitorDefaults] = useState({});
 
+  const [formShown, setFormShown] = useState(false);
+  const [formCompleted, setFormCompleted] = useState(false);
+  const [pending, setPending] = useState(null);
 
-  // === Mocked FormFill session flags ===
-  const [formShown, setFormShown] = useState(false); // first interaction opens it
-  const [formCompleted, setFormCompleted] = useState(false); // never show again after submit
-  const [pending, setPending] = useState(null); // { type: 'ask'|'demos'|'docs'|'meeting', payload? }
-
-  // Session persistence key so we never reshow after submit (per bot)
   const FORM_KEY = useMemo(
     () => `formfill_completed:${botId || alias || "_"}`,
     [botId, alias]
@@ -420,7 +376,6 @@ export default function Welcome() {
     } catch {}
   }, [FORM_KEY]);
 
-  // Helpers to attach identity in requests
   const withIdsBody = (obj) => ({
     ...obj,
     ...(sessionId ? { session_id: sessionId } : {}),
@@ -437,19 +392,13 @@ export default function Welcome() {
     return u.toString();
   };
 
-  /* ============================= *
-   *   Bot resolution & branding   *
-   * ============================= */
-
   // Resolve bot by alias
   useEffect(() => {
     if (botId || !alias) return;
     let cancel = false;
     (async () => {
       try {
-        const res = await fetch(
-          `${apiBase}/bot-settings?alias=${encodeURIComponent(alias)}`
-        );
+        const res = await fetch(`${apiBase}/bot-settings?alias=${encodeURIComponent(alias)}`);
         const data = await res.json();
         if (cancel) return;
 
@@ -471,6 +420,7 @@ export default function Welcome() {
             meeting: !!b.show_schedule_meeting,
           });
         }
+
         if (id) {
           setBotId(id);
           setFatal("");
@@ -481,20 +431,16 @@ export default function Welcome() {
         if (!cancel) setFatal("Invalid or inactive alias.");
       }
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => { cancel = true; };
   }, [alias, apiBase, botId]);
 
-  // Try default alias if needed
+  // Try default alias
   useEffect(() => {
     if (botId || alias || !defaultAlias) return;
     let cancel = false;
     (async () => {
       try {
-        const res = await fetch(
-          `${apiBase}/bot-settings?alias=${encodeURIComponent(defaultAlias)}`
-        );
+        const res = await fetch(`${apiBase}/bot-settings?alias=${encodeURIComponent(defaultAlias)}`);
         const data = await res.json();
         if (cancel) return;
 
@@ -517,20 +463,16 @@ export default function Welcome() {
         if (data?.ok && data?.bot?.id) setBotId(data.bot.id);
       } catch {}
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => { cancel = true; };
   }, [botId, alias, defaultAlias, apiBase]);
 
-  // If we start with bot_id in URL
+  // Start with bot_id
   useEffect(() => {
     if (!botIdFromUrl) return;
     let cancel = false;
     (async () => {
       try {
-        const res = await fetch(
-          `${apiBase}/bot-settings?bot_id=${encodeURIComponent(botIdFromUrl)}`
-        );
+        const res = await fetch(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botIdFromUrl)}`);
         const data = await res.json();
         if (cancel) return;
 
@@ -553,24 +495,19 @@ export default function Welcome() {
         if (data?.ok && data?.bot?.id) setBotId(data.bot.id);
       } catch {}
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => { cancel = true; };
   }, [botIdFromUrl, apiBase]);
 
   useEffect(() => {
     if (!botId && !alias && !brandReady) setBrandReady(true);
   }, [botId, alias, brandReady]);
 
-  // Enable ThemeLab when ?themelab=1 or ?themelab=true
   const themeLabOn = useMemo(() => {
-     const qs = new URLSearchParams(window.location.search);
-     const th = (qs.get("themelab") || "").trim().toLowerCase();
-     return th === "1" || th === "true";
+    const qs = new URLSearchParams(window.location.search);
+    const th = (qs.get("themelab") || "").trim().toLowerCase();
+    return th === "1" || th === "true";
   }, []);
 
-   
-  // Brand assets + css vars
   const [introVideoUrl, setIntroVideoUrl] = useState("");
   const [showIntroVideo, setShowIntroVideo] = useState(false);
   useEffect(() => {
@@ -578,14 +515,11 @@ export default function Welcome() {
     let cancel = false;
     (async () => {
       try {
-        const res = await fetch(
-          `${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`
-        );
+        const res = await fetch(`${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`);
         const data = await res.json();
         if (cancel) return;
-
         if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
-          setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
+          setThemeVars(prev => ({ ...prev, ...data.css_vars }));
         }
         if (data?.ok && data?.assets) {
           setBrandAssets({
@@ -594,19 +528,14 @@ export default function Welcome() {
             logo_dark_url: data.assets.logo_dark_url || null,
           });
         }
-      } catch {}
-      finally {
+      } catch {
+      } finally {
         if (!cancel) setBrandReady(true);
       }
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => { cancel = true; };
   }, [botId, apiBase]);
 
-  /* ============================= *
-   *   FormFill config fetcher     *
-   * ============================= */
   async function fetchFormfillConfigBy(botIdArg, aliasArg) {
     try {
       const params = new URLSearchParams();
@@ -614,9 +543,7 @@ export default function Welcome() {
       else if (aliasArg) params.set("alias", aliasArg);
       if (visitorId) params.set("visitor_id", visitorId);
       if ([...params.keys()].length === 0) return;
-      const res = await fetch(
-        `${apiBase}/formfill-config?${params.toString()}`
-      );
+      const res = await fetch(`${apiBase}/formfill-config?${params.toString()}`);
       const data = await res.json();
       if (data?.ok) {
         setShowFormfill(!!data.show_formfill);
@@ -628,31 +555,18 @@ export default function Welcome() {
     } catch {}
   }
 
-  // Fetch when botId resolves
-  useEffect(() => {
-    if (botId) fetchFormfillConfigBy(botId, null);
-  }, [botId]);
+  useEffect(() => { if (botId) fetchFormfillConfigBy(botId, null); }, [botId]);
+  useEffect(() => { if (!botId && alias) fetchFormfillConfigBy(null, alias); }, [alias, botId]);
+  useEffect(() => { if (botId && visitorId) fetchFormfillConfigBy(botId, null); }, [visitorId, botId]);
 
-  // If operating by alias before botId exists
-  useEffect(() => {
-    if (!botId && alias) fetchFormfillConfigBy(null, alias);
-  }, [alias, botId]);
+  const activeFormFields = useMemo(
+    () => (Array.isArray(formFields) ? formFields : []).filter(f => f && (f.is_standard || f.is_collected)),
+    [formFields]
+  );
 
-  // When visitorId appears, refresh to include visitor defaults
-  useEffect(() => {
-    if (botId && visitorId) fetchFormfillConfigBy(botId, null);
-  }, [visitorId]);
-
-  // Filter to collectable fields (is_standard overrides is_collected)
-  const activeFormFields = useMemo(() => {
-    const arr = Array.isArray(formFields) ? formFields : [];
-    return arr.filter((f) => f && (f.is_standard || f.is_collected));
-  }, [formFields]);
-
-  // Defaults: visitor values merged with URL overrides (URL wins)
   const formDefaults = useMemo(() => {
     const o = { ...(visitorDefaults || {}) };
-    activeFormFields.forEach((f) => {
+    activeFormFields.forEach(f => {
       const k = f.field_key;
       const urlV = urlParams[k];
       if (typeof urlV === "string" && urlV.length) o[k] = urlV;
@@ -660,57 +574,42 @@ export default function Welcome() {
     return o;
   }, [activeFormFields, visitorDefaults, urlParams]);
 
-  /* ============ *
-   *   Ask Flow   *
-   * ============ */
- // --- PATCH: Welcome.jsx — replace entire doSend to use demo_buttons only ---
- async function doSend(outgoing) {
-  setMode("ask");
-  setLastQuestion(outgoing);
-  setInput("");
-  setSelected(null);
-  setResponseText("");
-  setItems([]);
-  setLoading(true);
-  try {
-    const res = await axios.post(
-      `${apiBase}/demo-hal`,
-      withIdsBody({ bot_id: botId, user_question: outgoing, scope: "standard", debug: true }),
-      { timeout: 30000, headers: withIdsHeaders() }
-    );
-
-    const data = res?.data || {};
-    const text = data?.response_text || "";
-
-    // NEW: map only demo recommendations (no docs, no fallbacks)
-    const src = Array.isArray(data?.demo_buttons) ? data.demo_buttons : [];
-    const mapped = src.map((it, idx) => ({
-      id: it.id ?? it.value ?? it.url ?? it.title ?? String(idx),
-      title: it.title ?? it.button_title ?? it.label ?? "",
-      url: it.url ?? it.value ?? it.button_value ?? "",
-      description: it.description ?? it.summary ?? it.functions_text ?? "",
-    }));
-    setItems(mapped.filter(Boolean));
-
-    setResponseText(text);
-    setLoading(false);
-    requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-  } catch (err) {
-    setLoading(false);
-    setResponseText("Sorry—something went wrong.");
+  async function doSend(outgoing) {
+    setMode("ask");
+    setLastQuestion(outgoing);
+    setInput("");
+    setSelected(null);
+    setResponseText("");
     setItems([]);
-  }
-}
-// --- END PATCH ---
-
-  // Show-once helper (also consult sessionStorage defensively)
-  function maybeOpenForm(next) {
-    // Bypass if backend disabled or nothing to collect
-    if (!showFormfill || activeFormFields.length === 0) {
-      return false;
+    setLoading(true);
+    try {
+      const res = await axios.post(
+        `${apiBase}/demo-hal`,
+        withIdsBody({ bot_id: botId, user_question: outgoing, scope: "standard", debug: true }),
+        { timeout: 30000, headers: withIdsHeaders() }
+      );
+      const data = res?.data || {};
+      const text = data?.response_text || "";
+      const src = Array.isArray(data?.demo_buttons) ? data.demo_buttons : [];
+      const mapped = src.map((it, idx) => ({
+        id: it.id ?? it.value ?? it.url ?? it.title ?? String(idx),
+        title: it.title ?? it.button_title ?? it.label ?? "",
+        url: it.url ?? it.value ?? it.button_value ?? "",
+        description: it.description ?? it.summary ?? it.functions_text ?? "",
+      }));
+      setItems(mapped.filter(Boolean));
+      setResponseText(text);
+      setLoading(false);
+      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+    } catch {
+      setLoading(false);
+      setResponseText("Sorry—something went wrong.");
+      setItems([]);
     }
+  }
 
-    // Prevent re-trigger if already completed this session
+  function maybeOpenForm(next) {
+    if (!showFormfill || activeFormFields.length === 0) return false;
     try {
       if (sessionStorage.getItem(FORM_KEY) === "1") {
         if (!formCompleted) setFormCompleted(true);
@@ -720,7 +619,7 @@ export default function Welcome() {
     if (!formCompleted && !formShown) {
       setFormShown(true);
       setPending(next);
-      setMode("formfill"); // clear content area per spec
+      setMode("formfill");
       return true;
     }
     return false;
@@ -733,9 +632,6 @@ export default function Welcome() {
     await doSend(outgoing);
   }
 
-  /* ============================= *
-   *   Demo/Doc browse + viewers   *
-   * ============================= */
   async function normalizeAndSelectDemo(item) {
     try {
       const r = await fetch(`${apiBase}/render-video-iframe`, {
@@ -809,22 +705,22 @@ export default function Welcome() {
       setBrowseDocs(
         src.map((it) => ({
           id: it.id ?? it.value ?? it.url ?? it.title,
-            title: it.title ?? it.button_title ?? it.label ?? "",
-            url: it.url ?? it.value ?? it.button_value ?? "",
-            description: it.description ?? it.summary ?? it.functions_text ?? "",
-          }))
-        );
-        requestAnimationFrame(() =>
-          contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-        );
-      } catch {
-        setBrowseDocs([]);
-      }
+          title: it.title ?? it.button_title ?? it.label ?? "",
+          url: it.url ?? it.value ?? it.button_value ?? "",
+          description: it.description ?? it.summary ?? it.functions_text ?? "",
+        }))
+      );
+      requestAnimationFrame(() =>
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+      );
+    } catch {
+      setBrowseDocs([]);
     }
-    async function openBrowseDocs() {
-      if (maybeOpenForm({ type: "docs" })) return;
-      await _openBrowseDocs();
-    }
+  }
+  async function openBrowseDocs() {
+    if (maybeOpenForm({ type: "docs" })) return;
+    await _openBrowseDocs();
+  }
 
   const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
 
@@ -866,7 +762,6 @@ export default function Welcome() {
     await _openMeeting();
   }
 
-  // Calendly JS event relay (optional)
   useEffect(() => {
     if (mode !== "meeting" || !botId || !sessionId || !visitorId) return;
     function onCalendlyMessage(e) {
@@ -907,7 +802,6 @@ export default function Welcome() {
     return () => window.removeEventListener("message", onCalendlyMessage);
   }, [mode, botId, sessionId, visitorId, apiBase]);
 
-  // Autosize ask box
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
@@ -915,9 +809,6 @@ export default function Welcome() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  /* ============ *
-   *   Render     *
-   * ============ */
   const tabs = useMemo(() => {
     const out = [];
     if (tabsEnabled.demos)
@@ -1012,8 +903,7 @@ export default function Welcome() {
                 : "Ask the Assistant"}
             </div>
           </div>
-          {/* Tabs */}
-            <TabsNav mode={mode} tabs={tabs} />
+          <TabsNav mode={mode} tabs={tabs} />
         </div>
 
         {/* BODY */}
@@ -1032,7 +922,6 @@ export default function Welcome() {
                 fields={activeFormFields}
                 defaults={formDefaults}
                 onSubmit={async (vals) => {
-                  // persist to visitor profile
                   try {
                     await fetch(`${apiBase}/visitor-formfill`, {
                       method: "POST",
@@ -1043,7 +932,6 @@ export default function Welcome() {
                       }),
                     });
                   } catch {}
-                  // mark session complete & continue pending action
                   try {
                     sessionStorage.setItem(FORM_KEY, "1");
                   } catch {}
@@ -1282,7 +1170,7 @@ export default function Welcome() {
           )}
         </div>
 
-        {/* Bottom Ask Bar — hide while formfill is active */}
+        {/* Bottom Ask Bar */}
         {mode !== "formfill" && (
           <AskInputBar
             value={input}
@@ -1292,18 +1180,19 @@ export default function Welcome() {
           />
         )}
       </div>
-         {/* ThemeLab (only when ?themelab=1) */}
-         {themeLabOn && botId ? (
-           <ThemeLabInline
-             apiBase={apiBase}
-             botId={botId}
-             frameRef={contentRef}
-             // EXACTLY like AskAssistant: ColorBox controls ONLY the overlay
-             onVars={(vars) => setPickerVars(
-               typeof vars === "function" ? vars : { ...(vars || {}) }
-             )}
-          />
-        ) : null}
+
+      {themeLabOn && botId ? (
+        <ThemeLabInline
+          apiBase={apiBase}
+          botId={botId}
+          frameRef={contentRef}
+          onVars={(vars) =>
+            setPickerVars(
+              typeof vars === "function" ? vars : { ...(vars || {}) }
+            )
+          }
+        />
+      ) : null}
     </div>
   );
 }
