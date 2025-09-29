@@ -60,8 +60,6 @@ function inverseBW(hex) {
 }
 
 // ================== ThemeLabInline (embedded) ==================
-import React, { useEffect, useMemo, useState } from "react";
-
 function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
   // token -> CSS var map (matches brand_tokens_v2 keys)
   const TOKEN_TO_CSS = {
