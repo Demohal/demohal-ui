@@ -361,7 +361,24 @@ export default function Welcome() {
   const [sessionId, setSessionId] = useState("");
 
   // Theme & brand
+  // Base theme from server
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
+
+  // Derived base vars (e.g., compute active tab fg from tab-fg)
+  const derivedTheme = useMemo(() => {
+    const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
+    return { ...themeVars, "--tab-active-fg": activeFg };
+  }, [themeVars]);
+
+  // LIVE preview overlay from the color picker (does not mutate base)
+  const [pickerVars, setPickerVars] = useState({});
+
+  // What actually paints the UI: base+derived, overlaid with picker deltas
+  const liveTheme = useMemo(
+    () => ({ ...derivedTheme, ...pickerVars }),
+    [derivedTheme, pickerVars]
+  );
+
   const [brandAssets, setBrandAssets] = useState({
     logo_url: null,
     logo_light_url: null,
@@ -551,10 +568,13 @@ export default function Welcome() {
     if (!botId && !alias && !brandReady) setBrandReady(true);
   }, [botId, alias, brandReady]);
 
-  const themeLabEnabled = useMemo(() => {
-    const qs = new URLSearchParams(window.location.search);
-    return qs.get("themelab") === "1";
+  // Enable ThemeLab when ?themelab=1 or ?themelab=true
+  const themeLabOn = useMemo(() => {
+     const qs = new URLSearchParams(window.location.search);
+     const th = (qs.get("themelab") || "").trim().toLowerCase();
+     return th === "1" || th === "true";
   }, []);
+
    
   // Brand assets + css vars
   const [introVideoUrl, setIntroVideoUrl] = useState("");
@@ -1279,20 +1299,17 @@ async function doSend(outgoing) {
         )}
       </div>
          {/* ThemeLab (only when ?themelab=1) */}
-         {themeLabEnabled && botId ? (
+         {themeLabOn && botId ? (
            <ThemeLabInline
              apiBase={apiBase}
              botId={botId}
              frameRef={contentRef}
-             // merge patches so defaults aren’t lost
-             onVars={(patch) =>
-               setThemeVars((prev) => ({
-                 ...prev,
-                 ...(typeof patch === "function" ? patch(prev) : patch),
-               }))
-             }
-           />
-         ) : null}
+             // EXACTLY like AskAssistant: ColorBox controls ONLY the overlay
+             onVars={(vars) => setPickerVars(
+               typeof vars === "function" ? vars : { ...(vars || {}) }
+             )}
+          />
+        ) : null}
     </div>
   );
 }
