@@ -1782,11 +1782,16 @@ export default function Welcome() {
           apiBase={apiBase}
             botId={botId}
             frameRef={contentRef}
-            onVars={(vars) =>
-              setPickerVars(
-                typeof vars === "function" ? vars : { ...(vars || {}) }
-              )
-            }
+            onVars={(varsUpdate) => {
+              if (typeof varsUpdate === "function") {
+                setPickerVars((prev) => {
+                  const produced = varsUpdate(prev) || {};
+                  return { ...prev, ...produced };
+                });
+              } else {
+                setPickerVars((prev) => ({ ...prev, ...(varsUpdate || {}) }));
+              }
+            }}
         />
       ) : null}
     </div>
