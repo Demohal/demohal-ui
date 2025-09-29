@@ -150,13 +150,17 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
     onVars && onVars(cssPatch);
   }
 
-  function updateToken(tokenKey, value) {
-    const v = value || "";
-    setValues(prev => ({ ...prev, [tokenKey]: v }));
-    const cssVar = TOKEN_TO_CSS[tokenKey];
-    if (cssVar && onVars) onVars({ [cssVar]: v });
+function updateToken(tokenKey, value) {
+  const v = value || "";
+  setValues(prev => ({ ...prev, [tokenKey]: v })); // Update the local state for the token value
+  const cssVar = TOKEN_TO_CSS[tokenKey];
+  if (cssVar && onVars) {
+    onVars(vars => ({
+      ...(typeof vars === "function" ? vars() : vars), // Preserve existing variables
+      [cssVar]: v, // Update only the changed variable
+    }));
   }
-
+}
   async function doSave() {
     try {
       setBusy(true);
