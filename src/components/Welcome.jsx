@@ -1,4 +1,4 @@
-/* Welcome.jsx — FULL FILE (patched)
+/* Welcome.jsx — FULL FILE (patched with Option A: legacy SCREEN_ORDER)
    - Tabs (Demos, Docs, Meeting); Ask is not a tab
    - Dynamic FormFill fetched from backend (/formfill-config)
      * Honors bots_v2.show_formfill and bots_v2.formfill_fields
@@ -60,41 +60,41 @@ function inverseBW(hex) {
 // ================== ThemeLabInline (embedded) ==================
 function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
   // token -> CSS var map (matches brand_tokens_v2 keys)
-  // ThemeLab.jsx (inside ThemeLabInline) — REPLACE your TOKEN_TO_CSS with:
-const TOKEN_TO_CSS = {
-  "banner.background":            "--banner-bg",
-  "banner.foreground":            "--banner-fg",
-  "page.background":              "--page-bg",
-  "content.area.background":      "--card-bg",
+  const TOKEN_TO_CSS = {
+    "banner.background":            "--banner-bg",
+    "banner.foreground":            "--banner-fg",
+    "page.background":              "--page-bg",
+    "content.area.background":      "--card-bg",
 
-  "message.text.foreground":      "--message-fg",
-  "helper.text.foreground":       "--helper-fg",
-  "mirror.text.foreground":       "--mirror-fg",
+    "message.text.foreground":      "--message-fg",
+    "helper.text.foreground":       "--helper-fg",
+    "mirror.text.foreground":       "--mirror-fg",
 
-  "tab.background":               "--tab-bg",
-  "tab.foreground":               "--tab-fg",
+    "tab.background":               "--tab-bg",
+    "tab.foreground":               "--tab-fg",
 
-  "demo.button.background":       "--demo-button-bg",
-  "demo.button.foreground":       "--demo-button-fg",
+    "demo.button.background":       "--demo-button-bg",
+    "demo.button.foreground":       "--demo-button-fg",
 
-  "doc.button.background":        "--doc-button-bg",
-  "doc.button.foreground":        "--doc-button-fg",
+    "doc.button.background":        "--doc-button-bg",
+    "doc.button.foreground":        "--doc-button-fg",
 
-  "price.button.background":      "--price-button-bg",
-  "price.button.foreground":      "--price-button-fg",
+    "price.button.background":      "--price-button-bg",
+    "price.button.foreground":      "--price-button-fg",
 
-  "send.button.background":       "--send-color",
+    "send.button.background":       "--send-color",
 
-  "border.default":               "--border-default",
-};
+    "border.default":               "--border-default",
+  };
 
+  // OPTION A: Reverted to legacy screen_key values used in DB so all tokens appear.
   const SCREEN_ORDER = [
-    { key: "welcome", label: "Welcome" },
-    { key: "ask", label: "Ask" },
-    { key: "demos", label: "Demos" },
-    { key: "docs", label: "Docs" },
-    { key: "pricing", label: "Pricing" },
-    { key: "meeting", label: "Schedule" },
+    { key: "welcome",       label: "Welcome" },
+    { key: "bot_response",  label: "Bot Response" },
+    { key: "browse_demos",  label: "Browse Demos" },
+    { key: "browse_docs",   label: "Browse Documents" },
+    { key: "price",         label: "Price Estimate" },
+    { key: "meeting",       label: "Schedule" }, // keep if meeting tokens exist
   ];
 
   const [rows, setRows] = useState([]);
@@ -330,7 +330,7 @@ export default function Welcome() {
   }, []);
 
   const [botId, setBotId] = useState(botIdFromUrl || "");
-  const [fatal, setFatal] = useState("");
+  the [fatal, setFatal] = useState("");
 
   // Modes: 'ask' | 'browse' | 'docs' | 'meeting' | 'formfill'
   const [mode, setMode] = useState("ask");
@@ -664,7 +664,7 @@ export default function Welcome() {
    *   Ask Flow   *
    * ============ */
  // --- PATCH: Welcome.jsx — replace entire doSend to use demo_buttons only ---
-async function doSend(outgoing) {
+ async function doSend(outgoing) {
   setMode("ask");
   setLastQuestion(outgoing);
   setInput("");
@@ -809,22 +809,22 @@ async function doSend(outgoing) {
       setBrowseDocs(
         src.map((it) => ({
           id: it.id ?? it.value ?? it.url ?? it.title,
-          title: it.title ?? it.button_title ?? it.label ?? "",
-          url: it.url ?? it.value ?? it.button_value ?? "",
-          description: it.description ?? it.summary ?? it.functions_text ?? "",
-        }))
-      );
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
-    } catch {
-      setBrowseDocs([]);
+            title: it.title ?? it.button_title ?? it.label ?? "",
+            url: it.url ?? it.value ?? it.button_value ?? "",
+            description: it.description ?? it.summary ?? it.functions_text ?? "",
+          }))
+        );
+        requestAnimationFrame(() =>
+          contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+        );
+      } catch {
+        setBrowseDocs([]);
+      }
     }
-  }
-  async function openBrowseDocs() {
-    if (maybeOpenForm({ type: "docs" })) return;
-    await _openBrowseDocs();
-  }
+    async function openBrowseDocs() {
+      if (maybeOpenForm({ type: "docs" })) return;
+      await _openBrowseDocs();
+    }
 
   const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
 
@@ -991,7 +991,7 @@ async function doSend(outgoing) {
       )}
       style={liveTheme}
     >
-      <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all duration-300">
+      <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all">
         {/* Header */}
         <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)]">
           <div className="flex items-center justify-between w-full py-3">
@@ -1013,7 +1013,7 @@ async function doSend(outgoing) {
             </div>
           </div>
           {/* Tabs */}
-          <TabsNav mode={mode} tabs={tabs} />
+            <TabsNav mode={mode} tabs={tabs} />
         </div>
 
         {/* BODY */}
