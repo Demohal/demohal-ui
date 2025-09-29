@@ -1,3 +1,4 @@
+
 /* Welcome.jsx — FULL FILE (Option A applied: legacy SCREEN_ORDER) */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
