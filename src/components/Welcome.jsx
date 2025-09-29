@@ -1,5 +1,4 @@
-
-/* Welcome.jsx — FULL FILE (Option A applied: legacy SCREEN_ORDER) */
+/* Welcome.jsx — FULL FILE (Option A applied: legacy SCREEN_ORDER + minimal themelab fix) */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -154,7 +153,10 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
     const v = value || "";
     setValues(prev => ({ ...prev, [tokenKey]: v }));
     const cssVar = TOKEN_TO_CSS[tokenKey];
-    if (cssVar && onVars) onVars({ [cssVar]: v });
+    if (cssVar && onVars) {
+      // Minimal fix: functional updater merges instead of replacing
+      onVars(prev => ({ ...(prev || {}), [cssVar]: v }));
+    }
   }
 
   async function doSave() {
@@ -169,11 +171,9 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
       });
       const data = await res.json();
       if (!data?.ok) throw new Error();
-      setMsg(`Saved ${data.updated} token(s).`);
-      setTimeout(() => setMsg(""), 1600);
+      setMsg(`Saved ${data.updated} token(s).`); setTimeout(() => setMsg(""), 1600);
     } catch {
-      setMsg("Save failed.");
-      setTimeout(() => setMsg(""), 1800);
+      setMsg("Save failed."); setTimeout(() => setMsg(""), 1800);
     } finally {
       setBusy(false);
     }
@@ -206,7 +206,7 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
       by.get(k).push(r);
     }
     SCREEN_ORDER.forEach(({ key }) => {
-      if (by.has(key)) by.get(key).sort((a,b) => String(a.label||"").localeCompare(String(b.label||"")));
+      if (by.has(key)) by.get(key).sort((a,b) => String(a.label||""").localeCompare(String(b.label||"")));
     });
     return by;
   }, [rows]);
@@ -275,7 +275,6 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
   );
 }
 // ================== /ThemeLabInline ==================
-
 
 export default function Welcome() {
   const apiBase =
@@ -667,7 +666,7 @@ export default function Welcome() {
     setSelected(null);
     try {
       const url = withIdsQS(
-        `${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`
+        `${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}"
       );
       const res = await fetch(url, { headers: withIdsHeaders() });
       const data = await res.json();
@@ -698,7 +697,7 @@ export default function Welcome() {
     setSelected(null);
     try {
       const url = withIdsQS(
-        `${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`
+        `${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}"
       );
       const res = await fetch(url, { headers: withIdsHeaders() });
       const data = await res.json();
@@ -730,7 +729,7 @@ export default function Welcome() {
     setMode("meeting");
     try {
       const res = await fetch(
-        `${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`
+        `${apiBase}/agent?bot_id=${encodeURIComponent(botId)}"
       );
       const data = await res.json();
       const ag = data?.ok ? data.agent : null;
@@ -904,7 +903,8 @@ export default function Welcome() {
                 : "Ask the Assistant"}
             </div>
           </div>
-          <TabsNav mode={mode} tabs={tabs} />
+          {/* Tabs */}
+            <TabsNav mode={mode} tabs={tabs} />
         </div>
 
         {/* BODY */}
@@ -1150,7 +1150,7 @@ export default function Welcome() {
                 ) : null}
               </div>
               {(items || []).length > 0 && (
-                <>
+                <> 
                   <div className="flex items-center justify-between mt-3 mb-2">
                     <p className="italic text-[var(--helper-fg)]">
                       Recommended demos
