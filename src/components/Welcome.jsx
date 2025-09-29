@@ -17,7 +17,6 @@ import Row from "./Row";
 import DocIframe from "./DocIframe";
 import AskInputBar from "./AskInputBar";
 import FormFillCard from "./FormFillCard";
-import ColorBox from "./ThemeLab";
 
 /* =============================== *
  *  CLIENT-CONTROLLED CSS TOKENS   *
@@ -82,12 +81,6 @@ export default function Welcome() {
     return o;
   }, []);
 
-  // URL flag to enable ThemeLab editor
-  const themeLabEnabled = useMemo(() => {
-    const qs = new URLSearchParams(window.location.search);
-    return qs.get("themelab") === "1";
-  }, []);
-   
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [fatal, setFatal] = useState("");
 
@@ -99,8 +92,6 @@ export default function Welcome() {
   const [lastQuestion, setLastQuestion] = useState("");
   const [responseText, setResponseText] = useState("");
   const [loading, setLoading] = useState(false);
-  const priceBusy = loading;
-  const appBusy = loading; 
 
   // Recommendations / browse state
   const [items, setItems] = useState([]);
@@ -154,58 +145,6 @@ export default function Welcome() {
   const [formShown, setFormShown] = useState(false); // first interaction opens it
   const [formCompleted, setFormCompleted] = useState(false); // never show again after submit
   const [pending, setPending] = useState(null); // { type: 'ask'|'demos'|'docs'|'meeting', payload? }
-
-  // Viewers (needed by the iframe sections)
-  const [activeDemo, setActiveDemo] = useState(null);
-  const [activeDoc, setActiveDoc] = useState(null);
-
-  // ==== Shims & safe defaults to satisfy all references ====
-  // Chat window
-  const [messages, setMessages] = useState([]);
-  const onRetry = () => {};
-
-  // Pricing (no-op defaults)
-  const [priceQuestions, setPriceQuestions] = useState([]);
-  const [priceAnswers, setPriceAnswers] = useState({});
-  const [priceBands, setPriceBands] = useState([]);
-  const onPriceAnswer = () => {};
-  const calculatePrice = () => {};
-
-  // Demos browse/filter
-  const [demoFilter, setDemoFilter] = useState("");
-  const filteredDemos = useMemo(() => {
-    // if you want real filtering, change `items` to your source;
-    // this keeps UI stable without errors.
-    return Array.isArray(items)
-      ? items.filter((d) =>
-          (d.title || "").toLowerCase().includes(demoFilter.toLowerCase())
-        )
-      : [];
-  }, [items, demoFilter]);
-  function openDemo(d) {
-    setActiveDemo(d || null);
-    setMode("demos");
-  }
-
-  // Docs browse/filter
-  const [docFilter, setDocFilter] = useState("");
-  const filteredDocs = useMemo(() => {
-   return Array.isArray(browseDocs)
-      ? browseDocs.filter((d) =>
-          (d.title || "").toLowerCase().includes(docFilter.toLowerCase())
-        )
-      : [];
-  }, [browseDocs, docFilter]);
-  function openDoc(d) {
-    setActiveDoc(d || null);
-    setMode("docs");
-  }
-
-  // FormFill visibility flags
-  const [formVisible, setFormVisible] = useState(false);
-  const [formTrigger, setFormTrigger] = useState("");
-  // =========================================================
-
 
   // Session persistence key so we never reshow after submit (per bot)
   const FORM_KEY = useMemo(
@@ -766,29 +705,7 @@ async function doSend(outgoing) {
     );
   }
 
-   // Safe client shim so JSX like client?.name never throws
-   const client = { name: null };
-   
-   // Compose a safe "bot" view so JSX like bot?.logo_url never throws
-   const bot = {
-     logo_url:
-       (brandAssets && (brandAssets.logo_url || brandAssets.logo_light_url || brandAssets.logo_dark_url)) ||
-       null,
-     company_name: (brandAssets && brandAssets.company_name) || null,
-     description: (brandAssets && brandAssets.description) || null,
-     intro_video_url: introVideoUrl || null,
-     show_intro_video: !!showIntroVideo,
-     show_browse_demos: !!(tabsEnabled && tabsEnabled.demos),
-     show_browse_docs: !!(tabsEnabled && tabsEnabled.docs),
-     show_schedule_meeting: !!(tabsEnabled && tabsEnabled.meeting),
-     // pricing text if you have it in state; otherwise null is fine
-     pricing_intro: null,
-     pricing_outro: null,
-     welcome_message: responseText || null,
-   };
- 
-   
-   const logoSrc =
+  const logoSrc =
     brandAssets.logo_url ||
     brandAssets.logo_light_url ||
     brandAssets.logo_dark_url ||
@@ -797,416 +714,315 @@ async function doSend(outgoing) {
   const listSource = mode === "browse" ? browseItems : items;
   const visibleUnderVideo = selected ? (mode === "ask" ? items : []) : listSource;
 
-  // ---- temporary shims to unblock rendering ----
-  const AskExamples = ({ onPick }) => null; // keep if not importing real one
-  const ChatWindow = ({ messages, onRetry, busy }) => null;
-  const DemoCard = ({ demo, onOpen }) => (
-    <button onClick={onOpen} className="px-2 py-1 border rounded">
-      {demo?.title || "Open demo"}
-    </button>
-  );
-  const DocCard = ({ doc, onOpen }) => (
-    <button onClick={onOpen} className="px-2 py-1 border rounded">
-      {doc?.title || "Open doc"}
-    </button>
-  );
-  const PriceQuestion = ({ question, value, onChange }) => null;
-  // ---- end shims ----
-
   return (
     <div
       className={classNames(
-        "min-h-screen w-full bg-background text-foreground",
-        priceBusy ? "pointer-events-none select-none opacity-70" : "opacity-100",
+        "w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center transition-opacity duration-200",
+        brandReady ? "opacity-100" : "opacity-0"
       )}
       style={liveTheme}
-      ref={contentRef}
     >
-      {/* Top Bar */}
-      <div className="sticky top-0 z-40 bg-background/65 backdrop-blur border-b border-border">
-        <div className="mx-auto max-w-6xl px-4 py-3 flex items-center gap-3">
-          <div className="flex items-center gap-3">
-            <img
-              src={bot?.logo_url || fallbackLogo}
-              className="h-8 w-8 rounded"
-              alt={bot?.company_name || "Brand"}
-            />
-            <div className="leading-tight">
-              <div className="font-semibold">
-                {bot?.company_name || client?.name || "Welcome"}
-              </div>
-              {bot?.description ? (
-                <div className="text-sm text-muted-foreground">
-                  {bot.description}
-                </div>
-              ) : null}
+      <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all duration-300">
+        {/* Header */}
+        <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)]">
+          <div className="flex items-center justify-between w-full py-3">
+            <div className="flex items-center gap-3">
+              <img src={logoSrc} alt="Brand logo" className="h-10 object-contain" />
+            </div>
+            <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
+              {selected
+                ? selected.title
+                : mode === "browse"
+                ? "Browse Demos"
+                : mode === "docs"
+                ? "Browse Documents"
+                : mode === "meeting"
+                ? "Schedule Meeting"
+                : mode === "formfill"
+                ? "Tell us about yourself"
+                : "Ask the Assistant"}
             </div>
           </div>
-
-          <div className="ml-auto flex items-center gap-2">
-            {/* Quick actions */}
-            {bot?.show_schedule_meeting ? (
-              <button
-                className="px-3 py-1.5 text-sm rounded-md border border-border hover:bg-accent"
-                onClick={() => setMode("meeting")}
-              >
-                Schedule
-              </button>
-            ) : null}
-            {bot?.show_price_estimate ? (
-              <button
-                className="px-3 py-1.5 text-sm rounded-md border border-border hover:bg-accent"
-                onClick={() => setMode("pricing")}
-              >
-                Estimate
-              </button>
-            ) : null}
-            {bot?.show_browse_demos ? (
-              <button
-                className={classNames(
-                  "px-3 py-1.5 text-sm rounded-md border border-border hover:bg-accent",
-                  mode === "demos" && "bg-accent",
-                )}
-                onClick={() => setMode("demos")}
-              >
-                Demos
-              </button>
-            ) : null}
-            {bot?.show_browse_docs ? (
-              <button
-                className={classNames(
-                  "px-3 py-1.5 text-sm rounded-md border border-border hover:bg-accent",
-                  mode === "docs" && "bg-accent",
-                )}
-                onClick={() => setMode("docs")}
-              >
-                Docs
-              </button>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      {/* Body */}
-      <div className="mx-auto max-w-6xl w-full px-4 py-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left column — primary content */}
-        <div className="lg:col-span-2 flex flex-col gap-6">
-          {/* Intro Video */}
-          {showIntroVideo && bot?.intro_video_url && mode === "home" && (
-            <div className="rounded-xl border border-border overflow-hidden">
-              <div className="aspect-video bg-muted/40">
-                <iframe
-                  className="w-full h-full"
-                  src={bot.intro_video_url}
-                  title="Intro Video"
-                  allow="autoplay; fullscreen; picture-in-picture"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Welcome message */}
-          {bot?.welcome_message && mode === "home" && (
-            <div className="rounded-xl border border-border p-6">
-              <p className="text-base whitespace-pre-wrap">
-                {bot.welcome_message}
-              </p>
-            </div>
-          )}
-
-          {/* Meeting Scheduler */}
-          {mode === "meeting" && (
-            <div className="rounded-xl border border-border overflow-hidden">
-              <div className="p-4 border-b border-border">
-                <h2 className="font-semibold">Schedule a meeting</h2>
-                {agent?.schedule_header ? (
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {agent.schedule_header}
-                  </p>
-                ) : null}
-              </div>
-              <div className="h-[720px]">
-                <iframe
-                  src={agent?.calendar_link}
-                  className="w-full h-full"
-                  title="Schedule"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Pricing */}
-          {mode === "pricing" && (
-            <div className="rounded-xl border border-border overflow-hidden">
-              <div className="p-4 border-b border-border">
-                <h2 className="font-semibold">Price Estimate</h2>
-                {bot?.pricing_intro ? (
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {bot.pricing_intro}
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="p-4">
-                {/* Price questions */}
-                {priceQuestions.length ? (
-                  <div className="flex flex-col gap-4">
-                    {priceQuestions.map((q) => (
-                      <PriceQuestion
-                        key={q.id}
-                        question={q}
-                        value={priceAnswers[q.id]}
-                        onChange={(val) => onPriceAnswer(q.id, val)}
-                      />
-                    ))}
-                    <div className="flex justify-end">
-                      <button
-                        className="px-3 py-1.5 text-sm rounded-md border border-border hover:bg-accent"
-                        onClick={calculatePrice}
-                        disabled={priceBusy}
-                      >
-                        {priceBusy ? "Calculating…" : "Get estimate"}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-sm text-muted-foreground">
-                    No pricing questions configured.
-                  </div>
-                )}
-
-                {/* Price results */}
-                {priceBands?.length ? (
-                  <div className="mt-6">
-                    <h3 className="font-medium mb-2">Estimated range</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {priceBands.map((b) => (
-                        <div
-                          key={b.id}
-                          className="rounded-lg border border-border p-3"
-                        >
-                          <div className="text-sm text-muted-foreground">
-                            {b.label}
-                          </div>
-                          <div className="text-xl font-semibold">
-                            {formatCurrency(b.min)} – {formatCurrency(b.max)}
-                          </div>
-                          {b.notes ? (
-                            <div className="text-sm mt-1">{b.notes}</div>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                    {bot?.pricing_outro ? (
-                      <p className="text-sm text-muted-foreground mt-3">
-                        {bot.pricing_outro}
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          )}
-
-          {/* Demos */}
-          {mode === "demos" && (
-            <div className="rounded-xl border border-border overflow-hidden">
-              <div className="p-4 border-b border-border flex items-center justify-between">
-                <div>
-                  <h2 className="font-semibold">Product demos</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Browse and launch demos.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    className="px-3 py-1.5 text-sm rounded-md border border-border bg-background"
-                    placeholder="Filter demos…"
-                    value={demoFilter}
-                    onChange={(e) => setDemoFilter(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="p-4">
-                {filteredDemos.length ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {filteredDemos.map((d) => (
-                      <DemoCard
-                        key={d.id}
-                        demo={d}
-                        onOpen={() => openDemo(d)}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-sm text-muted-foreground">
-                    No demos match your filter.
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Docs */}
-          {mode === "docs" && (
-            <div className="rounded-xl border border-border overflow-hidden">
-              <div className="p-4 border-b border-border flex items-center justify-between">
-                <div>
-                  <h2 className="font-semibold">Documents</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Explore documents and resources.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    className="px-3 py-1.5 text-sm rounded-md border border-border bg-background"
-                    placeholder="Filter docs…"
-                    value={docFilter}
-                    onChange={(e) => setDocFilter(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="p-4">
-                {filteredDocs.length ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {filteredDocs.map((d) => (
-                      <DocCard
-                        key={d.id}
-                        doc={d}
-                        onOpen={() => openDoc(d)}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-sm text-muted-foreground">
-                    No documents match your filter.
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Iframes for viewers */}
-          {activeDemo ? (
-            <div className="rounded-xl border border-border overflow-hidden">
-              <div className="p-4 border-b border-border flex items-center justify-between">
-                <div>
-                  <h2 className="font-semibold">{activeDemo.title}</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Demo viewer
-                  </p>
-                </div>
-                <button
-                  className="px-3 py-1.5 text-sm rounded-md border border-border hover:bg-accent"
-                  onClick={() => setActiveDemo(null)}
-                >
-                  Close
-                </button>
-              </div>
-              <div className="h-[720px] bg-muted/40">
-                <iframe
-                  className="w-full h-full"
-                  src={activeDemo.url}
-                  title={activeDemo.title}
-                />
-              </div>
-            </div>
-          ) : null}
-
-          {activeDoc ? (
-            <div className="rounded-xl border border-border overflow-hidden">
-              <div className="p-4 border-b border-border flex items-center justify-between">
-                <div>
-                  <h2 className="font-semibold">{activeDoc.title}</h2>
-                  <p className="text-sm text-muted-foreground">Doc viewer</p>
-                </div>
-                <button
-                  className="px-3 py-1.5 text-sm rounded-md border border-border hover:bg-accent"
-                  onClick={() => setActiveDoc(null)}
-                >
-                  Close
-                </button>
-              </div>
-              <div className="h-[720px] bg-muted/40">
-                <iframe
-                  className="w-full h-full"
-                  src={activeDoc.url}
-                  title={activeDoc.title}
-                />
-              </div>
-            </div>
-          ) : null}
+          {/* Tabs */}
+          <TabsNav mode={mode} tabs={tabs} />
         </div>
 
-        {/* Right column — Ask + FormFill */}
-        <div className="lg:col-span-1 flex flex-col gap-6">
-          {/* FormFill (first interaction) */}
-          {mode === "formfill" && formVisible && (
-            <div className="rounded-xl border border-border p-4">
-              <h2 className="font-semibold mb-2">
-                Tell us a little about you
-              </h2>
+        {/* BODY */}
+        <div
+          ref={contentRef}
+          className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto"
+        >
+          {mode === "formfill" ? (
+            <div className="space-y-4">
+              <div className="text-base font-semibold">
+                Before we get started, please take a minute to tell us a little
+                about yourself so that we can give you the best experience
+                possible.
+              </div>
               <FormFillCard
-                botId={botId}
-                apiBase={apiBase}
-                onSaved={() => {
-                  setFormVisible(false);
-                  if (formTrigger === "first_interaction") {
-                    setMode("ask");
-                  }
+                fields={activeFormFields}
+                defaults={formDefaults}
+                onSubmit={async (vals) => {
+                  // persist to visitor profile
+                  try {
+                    await fetch(`${apiBase}/visitor-formfill`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        visitor_id: visitorId,
+                        values: vals,
+                      }),
+                    });
+                  } catch {}
+                  // mark session complete & continue pending action
+                  try {
+                    sessionStorage.setItem(FORM_KEY, "1");
+                  } catch {}
+                  setFormCompleted(true);
+                  const p = pending;
+                  setPending(null);
+                  if (p?.type === "ask" && p.payload?.text)
+                    await doSend(p.payload.text);
+                  else if (p?.type === "demos") await _openBrowse();
+                  else if (p?.type === "docs") await _openBrowseDocs();
+                  else if (p?.type === "meeting") await _openMeeting();
+                  else setMode("ask");
                 }}
               />
             </div>
-          )}
-
-          {/* Ask */}
-          {mode !== "formfill" && (
-            <div className="rounded-xl border border-border p-4 flex flex-col gap-3">
-              <h2 className="font-semibold">Ask anything</h2>
-              <p className="text-sm text-muted-foreground">
-                I can answer questions, launch demos, and more.
-              </p>
-
-              <div className="flex flex-col gap-2">
-                <AskExamples onPick={(t) => setInput(t)} />
-                <div className="rounded-lg border border-border">
-                  <ChatWindow
-                    messages={messages}
-                    onRetry={onRetry}
-                    busy={false}
+          ) : mode === "meeting" ? (
+            <div className="w-full flex-1 flex flex-col">
+              {!agent ? (
+                <div className="text-sm text-[var(--helper-fg)]">
+                  Loading scheduling…
+                </div>
+              ) : agent.calendar_link_type &&
+                String(agent.calendar_link_type).toLowerCase() === "embed" &&
+                agent.calendar_link ? (
+                <iframe
+                  title="Schedule a Meeting"
+                  src={`${agent.calendar_link}${
+                    agent.calendar_link.includes("?") ? "&" : "?"
+                  }embed_domain=${embedDomain}&embed_type=Inline&session_id=${encodeURIComponent(
+                    sessionId || ""
+                  )}&visitor_id=${encodeURIComponent(
+                    visitorId || ""
+                  )}&bot_id=${encodeURIComponent(botId || "")}`}
+                  style={{
+                    width: "100%",
+                    height: "60vh",
+                    maxHeight: "640px",
+                    background: "var(--card-bg)",
+                  }}
+                  className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
+                />
+              ) : agent.calendar_link_type &&
+                String(agent.calendar_link_type).toLowerCase() === "external" &&
+                agent.calendar_link ? (
+                <div className="text-sm text-gray-700">
+                  We opened the scheduling page in a new tab. If it didn’t
+                  open,&nbsp;
+                  <a
+                    href={agent.calendar_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 underline"
+                  >
+                    click here to open it
+                  </a>
+                  .
+                </div>
+              ) : (
+                <div className="text-sm text-[var(--helper-fg)]">
+                  No scheduling link is configured.
+                </div>
+              )}
+            </div>
+          ) : selected ? (
+            <div className="w-full flex-1 flex flex-col">
+              {mode === "docs" ? (
+                <DocIframe doc={selected} />
+              ) : (
+                <div className="bg-[var(--card-bg)] pt-2 pb-2">
+                  <iframe
+                    style={{ width: "100%", aspectRatio: "471 / 272" }}
+                    src={selected.url}
+                    title={selected.title}
+                    className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
                   />
                 </div>
+              )}
+              {mode === "ask" && (visibleUnderVideo || []).length > 0 && (
+                <>
+                  <div className="flex items-center justify-between mt-1 mb-3">
+                    <p className="italic text-[var(--helper-fg)]">
+                      Recommended demos
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    {visibleUnderVideo.map((it) => (
+                      <Row
+                        key={it.id || it.url || it.title}
+                        item={it}
+                        onPick={(val) => normalizeAndSelectDemo(val)}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : mode === "browse" ? (
+            <div className="w-full flex-1 flex flex-col">
+              {(browseItems || []).length > 0 && (
+                <>
+                  <div className="flex items-center justify-between mt-2 mb-3">
+                    <p className="italic text-[var(--helper-fg)]">
+                      Select a demo to view it
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    {browseItems.map((it) => (
+                      <Row
+                        key={it.id || it.url || it.title}
+                        item={it}
+                        onPick={(val) => normalizeAndSelectDemo(val)}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : mode === "docs" ? (
+            <div className="w-full flex-1 flex flex-col">
+              {(browseDocs || []).length > 0 && (
+                <>
+                  <div className="flex items-center justify-between mt-2 mb-3">
+                    <p className="italic text-[var(--helper-fg)]">
+                      Select a document to view it
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    {browseDocs.map((it) => (
+                      <Row
+                        key={it.id || it.url || it.title}
+                        item={it}
+                        kind="doc"
+                        onPick={async (val) => {
+                          try {
+                            const r = await fetch(
+                              `${apiBase}/render-doc-iframe`,
+                              {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify(
+                                  withIdsBody({
+                                    bot_id: botId,
+                                    doc_id: val.id || "",
+                                    title: val.title || "",
+                                    url: val.url || "",
+                                  })
+                                ),
+                              }
+                            );
+                            const j = await r.json();
+                            setSelected({
+                              ...val,
+                              _iframe_html: j?.iframe_html || null,
+                            });
+                          } catch {
+                            setSelected(val);
+                          }
+                          requestAnimationFrame(() =>
+                            contentRef.current?.scrollTo({
+                              top: 0,
+                              behavior: "auto",
+                            })
+                          );
+                        }}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="w-full flex-1 flex flex-col">
+              {!lastQuestion && !loading && (
+                <div className="space-y-3">
+                  <div className="text-base font-bold whitespace-pre-line">
+                    {responseText}
+                  </div>
+                  {showIntroVideo && introVideoUrl ? (
+                    <div style={{ position: "relative", paddingTop: "56.25%" }}>
+                      <iframe
+                        src={introVideoUrl}
+                        title="Intro Video"
+                        frameBorder="0"
+                        allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
+                        referrerPolicy="strict-origin-when-cross-origin"
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          width: "100%",
+                          height: "100%",
+                        }}
+                        className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              )}
+              {lastQuestion ? (
+                <p className="text-base italic text-center mb-2 text-[var(--helper-fg)]">
+                  "{lastQuestion}"
+                </p>
+              ) : null}
+              <div className="text-left mt-2">
+                {loading ? (
+                  <p className="font-semibold animate-pulse text-[var(--helper-fg)]">
+                    Thinking…
+                  </p>
+                ) : lastQuestion ? (
+                  <p className="text-base font-bold whitespace-pre-line">
+                    {responseText}
+                  </p>
+                ) : null}
               </div>
-
-              {/* Bottom Ask Bar — hide while formfill is active */}
-              {mode !== "formfill" && (
-                <AskInputBar
-                  value={input}
-                  onChange={setInput}
-                  onSend={onSendClick}
-                  inputRef={inputRef}
-                />
+              {(items || []).length > 0 && (
+                <>
+                  <div className="flex items-center justify-between mt-3 mb-2">
+                    <p className="italic text-[var(--helper-fg)]">
+                      Recommended demos
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    {items.map((it) => (
+                      <Row
+                        key={it.id || it.url || it.title}
+                        item={it}
+                        onPick={(val) => normalizeAndSelectDemo(val)}
+                      />
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           )}
         </div>
-      </div>
 
-      {/* ThemeLab floating color editor (password-gated, only via ?themelab=1) */}
-      {themeLabEnabled && botId ? (
-        <ColorBox
-          apiBase={apiBase}
-          botId={botId}
-          frameRef={contentRef}
-          // IMPORTANT: merge, don't replace, so defaults stay intact
-          onVars={(patch) =>
-            setThemeVars((prev) => ({
-              ...prev,
-              ...(typeof patch === "function" ? patch(prev) : patch),
-            }))
-          }
-        />
-      ) : null}
+        {/* Bottom Ask Bar — hide while formfill is active */}
+        {mode !== "formfill" && (
+          <AskInputBar
+            value={input}
+            onChange={setInput}
+            onSend={onSendClick}
+            inputRef={inputRef}
+          />
+        )}
+      </div>
     </div>
   );
 }
