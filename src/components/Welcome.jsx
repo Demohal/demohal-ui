@@ -1,5 +1,4 @@
-
-/* Welcome.jsx — FULL FILE (Option A applied: legacy SCREEN_ORDER) */
+/* Welcome.jsx — updated with Price Estimate integration + formfill gating */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -20,7 +19,8 @@ const DEFAULT_THEME_VARS = {
   "--banner-fg": "#ffffff",
   "--page-bg": "#e6e6e6",
   "--card-bg": "#ffffff",
-  "--shadow-elevation": "0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.10)",
+  "--shadow-elevation":
+    "0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.10)",
   "--message-fg": "#000000",
   "--helper-fg": "#4b5563",
   "--mirror-fg": "#4b5563",
@@ -32,13 +32,17 @@ const DEFAULT_THEME_VARS = {
   "--doc.button.background": "#000000",
   "--doc-button-bg": "#000000",
   "--doc-button-fg": "#ffffff",
+  "--price-button-bg": "#1a1a1a",
+  "--price-button-fg": "#ffffff",
   "--send-color": "#000000",
   "--border-default": "#9ca3af",
 };
 
 const classNames = (...xs) => xs.filter(Boolean).join(" ");
 function inverseBW(hex) {
-  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(String(hex || "").trim());
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(
+    String(hex || "").trim()
+  );
   if (!m) return "#000000";
   const r = parseInt(m[1], 16),
     g = parseInt(m[2], 16),
@@ -69,7 +73,6 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
     "border.default": "--border-default",
   };
 
-  // Option A legacy screen keys (must match DB screen_key values)
   const SCREEN_ORDER = [
     { key: "welcome", label: "Welcome" },
     { key: "bot_response", label: "Bot Response" },
@@ -92,7 +95,8 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
   useEffect(() => {
     function updatePos() {
       const r = frameRef?.current?.getBoundingClientRect?.();
-      const width = 460, gap = 12;
+      const width = 460,
+        gap = 12;
       if (!r) return setPos({ left: 16, top: 16, width });
       setPos({
         left: Math.max(8, r.left - width - gap),
@@ -112,13 +116,16 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
 
   async function checkStatusAndMaybeLoad() {
     try {
-      setAuthError(""); setAuthState("checking");
+      setAuthError("");
+      setAuthState("checking");
       const res = await fetch(
         `${apiBase}/themelab/status?bot_id=${encodeURIComponent(botId)}`,
         { credentials: "include" }
       );
-      if (res.status === 200) { setAuthState("ok"); await load(); }
-      else if (res.status === 401) setAuthState("need_password");
+      if (res.status === 200) {
+        setAuthState("ok");
+        await load();
+      } else if (res.status === 401) setAuthState("need_password");
       else if (res.status === 403) setAuthState("disabled");
       else setAuthState("error");
     } catch {
@@ -139,11 +146,13 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
     setRows(toks);
 
     const v = {};
-    toks.forEach(t => { v[t.token_key] = t.value || "#000000"; });
+    toks.forEach((t) => {
+      v[t.token_key] = t.value || "#000000";
+    });
     setValues(v);
 
     const cssPatch = {};
-    toks.forEach(t => {
+    toks.forEach((t) => {
       const cssVar = TOKEN_TO_CSS[t.token_key];
       if (cssVar) cssPatch[cssVar] = v[t.token_key];
     });
@@ -152,7 +161,7 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
 
   function updateToken(tokenKey, value) {
     const v = value || "";
-    setValues(prev => ({ ...prev, [tokenKey]: v }));
+    setValues((prev) => ({ ...prev, [tokenKey]: v }));
     const cssVar = TOKEN_TO_CSS[tokenKey];
     if (cssVar && onVars) onVars({ [cssVar]: v });
   }
@@ -160,7 +169,10 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
   async function doSave() {
     try {
       setBusy(true);
-      const updates = Object.entries(values).map(([token_key, value]) => ({ token_key, value }));
+      const updates = Object.entries(values).map(([token_key, value]) => ({
+        token_key,
+        value,
+      }));
       const res = await fetch(`${apiBase}/brand/client-tokens/save`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -178,7 +190,11 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
       setBusy(false);
     }
   }
-  async function doReset() { await load(); setMsg("Restored from database."); setTimeout(() => setMsg(""), 1400); }
+  async function doReset() {
+    await load();
+    setMsg("Restored from database.");
+    setTimeout(() => setMsg(""), 1400);
+  }
   async function doLogin(e) {
     e?.preventDefault();
     try {
@@ -190,8 +206,11 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
         body: JSON.stringify({ bot_id: botId, password }),
       });
       const data = await res.json();
-      if (res.status === 200 && data?.ok) { setAuthState("ok"); setPassword(""); await load(); }
-      else if (res.status === 403) setAuthState("disabled");
+      if (res.status === 200 && data?.ok) {
+        setAuthState("ok");
+        setPassword("");
+        await load();
+      } else if (res.status === 403) setAuthState("disabled");
       else setAuthError("Invalid password.");
     } catch {
       setAuthError("Login failed.");
@@ -206,21 +225,41 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
       by.get(k).push(r);
     }
     SCREEN_ORDER.forEach(({ key }) => {
-      if (by.has(key)) by.get(key).sort((a,b) => String(a.label||"").localeCompare(String(b.label||"")));
+      if (by.has(key))
+        by
+          .get(key)
+          .sort((a, b) =>
+            String(a.label || "").localeCompare(String(b.label || ""))
+          );
     });
     return by;
   }, [rows]);
 
   return (
-    <div style={{
-      position: "fixed", left: pos.left, top: pos.top, width: pos.width,
-      background: "#fff", border: "1px solid rgba(0,0,0,0.2)",
-      borderRadius: "12px", padding: 12, zIndex: 50, boxShadow: "0 8px 24px rgba(0,0,0,0.08)"
-    }}>
+    <div
+      style={{
+        position: "fixed",
+        left: pos.left,
+        top: pos.top,
+        width: pos.width,
+        background: "#fff",
+        border: "1px solid rgba(0,0,0,0.2)",
+        borderRadius: "12px",
+        padding: 12,
+        zIndex: 50,
+        boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+      }}
+    >
       <div className="text-base font-bold mb-2">ThemeLab</div>
 
-      {authState === "checking" && <div className="text-sm text-gray-600">Checking access…</div>}
-      {authState === "disabled" && <div className="text-sm text-gray-600">ThemeLab is disabled for this bot.</div>}
+      {authState === "checking" && (
+        <div className="text-sm text-gray-600">Checking access…</div>
+      )}
+      {authState === "disabled" && (
+        <div className="text-sm text-gray-600">
+          ThemeLab is disabled for this bot.
+        </div>
+      )}
 
       {authState === "need_password" && (
         <form onSubmit={doLogin} className="flex items-center gap-2">
@@ -229,10 +268,17 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
             placeholder="Enter ThemeLab password"
             className="flex-1 rounded-[12px] border border-black/20 px-3 py-2"
             value={password}
-            onChange={(e)=>setPassword(e.target.value)}
+            onChange={(e) => setPassword(e.target.value)}
           />
-          <button type="submit" className="px-3 py-2 rounded-[12px] bg-black text-white">Unlock</button>
-          {authError ? <div className="text-xs text-red-600 ml-2">{authError}</div> : null}
+          <button
+            type="submit"
+            className="px-3 py-2 rounded-[12px] bg-black text-white"
+          >
+            Unlock
+          </button>
+          {authError ? (
+            <div className="text-xs text-red-600 ml-2">{authError}</div>
+          ) : null}
         </form>
       )}
 
@@ -242,18 +288,28 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
             <div key={key} className="mb-2">
               <div className="text-sm font-semibold mb-1">{label}</div>
               <div className="space-y-1 pl-1">
-                {(groups.get(key) || []).map(t => (
-                  <div key={t.token_key} className="flex items-center justify-between gap-3">
+                {(groups.get(key) || []).map((t) => (
+                  <div
+                    key={t.token_key}
+                    className="flex items-center justify-between gap-3"
+                  >
                     <div className="text-xs">{t.label}</div>
                     <div className="flex items-center gap-2">
                       <input
                         type="color"
                         value={values[t.token_key] || "#000000"}
-                        onChange={(e)=>updateToken(t.token_key, e.target.value)}
-                        style={{ width: 32, height: 24, borderRadius: 6, border: "1px solid rgba(0,0,0,0.2)" }}
+                        onChange={(e) => updateToken(t.token_key, e.target.value)}
+                        style={{
+                          width: 32,
+                          height: 24,
+                          borderRadius: 6,
+                          border: "1px solid rgba(0,0,0,0.2)",
+                        }}
                         title={t.token_key}
                       />
-                      <code className="text-[11px] opacity-70">{values[t.token_key] || ""}</code>
+                      <code className="text-[11px] opacity-70">
+                        {values[t.token_key] || ""}
+                      </code>
                     </div>
                   </div>
                 ))}
@@ -263,19 +319,179 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
           <div className="mt-3 flex items-center justify-between">
             <div className="text-xs text-gray-600">{msg}</div>
             <div className="flex items-center gap-2">
-              <button onClick={doReset} disabled={busy} className="px-3 py-1 rounded-[12px] border border-black/20 bg-white">Reset</button>
-              <button onClick={doSave} disabled={busy} className="px-3 py-1 rounded-[12px] bg-black text-white">{busy ? "Saving…" : "Save"}</button>
+              <button
+                onClick={doReset}
+                disabled={busy}
+                className="px-3 py-1 rounded-[12px] border border-black/20 bg-white"
+              >
+                Reset
+              </button>
+              <button
+                onClick={doSave}
+                disabled={busy}
+                className="px-3 py-1 rounded-[12px] bg-black text-white"
+              >
+                {busy ? "Saving…" : "Save"}
+              </button>
             </div>
           </div>
         </>
       )}
 
-      {authState === "error" && <div className="text-sm text-red-600">Unable to verify access.</div>}
+      {authState === "error" && (
+        <div className="text-sm text-red-600">Unable to verify access.</div>
+      )}
     </div>
   );
 }
 // ================== /ThemeLabInline ==================
 
+/* ================== Pricing UI Small Components ================== */
+
+function normalizeOptions(q) {
+  const raw = q?.options ?? q?.choices ?? q?.buttons ?? q?.values ?? [];
+  return (Array.isArray(raw) ? raw : [])
+    .map((o, idx) => {
+      if (o == null) return null;
+      if (typeof o === "string") {
+        return { key: o, label: o, id: String(idx) };
+      }
+      const key = o.key ?? o.value ?? o.id ?? String(idx);
+      const label = o.label ?? o.title ?? o.name ?? String(key);
+      const tooltip = o.tooltip ?? o.description ?? o.help ?? undefined;
+      return { key, label, tooltip, id: String(o.id ?? key ?? idx) };
+    })
+    .filter(Boolean);
+}
+
+function OptionButton({ opt, selected, onClick }) {
+  return (
+    <button
+      onClick={() => onClick(opt)}
+      className={classNames(
+        "w-full text-center rounded-[0.75rem] px-4 py-3 transition",
+        "text-[var(--price-button-fg)] bg-[var(--price-button-bg)] hover:brightness-110 active:brightness-95",
+        selected && "ring-2 ring-black/20"
+      )}
+      title={opt.tooltip || ""}
+    >
+      <div className="font-extrabold text-xs sm:text-sm">{opt.label}</div>
+      {opt.tooltip ? (
+        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">
+          {opt.tooltip}
+        </div>
+      ) : null}
+    </button>
+  );
+}
+
+function QuestionBlock({ q, value, onPick }) {
+  const opts = normalizeOptions(q);
+  const type = String(q?.type || "").toLowerCase();
+  const isMulti =
+    type === "multi_choice" || type === "multichoice" || type === "multi";
+  return (
+    <div className="w-full rounded-[0.75rem] px-4 py-3 text-base bg-[var(--card-bg)] border border-[var(--border-default)]">
+      <div className="font-bold text-base">{q.prompt}</div>
+      {q.help_text ? (
+        <div className="text-xs italic mt-1 text-[var(--helper-fg)]">
+          {q.help_text}
+        </div>
+      ) : null}
+
+      {opts.length > 0 ? (
+        <div className="mt-3 flex flex-col gap-3">
+          {opts.map((opt) => (
+            <OptionButton
+              key={opt.id}
+              opt={opt}
+              selected={
+                isMulti
+                  ? Array.isArray(value) && value.includes(opt.key)
+                  : value === opt.key
+              }
+              onClick={(o) => onPick(q, o)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 text-xs text-[var(--helper-fg)]">
+          No options available.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PriceMirror({ lines }) {
+  if (!lines?.length) return null;
+  return (
+    <div className="mb-3">
+      {lines.map((ln, i) => (
+        <div
+          key={i}
+          className="text-base italic whitespace-pre-line text-[var(--mirror-fg)]"
+        >
+          {ln}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EstimateCard({ estimate, outroText }) {
+  if (!estimate) return null;
+  const items = Array.isArray(estimate.line_items) ? estimate.line_items : [];
+
+  const fmtAmount = (ccy, v) => `${ccy} ${Number(v).toLocaleString()}`;
+  const fmtRange = (ccy, min, max) =>
+    Number(min) === Number(max)
+      ? fmtAmount(ccy, max)
+      : `${fmtAmount(ccy, min)} – ${fmtAmount(ccy, max)}`;
+  const totalText = fmtRange(
+    estimate.currency_code,
+    estimate.total_min,
+    estimate.total_max
+  );
+
+  return (
+    <div>
+      <div className="rounded-[0.75rem] p-4 bg-white [box-shadow:var(--shadow-elevation)]">
+        <div className="flex items-center justify-between mb-3">
+          <div className="font-bold text-lg">Your Estimate</div>
+          <div className="font-bold text-lg text-right [font-variant-numeric:tabular-nums]">
+            {totalText}
+          </div>
+        </div>
+        <div className="space-y-3">
+          {items.map((li, idx) => {
+            const name = li?.product?.name ?? li?.label ?? "Item";
+            const key = li?.product?.id ?? `${name}-${idx}`;
+            const ccy = li?.currency_code || estimate.currency_code || "";
+            const lineText = fmtRange(ccy, li?.price_min, li?.price_max);
+            return (
+              <div key={key} className="rounded-[0.75rem] p-3 bg-white">
+                <div className="grid grid-cols-[1fr_auto] items-center gap-3">
+                  <div className="font-bold">{name}</div>
+                  <div className="font-bold text-lg text-right [font-variant-numeric:tabular-nums]">
+                    {lineText}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      {outroText ? (
+        <div className="mt-3 text-base font-bold whitespace-pre-line">
+          {outroText}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* ================== /Pricing UI Components ================== */
 
 export default function Welcome() {
   const apiBase =
@@ -293,14 +509,17 @@ export default function Welcome() {
   const urlParams = useMemo(() => {
     const q = new URLSearchParams(window.location.search);
     const o = {};
-    q.forEach((v, k) => { o[k] = v; });
+    q.forEach((v, k) => {
+      o[k] = v;
+    });
     return o;
   }, []);
 
   const [botId, setBotId] = useState(botIdFromUrl || "");
-  const [fatal, setFatal] = useState("");   // FIXED: removed stray 'the'
+  const [fatal, setFatal] = useState("");
 
-  // Modes: 'ask' | 'browse' | 'docs' | 'meeting' | 'formfill'
+  // Modes now include 'price'
+  // 'ask' | 'browse' | 'docs' | 'meeting' | 'formfill' | 'price'
   const [mode, setMode] = useState("ask");
 
   // Q&A state
@@ -354,6 +573,7 @@ export default function Welcome() {
     demos: false,
     docs: false,
     meeting: false,
+    price: false,
   });
 
   // FormFill
@@ -377,6 +597,19 @@ export default function Welcome() {
     } catch {}
   }, [FORM_KEY]);
 
+  // ---------- Pricing State ----------
+  const [pricingCopy, setPricingCopy] = useState({
+    intro: "",
+    outro: "",
+    custom_notice: "",
+  });
+  const [priceQuestions, setPriceQuestions] = useState([]);
+  const [priceAnswers, setPriceAnswers] = useState({});
+  const [priceEstimate, setPriceEstimate] = useState(null);
+  const [priceBusy, setPriceBusy] = useState(false);
+  const [priceErr, setPriceErr] = useState("");
+
+  // Identity helpers
   const withIdsBody = (obj) => ({
     ...obj,
     ...(sessionId ? { session_id: sessionId } : {}),
@@ -399,15 +632,17 @@ export default function Welcome() {
     let cancel = false;
     (async () => {
       try {
-        const res = await fetch(`${apiBase}/bot-settings?alias=${encodeURIComponent(alias)}`);
+        const res = await fetch(
+          `${apiBase}/bot-settings?alias=${encodeURIComponent(alias)}`
+        );
         const data = await res.json();
         if (cancel) return;
 
         const id = data?.ok ? data?.bot?.id : null;
 
         if (data?.ok) {
-          setVisitorId(data.visitor_id || "");
-          setSessionId(data.session_id || "");
+            setVisitorId(data.visitor_id || "");
+            setSessionId(data.session_id || "");
         }
 
         const b = data?.ok ? data?.bot : null;
@@ -415,10 +650,17 @@ export default function Welcome() {
           setResponseText(b.welcome_message || "");
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
-          setTabsEnabled({
+          setTabsEnabled((prev) => ({
+            ...prev,
             demos: !!b.show_browse_demos,
             docs: !!b.show_browse_docs,
             meeting: !!b.show_schedule_meeting,
+            price: !!b.show_price_estimate,
+          }));
+          setPricingCopy({
+            intro: b.pricing_intro || "",
+            outro: b.pricing_outro || "",
+            custom_notice: b.pricing_custom_notice || "",
           });
         }
 
@@ -432,7 +674,9 @@ export default function Welcome() {
         if (!cancel) setFatal("Invalid or inactive alias.");
       }
     })();
-    return () => { cancel = true; };
+    return () => {
+      cancel = true;
+    };
   }, [alias, apiBase, botId]);
 
   // Try default alias
@@ -441,7 +685,9 @@ export default function Welcome() {
     let cancel = false;
     (async () => {
       try {
-        const res = await fetch(`${apiBase}/bot-settings?alias=${encodeURIComponent(defaultAlias)}`);
+        const res = await fetch(
+          `${apiBase}/bot-settings?alias=${encodeURIComponent(defaultAlias)}`
+        );
         const data = await res.json();
         if (cancel) return;
 
@@ -455,16 +701,25 @@ export default function Welcome() {
           setResponseText(b.welcome_message || "");
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
-          setTabsEnabled({
+          setTabsEnabled((prev) => ({
+            ...prev,
             demos: !!b.show_browse_demos,
             docs: !!b.show_browse_docs,
             meeting: !!b.show_schedule_meeting,
+            price: !!b.show_price_estimate,
+          }));
+          setPricingCopy({
+            intro: b.pricing_intro || "",
+            outro: b.pricing_outro || "",
+            custom_notice: b.pricing_custom_notice || "",
           });
         }
         if (data?.ok && data?.bot?.id) setBotId(data.bot.id);
       } catch {}
     })();
-    return () => { cancel = true; };
+    return () => {
+      cancel = true;
+    };
   }, [botId, alias, defaultAlias, apiBase]);
 
   // Start with bot_id
@@ -473,7 +728,9 @@ export default function Welcome() {
     let cancel = false;
     (async () => {
       try {
-        const res = await fetch(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botIdFromUrl)}`);
+        const res = await fetch(
+          `${apiBase}/bot-settings?bot_id=${encodeURIComponent(botIdFromUrl)}`
+        );
         const data = await res.json();
         if (cancel) return;
 
@@ -487,16 +744,25 @@ export default function Welcome() {
           setResponseText(b.welcome_message || "");
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
-          setTabsEnabled({
+          setTabsEnabled((prev) => ({
+            ...prev,
             demos: !!b.show_browse_demos,
             docs: !!b.show_browse_docs,
             meeting: !!b.show_schedule_meeting,
+            price: !!b.show_price_estimate,
+          }));
+          setPricingCopy({
+            intro: b.pricing_intro || "",
+            outro: b.pricing_outro || "",
+            custom_notice: b.pricing_custom_notice || "",
           });
         }
         if (data?.ok && data?.bot?.id) setBotId(data.bot.id);
       } catch {}
     })();
-    return () => { cancel = true; };
+    return () => {
+      cancel = true;
+    };
   }, [botIdFromUrl, apiBase]);
 
   useEffect(() => {
@@ -516,11 +782,13 @@ export default function Welcome() {
     let cancel = false;
     (async () => {
       try {
-        const res = await fetch(`${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`);
+        const res = await fetch(
+          `${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`
+        );
         const data = await res.json();
         if (cancel) return;
         if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
-          setThemeVars(prev => ({ ...prev, ...data.css_vars }));
+          setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
         }
         if (data?.ok && data?.assets) {
           setBrandAssets({
@@ -534,7 +802,9 @@ export default function Welcome() {
         if (!cancel) setBrandReady(true);
       }
     })();
-    return () => { cancel = true; };
+    return () => {
+      cancel = true;
+    };
   }, [botId, apiBase]);
 
   async function fetchFormfillConfigBy(botIdArg, aliasArg) {
@@ -544,7 +814,9 @@ export default function Welcome() {
       else if (aliasArg) params.set("alias", aliasArg);
       if (visitorId) params.set("visitor_id", visitorId);
       if ([...params.keys()].length === 0) return;
-      const res = await fetch(`${apiBase}/formfill-config?${params.toString()}`);
+      const res = await fetch(
+        `${apiBase}/formfill-config?${params.toString()}`
+      );
       const data = await res.json();
       if (data?.ok) {
         setShowFormfill(!!data.show_formfill);
@@ -556,18 +828,27 @@ export default function Welcome() {
     } catch {}
   }
 
-  useEffect(() => { if (botId) fetchFormfillConfigBy(botId, null); }, [botId]);
-  useEffect(() => { if (!botId && alias) fetchFormfillConfigBy(null, alias); }, [alias, botId]);
-  useEffect(() => { if (botId && visitorId) fetchFormfillConfigBy(botId, null); }, [visitorId, botId]);
+  useEffect(() => {
+    if (botId) fetchFormfillConfigBy(botId, null);
+  }, [botId]);
+  useEffect(() => {
+    if (!botId && alias) fetchFormfillConfigBy(null, alias);
+  }, [alias, botId]);
+  useEffect(() => {
+    if (botId && visitorId) fetchFormfillConfigBy(botId, null);
+  }, [visitorId, botId]);
 
   const activeFormFields = useMemo(
-    () => (Array.isArray(formFields) ? formFields : []).filter(f => f && (f.is_standard || f.is_collected)),
+    () =>
+      (Array.isArray(formFields) ? formFields : []).filter(
+        (f) => f && (f.is_standard || f.is_collected)
+      ),
     [formFields]
   );
 
   const formDefaults = useMemo(() => {
     const o = { ...(visitorDefaults || {}) };
-    activeFormFields.forEach(f => {
+    activeFormFields.forEach((f) => {
       const k = f.field_key;
       const urlV = urlParams[k];
       if (typeof urlV === "string" && urlV.length) o[k] = urlV;
@@ -586,7 +867,12 @@ export default function Welcome() {
     try {
       const res = await axios.post(
         `${apiBase}/demo-hal`,
-        withIdsBody({ bot_id: botId, user_question: outgoing, scope: "standard", debug: true }),
+        withIdsBody({
+          bot_id: botId,
+          user_question: outgoing,
+          scope: "standard",
+          debug: true,
+        }),
         { timeout: 30000, headers: withIdsHeaders() }
       );
       const data = res?.data || {};
@@ -596,12 +882,15 @@ export default function Welcome() {
         id: it.id ?? it.value ?? it.url ?? it.title ?? String(idx),
         title: it.title ?? it.button_title ?? it.label ?? "",
         url: it.url ?? it.value ?? it.button_value ?? "",
-        description: it.description ?? it.summary ?? it.functions_text ?? "",
+        description:
+          it.description ?? it.summary ?? it.functions_text ?? "",
       }));
       setItems(mapped.filter(Boolean));
       setResponseText(text);
       setLoading(false);
-      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
+      requestAnimationFrame(() =>
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+      );
     } catch {
       setLoading(false);
       setResponseText("Sorry—something went wrong.");
@@ -677,7 +966,8 @@ export default function Welcome() {
           id: it.id ?? it.value ?? it.url ?? it.title,
           title: it.title ?? it.button_title ?? it.label ?? "",
           url: it.url ?? it.value ?? it.button_value ?? "",
-          description: it.description ?? it.summary ?? it.functions_text ?? "",
+          description:
+            it.description ?? it.summary ?? it.functions_text ?? "",
         }))
       );
       requestAnimationFrame(() =>
@@ -706,10 +996,11 @@ export default function Welcome() {
       setBrowseDocs(
         src.map((it) => ({
           id: it.id ?? it.value ?? it.url ?? it.title,
-          title: it.title ?? it.button_title ?? it.label ?? "",
-          url: it.url ?? it.value ?? it.button_value ?? "",
-          description: it.description ?? it.summary ?? it.functions_text ?? "",
-        }))
+            title: it.title ?? it.button_title ?? it.label ?? "",
+            url: it.url ?? it.value ?? it.button_value ?? "",
+            description:
+              it.description ?? it.summary ?? it.functions_text ?? "",
+          }))
       );
       requestAnimationFrame(() =>
         contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
@@ -723,7 +1014,8 @@ export default function Welcome() {
     await _openBrowseDocs();
   }
 
-  const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
+  const embedDomain =
+    typeof window !== "undefined" ? window.location.hostname : "";
 
   async function _openMeeting() {
     if (!botId) return;
@@ -743,7 +1035,9 @@ export default function Welcome() {
       ) {
         try {
           const base = ag.calendar_link || "";
-          const withQS = `${base}${base.includes("?") ? "&" : "?"}session_id=${encodeURIComponent(
+          const withQS = `${base}${
+            base.includes("?") ? "&" : "?"
+          }session_id=${encodeURIComponent(
             sessionId || ""
           )}&visitor_id=${encodeURIComponent(
             visitorId || ""
@@ -763,6 +1057,18 @@ export default function Welcome() {
     await _openMeeting();
   }
 
+  // ----- Price Mode open (gated) -----
+  function _openPrice() {
+    if (!botId) return;
+    setMode("price");
+    setSelected(null);
+  }
+  function openPrice() {
+    if (maybeOpenForm({ type: "price" })) return;
+    _openPrice();
+  }
+
+  // Calendly listener
   useEffect(() => {
     if (mode !== "meeting" || !botId || !sessionId || !visitorId) return;
     function onCalendlyMessage(e) {
@@ -784,7 +1090,9 @@ export default function Welcome() {
             name: p.invitee?.full_name ?? p.invitee?.name ?? null,
           },
           questions_and_answers:
-            p.questions_and_answers ?? p.invitee?.questions_and_answers ?? [],
+            p.questions_and_answers ??
+            p.invitee?.questions_and_answers ??
+            [],
           tracking: p.tracking || {},
         };
         fetch(`${apiBase}/calendly/js-event`, {
@@ -803,6 +1111,7 @@ export default function Welcome() {
     return () => window.removeEventListener("message", onCalendlyMessage);
   }, [mode, botId, sessionId, visitorId, apiBase]);
 
+  // Autosize ask box
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
@@ -810,6 +1119,224 @@ export default function Welcome() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
+  // ---------- Pricing Effects ----------
+  // Load pricing questions on entering price mode
+  useEffect(() => {
+    if (mode !== "price" || !botId) return;
+    let cancel = false;
+    (async () => {
+      try {
+        setPriceErr("");
+        setPriceEstimate(null);
+        setPriceAnswers({});
+        const res = await fetch(
+          `${apiBase}/pricing/questions?bot_id=${encodeURIComponent(botId)}`
+        );
+        const data = await res.json();
+        if (cancel) return;
+        if (!data?.ok)
+          throw new Error(data?.error || "Failed to load pricing questions");
+        setPriceQuestions(
+          Array.isArray(data.questions) ? data.questions : []
+        );
+        requestAnimationFrame(() =>
+          contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+        );
+      } catch {
+        if (!cancel) setPriceErr("Unable to load price estimator.");
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [mode, botId, apiBase]);
+
+  // Compute estimate when all required answered
+  useEffect(() => {
+    const haveAll = (() => {
+      if (!priceQuestions.length) return false;
+      const req = priceQuestions.filter(
+        (q) =>
+          (q.group ?? "estimation") === "estimation" && q.required !== false
+      );
+      if (!req.length) return false;
+      return req.every((q) => {
+        const v = priceAnswers[q.q_key];
+        const isMulti = String(q.type).toLowerCase().includes("multi");
+        return isMulti
+          ? Array.isArray(v) && v.length > 0
+          : !(v === undefined || v === null || v === "");
+      });
+    })();
+
+    if (mode !== "price" || !botId || !haveAll) {
+      setPriceEstimate(null);
+      return;
+    }
+
+    let cancel = false;
+    (async () => {
+      try {
+        setPriceBusy(true);
+        const body = {
+          bot_id: botId,
+          answers: {
+            product_id:
+              priceAnswers?.product ||
+              priceAnswers?.edition ||
+              priceAnswers?.product_id ||
+              "",
+            tier_id:
+              priceAnswers?.tier ||
+              priceAnswers?.transactions ||
+              priceAnswers?.tier_id ||
+              "",
+          },
+          session_id: sessionId || undefined,
+          visitor_id: visitorId || undefined,
+        };
+        const res = await fetch(`${apiBase}/pricing/estimate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (cancel) return;
+        if (!data?.ok)
+          throw new Error(data?.error || "Failed to compute estimate");
+        setPriceEstimate(data);
+      } catch {
+        if (!cancel) setPriceErr("Unable to compute estimate.");
+      } finally {
+        if (!cancel) setPriceBusy(false);
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [
+    mode,
+    botId,
+    apiBase,
+    priceQuestions,
+    priceAnswers,
+    sessionId,
+    visitorId,
+  ]);
+
+  // Pricing option selection
+  function handlePickPriceOption(q, opt) {
+    const isMulti = String(q?.type || "").toLowerCase().includes("multi");
+    setPriceAnswers((prev) => {
+      if (isMulti) {
+        const curr = Array.isArray(prev[q.q_key]) ? prev[q.q_key] : [];
+        const exists = curr.includes(opt.key);
+        const next = exists
+          ? curr.filter((k) => k !== opt.key)
+          : [...curr, opt.key];
+        return { ...prev, [q.q_key]: next };
+      }
+      return { ...prev, [q.q_key]: opt.key };
+    });
+  }
+
+  // Next unanswered pricing question
+  const nextPriceQuestion = useMemo(() => {
+    if (!priceQuestions.length) return null;
+    for (const q of priceQuestions) {
+      if ((q.group ?? "estimation") !== "estimation" || q.required === false)
+        continue;
+      const v = priceAnswers[q.q_key];
+      const isMulti = String(q.type).toLowerCase().includes("multi");
+      const empty = isMulti
+        ? !(Array.isArray(v) && v.length > 0)
+        : v === undefined || v === null || v === "";
+      if (empty) return q;
+    }
+    return null;
+  }, [priceQuestions, priceAnswers]);
+
+  // Mirror lines
+  const mirrorLines = useMemo(() => {
+    const labelFor = (q_key) => {
+      const q = priceQuestions.find((qq) => qq.q_key === q_key);
+      if (!q) return "";
+      const ans = priceAnswers[q.q_key];
+      if (
+        ans == null ||
+        ans === "" ||
+        (Array.isArray(ans) && ans.length === 0)
+      )
+        return "";
+      const opts = normalizeOptions(q);
+      if (String(q.type).toLowerCase().includes("multi")) {
+        const picked = Array.isArray(ans) ? ans : [];
+        return opts
+          .filter((o) => picked.includes(o.key))
+          .map((o) => o.label)
+          .join(", ");
+      }
+      const o = opts.find((o) => o.key === ans);
+      return o?.label || String(ans);
+    };
+
+    if (typeof priceEstimate?.mirror_text === "string") {
+      const t = priceEstimate.mirror_text.trim();
+      if (t) return [t];
+    }
+
+    if (Array.isArray(priceEstimate?.mirror_text)) {
+      const out = [];
+      for (const m of priceEstimate.mirror_text) {
+        const raw = String(m?.text || "").trim();
+        if (!raw) continue;
+        const lbl = labelFor(m?.q_key);
+        const replaced = raw
+          .replace(/\{\{\s*answer_label_lower\s*\}\}/gi, lbl.toLowerCase())
+          .replace(/\{\{\s*answer_label\s*\}\}/gi, lbl);
+        out.push(replaced);
+      }
+      return out.filter(Boolean);
+    }
+
+    if (!priceQuestions.length) return [];
+    const lines = [];
+    for (const q of priceQuestions) {
+      const ans = priceAnswers[q.q_key];
+      if (
+        ans === undefined ||
+        ans === null ||
+        ans === "" ||
+        (Array.isArray(ans) && ans.length === 0)
+      )
+        continue;
+      const opts = normalizeOptions(q);
+      let label = "";
+      if (String(q.type).toLowerCase().includes("multi")) {
+        const picked = Array.isArray(ans) ? ans : [];
+        label = opts
+          .filter((o) => picked.includes(o.key))
+          .map((o) => o.label)
+          .join(", ");
+      } else {
+        const o = opts.find((o) => o.key === ans);
+        label = o?.label || String(ans);
+      }
+      if (!label) continue;
+      const tmpl = q.mirror_template;
+      if (tmpl && typeof tmpl === "string") {
+        const replaced = tmpl
+          .replace(/\{\{\s*answer_label_lower\s*\}\}/gi, label.toLowerCase())
+          .replace(/\{\{\s*answer_label\s*\}\}/gi, label);
+        lines.push(replaced);
+      } else {
+        lines.push(label);
+      }
+    }
+    return lines;
+  }, [priceEstimate, priceQuestions, priceAnswers]);
+
+  // Tabs
   const tabs = useMemo(() => {
     const out = [];
     if (tabsEnabled.demos)
@@ -819,6 +1346,12 @@ export default function Welcome() {
         key: "docs",
         label: "Browse Documents",
         onClick: openBrowseDocs,
+      });
+    if (tabsEnabled.price)
+      out.push({
+        key: "price",
+        label: "Price Estimate",
+        onClick: openPrice,
       });
     if (tabsEnabled.meeting)
       out.push({
@@ -873,7 +1406,14 @@ export default function Welcome() {
     fallbackLogo;
 
   const listSource = mode === "browse" ? browseItems : items;
-  const visibleUnderVideo = selected ? (mode === "ask" ? items : []) : listSource;
+  const visibleUnderVideo = selected
+    ? mode === "ask"
+      ? items
+      : []
+    : listSource;
+
+  // Ask bar visibility: hide during price questionnaire until estimate (parity with legacy)
+  const showAskBottom = mode !== "price" || !!priceEstimate;
 
   return (
     <div
@@ -888,7 +1428,11 @@ export default function Welcome() {
         <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)]">
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
-              <img src={logoSrc} alt="Brand logo" className="h-10 object-contain" />
+              <img
+                src={logoSrc}
+                alt="Brand logo"
+                className="h-10 object-contain"
+              />
             </div>
             <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
               {selected
@@ -901,6 +1445,8 @@ export default function Welcome() {
                 ? "Schedule Meeting"
                 : mode === "formfill"
                 ? "Tell us about yourself"
+                : mode === "price"
+                ? "Price Estimate"
                 : "Ask the Assistant"}
             </div>
           </div>
@@ -944,9 +1490,55 @@ export default function Welcome() {
                   else if (p?.type === "demos") await _openBrowse();
                   else if (p?.type === "docs") await _openBrowseDocs();
                   else if (p?.type === "meeting") await _openMeeting();
+                  else if (p?.type === "price") _openPrice();
                   else setMode("ask");
                 }}
               />
+            </div>
+          ) : mode === "price" ? (
+            <div className="flex-1 flex flex-col">
+              <div className="pt-0 pb-0">
+                <PriceMirror
+                  lines={mirrorLines.length ? mirrorLines : [""]}
+                />
+                {!mirrorLines.length && (
+                  <div className="text-base font-bold whitespace-pre-line">
+                    {pricingCopy.intro ||
+                      "This tool provides a quick estimate based on your selections. Final pricing may vary."}
+                  </div>
+                )}
+              </div>
+              <div className="mt-2 space-y-4">
+                {!priceQuestions.length ? (
+                  <div className="text-sm text-[var(--helper-fg)]">
+                    Loading questions…
+                  </div>
+                ) : nextPriceQuestion ? (
+                  <QuestionBlock
+                    q={nextPriceQuestion}
+                    value={priceAnswers[nextPriceQuestion.q_key]}
+                    onPick={handlePickPriceOption}
+                  />
+                ) : priceEstimate && priceEstimate.custom ? (
+                  <div className="text-base font-bold whitespace-pre-line">
+                    {pricingCopy.custom_notice ||
+                      "We’ll follow up with a custom quote tailored to your selection."}
+                  </div>
+                ) : (
+                  <EstimateCard
+                    estimate={priceEstimate}
+                    outroText={pricingCopy.outro || ""}
+                  />
+                )}
+                {priceBusy && (
+                  <div className="text-sm text-[var(--helper-fg)]">
+                    Calculating…
+                  </div>
+                )}
+                {priceErr && (
+                  <div className="text-sm text-red-600">{priceErr}</div>
+                )}
+              </div>
             </div>
           ) : mode === "meeting" ? (
             <div className="w-full flex-1 flex flex-col">
@@ -975,7 +1567,8 @@ export default function Welcome() {
                   className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
                 />
               ) : agent.calendar_link_type &&
-                String(agent.calendar_link_type).toLowerCase() === "external" &&
+                String(agent.calendar_link_type).toLowerCase() ===
+                  "external" &&
                 agent.calendar_link ? (
                 <div className="text-sm text-gray-700">
                   We opened the scheduling page in a new tab. If it didn’t
@@ -1073,7 +1666,9 @@ export default function Welcome() {
                               `${apiBase}/render-doc-iframe`,
                               {
                                 method: "POST",
-                                headers: { "Content-Type": "application/json" },
+                                headers: {
+                                  "Content-Type": "application/json",
+                                },
                                 body: JSON.stringify(
                                   withIdsBody({
                                     bot_id: botId,
@@ -1172,7 +1767,7 @@ export default function Welcome() {
         </div>
 
         {/* Bottom Ask Bar */}
-        {mode !== "formfill" && (
+        {mode !== "formfill" && showAskBottom && (
           <AskInputBar
             value={input}
             onChange={setInput}
@@ -1185,15 +1780,15 @@ export default function Welcome() {
       {themeLabOn && botId ? (
         <ThemeLabInline
           apiBase={apiBase}
-          botId={botId}
-          frameRef={contentRef}
-          onVars={(vars) =>
-            setPickerVars(
-              typeof vars === "function" ? vars : { ...(vars || {}) }
-            )
-          }
+            botId={botId}
+            frameRef={contentRef}
+            onVars={(vars) =>
+              setPickerVars(
+                typeof vars === "function" ? vars : { ...(vars || {}) }
+              )
+            }
         />
       ) : null}
     </div>
   );
-}/* UPDATED CONTENT HERE */
+}
