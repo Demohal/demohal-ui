@@ -384,11 +384,7 @@ export default function Welcome() {
     logo_light_url: null,
     logo_dark_url: null,
   });
-  const liveTheme = useMemo(() => {
-    const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
-    return { ...themeVars, "--tab-active-fg": activeFg };
-  }, [themeVars]);
-
+  
   const initialBrandReady = useMemo(
     () => !(botIdFromUrl || alias),
     [botIdFromUrl, alias]
