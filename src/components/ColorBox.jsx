@@ -1,29 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-
-const TOKEN_TO_CSS = {
-  "color.background": "--background",
-  "color.foreground": "--foreground",
-  "color.muted": "--muted",
-  "color.mutedForeground": "--muted-foreground",
-  "color.accent": "--accent",
-  "color.accentForeground": "--accent-foreground",
-  "color.border": "--border",
-  "color.card": "--card",
-  "color.cardForeground": "--card-foreground",
-  "color.primary": "--primary",
-  "color.primaryForeground": "--primary-foreground",
-  "color.secondary": "--secondary",
-  "color.secondaryForeground": "--secondary-foreground",
-};
-
-const SCREEN_ORDER = [
-  { key: "welcome", label: "Welcome" },
-  { key: "ask", label: "Ask" },
-  { key: "demos", label: "Demos" },
-  { key: "docs", label: "Docs" },
-  { key: "pricing", label: "Pricing" },
-  { key: "meeting", label: "Schedule" },
-];
+import { TOKEN_TO_CSS, SCREEN_ORDER } from "./AskAssistant.ui";
 
 export default function ColorBox({ apiBase, botId, frameRef, onVars }) {
   const [rows, setRows] = useState([]);
@@ -55,21 +31,14 @@ export default function ColorBox({ apiBase, botId, frameRef, onVars }) {
 
   async function checkStatusAndMaybeLoad() {
     try {
-      setAuthError("");
-      setAuthState("checking");
-      const res = await fetch(
-        `${apiBase}/themelab/status?bot_id=${encodeURIComponent(botId)}`,
-        { credentials: "include" } // ensure cookie is sent if already logged in
-      );
+      setAuthError(""); setAuthState("checking");
+      const res = await fetch(`${apiBase}/themelab/status?bot_id=${encodeURIComponent(botId)}`);
       if (res.status === 200) { setAuthState("ok"); await load(); }
       else if (res.status === 401) setAuthState("need_password");
       else if (res.status === 403) setAuthState("disabled");
       else setAuthState("error");
-    } catch {
-      setAuthState("error");
-    }
+    } catch { setAuthState("error"); }
   }
-
   useEffect(() => { checkStatusAndMaybeLoad(); /* eslint-disable-next-line */ }, [apiBase, botId]);
 
   async function load() {
