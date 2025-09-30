@@ -1,21 +1,22 @@
-/* Welcome.jsx — Full Replacement (Personalize tab + Perspective injection)
+/* Welcome.jsx — FULL REPLACEMENT
  *
- * New Additions (Fine Tuning):
- *  - Always-present "Personalize" tab to re-run form fill at any time.
- *  - Perspective field is ensured (injected if missing), defaulting to "general".
- *  - Perspective value normalized to lowercase before submit.
- *  - Personalize tab bypasses gating (even if form already completed or show_formfill=false).
- *
- * Recent Prior Improvements Retained:
- *  - first_question pre-fills the input box (user can just hit Send).
- *  - Ask bar always visible except during form fill.
- *  - Pricing "Calculating…" only after last question answered.
- *  - Removed unused "Schedule" tokens from ThemeLab color panel.
- *  - schedule_header shown on schedule screen.
+ * Features:
+ *  - Always-present "Personalize" tab (re-run form fill any time).
+ *  - Perspective field: guaranteed single_select with canonical options.
+ *  - Immediate in‑memory sync of changed form fill values (optimistic + refetch safety).
+ *  - Perspective precedence handled server-side; client only normalizes to lowercase.
+ *  - Robust doSend() with structured error handling & optional retry.
+ *  - Pricing, Demos, Docs, Scheduling tabs preserved.
+ *  - first_question auto-prefill.
+ *  - Intro video, ThemeLab color + wording panels (optional via ?themelab=1).
  *
  * Environment variables:
  *  VITE_API_URL
  *  VITE_DEFAULT_ALIAS
+ *
+ * IMPORTANT:
+ *  - If you modify FormFillCard props contract, adjust onSubmit here accordingly.
+ *  - This file assumes FormFillCard supports field_type === 'single_select' and uses f.options.
  */
 
 import React, {
@@ -25,8 +26,8 @@ import React, {
   useState,
 } from "react";
 import axios from "axios";
-import fallbackLogo from "../assets/logo.png";
 
+import fallbackLogo from "../assets/logo.png";
 import TabsNav from "./TabsNav";
 import Row from "./Row";
 import DocIframe from "./DocIframe";
@@ -116,43 +117,8 @@ function useFloatingPos(frameRef, side = "left", width = 460, gap = 12) {
   return pos;
 }
 
-/* === ADD near other hooks/utilities in Welcome.jsx (e.g. after ensurePerspectiveField) === */
-  // Merge freshly saved values into in-memory defaults
-  function updateLocalVisitorValues(newVals) {
-    if (!newVals || typeof newVals !== "object") return;
-    setVisitorDefaults((prev) => {
-      const merged = { ...(prev || {}) };
-      Object.entries(newVals).forEach(([k, v]) => {
-        if (typeof v === "string") merged[k] = v;
-      });
-      // Always normalize perspective
-      if (merged.perspective) {
-        merged.perspective = merged.perspective.toLowerCase();
-      }
-      return merged;
-    });
-  }
-
-  async function refetchVisitorValues() {
-    if (!visitorId) return;
-    try {
-      const res = await fetch(
-        `${apiBase}/visitor-formfill?visitor_id=${encodeURIComponent(
-          visitorId
-        )}`
-      );
-      const data = await res.json();
-      if (data?.ok && data.values) {
-        updateLocalVisitorValues(data.values);
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-
 /* ===================== ThemeLab Color Panel ===================== */
 function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
-  // "Schedule" section removed
   const TOKEN_TO_CSS = {
     "banner.background": "--banner-bg",
     "banner.foreground": "--banner-fg",
@@ -222,7 +188,7 @@ function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
 
   useEffect(() => {
     if (sharedAuth.state === "ok") load();
-  }, [sharedAuth.state]); // eslint-disable-line
+  }, [sharedAuth.state]);
 
   function updateToken(tokenKey, value) {
     const v = value || "";
@@ -424,7 +390,10 @@ function ThemeLabWordingBox({
   function markDirty() {
     setDirty(true);
   }
-  function propagateFormfill(show = options.show_formfill, fields = standardFields) {
+  function propagateFormfill(
+    show = options.show_formfill,
+    fields = standardFields
+  ) {
     onFormfillChange &&
       onFormfillChange({
         show_formfill: show,
@@ -478,7 +447,7 @@ function ThemeLabWordingBox({
 
   useEffect(() => {
     if (sharedAuth.state === "ok") load();
-  }, [sharedAuth.state]); // eslint-disable-line
+  }, [sharedAuth.state]);
 
   async function doLogin(e) {
     e?.preventDefault();
@@ -641,7 +610,7 @@ function ThemeLabWordingBox({
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-          <button
+            <button
             type="submit"
             className="px-3 py-2 rounded-[12px] bg-black text-white text-sm"
           >
@@ -1134,7 +1103,7 @@ export default function Welcome() {
   );
   const [brandReady, setBrandReady] = useState(initialBrandReady);
 
-  // Tabs
+  // Tabs visibility flags
   const [tabsEnabled, setTabsEnabled] = useState({
     demos: false,
     docs: false,
@@ -1176,6 +1145,9 @@ export default function Welcome() {
   const [introVideoUrl, setIntroVideoUrl] = useState("");
   const [showIntroVideo, setShowIntroVideo] = useState(false);
 
+  // Error diagnostics for /demo-hal
+  const [lastError, setLastError] = useState(null);
+
   // first_question prefill
   const firstPrefillDone = useRef(false);
   function maybePrefillFirstQuestion(firstQ) {
@@ -1197,11 +1169,11 @@ export default function Welcome() {
         hasPerspective = true;
         return {
           ...f,
-          type: f.type || "single_select",
+          field_type: f.field_type || "single_select",
           is_standard: true,
           is_collected: true,
           is_required: true,
-          options: PERSPECTIVE_OPTIONS, // override to canonical list
+          options: PERSPECTIVE_OPTIONS,
         };
       }
       return f;
@@ -1210,7 +1182,7 @@ export default function Welcome() {
       updated.push({
         field_key: "perspective",
         label: "Perspective",
-        type: "single_select",
+        field_type: "single_select",
         is_standard: true,
         is_collected: true,
         is_required: true,
@@ -1219,11 +1191,9 @@ export default function Welcome() {
     }
     // Normalize defaults
     const d = { ...(incomingDefaults || {}) };
-    if (d.perspective) {
-      d.perspective = String(d.perspective).toLowerCase();
-    } else {
-      d.perspective = "general";
-    }
+    d.perspective = d.perspective
+      ? String(d.perspective).toLowerCase()
+      : "general";
     return { fields: updated, defaults: d };
   }
 
@@ -1243,6 +1213,41 @@ export default function Welcome() {
     if (visitorId) u.searchParams.set("visitor_id", visitorId);
     return u.toString();
   };
+
+  /* ========== Form fill memory helpers (must be inside component) ========== */
+  function updateLocalVisitorValues(newVals) {
+    if (!newVals || typeof newVals !== "object") return;
+    setVisitorDefaults((prev) => {
+      const merged = { ...(prev || {}) };
+      Object.entries(newVals).forEach(([k, v]) => {
+        if (typeof v === "string") merged[k] = v;
+      });
+      if (merged.perspective) {
+        merged.perspective = merged.perspective.toLowerCase();
+      }
+      return merged;
+    });
+  }
+  async function refetchVisitorValues() {
+    if (!visitorId) return;
+    try {
+      const res = await fetch(
+        `${apiBase}/visitor-formfill?visitor_id=${encodeURIComponent(
+          visitorId
+        )}`
+      );
+      if (!res.ok) {
+        console.warn("[visitor-formfill] GET status", res.status);
+        return;
+      }
+      const data = await res.json();
+      if (data?.ok && data.values) {
+        updateLocalVisitorValues(data.values);
+      }
+    } catch (e) {
+      console.warn("[visitor-formfill] GET error", e);
+    }
+  }
 
   /* ----------- Bot Resolution / Bootstrapping (alias) ----------- */
   useEffect(() => {
@@ -1279,7 +1284,8 @@ export default function Welcome() {
           });
         }
         if (id) setBotId(id);
-        else if (!res.ok || data?.ok === false) setFatal("Invalid or inactive alias.");
+        else if (!res.ok || data?.ok === false)
+          setFatal("Invalid or inactive alias.");
       } catch {
         if (!cancel) setFatal("Invalid or inactive alias.");
       }
@@ -1458,19 +1464,18 @@ export default function Welcome() {
     if ((mode === "formfill" || mode === "personalize") && visitorId && botId) {
       refetchVisitorValues();
     }
-  }, [mode, visitorId, botId]); // ensures latest values when re-entering
+  }, [mode, visitorId, botId]);
 
-  /* Active form fields (collected or standard, perspective forced) */
+  /* Active form fields */
   const activeFormFields = useMemo(() => {
     const base = (Array.isArray(formFields) ? formFields : []).filter(
       (f) => f && (f.is_standard || f.is_collected)
     );
-    // Ensure perspective still there if something stripped it
     if (!base.some((f) => f.field_key === "perspective")) {
       base.push({
         field_key: "perspective",
         label: "Perspective",
-        type: "single_select",
+        field_type: "single_select",
         is_standard: true,
         is_collected: true,
         is_required: true,
@@ -1480,7 +1485,7 @@ export default function Welcome() {
     return base;
   }, [formFields]);
 
-  /* Defaults merged with visitor & URL-supplied overrides */
+  /* Form defaults merged with URL override */
   const formDefaults = useMemo(() => {
     const o = { ...(visitorDefaults || {}) };
     activeFormFields.forEach((f) => {
@@ -1493,8 +1498,8 @@ export default function Welcome() {
     return o;
   }, [activeFormFields, visitorDefaults, urlParams]);
 
-  /* Sending a question */
-    async function doSend(outgoing) {
+  /* Send question (Answer endpoint) */
+  async function doSend(outgoing) {
     if (!outgoing || !botId) return;
     setMode("ask");
     setLastQuestion(outgoing);
@@ -1503,59 +1508,111 @@ export default function Welcome() {
     setResponseText("");
     setItems([]);
     setLoading(true);
+    setLastError(null);
 
-    try {
-      const res = await axios.post(
-        `${apiBase}/demo-hal`,
-        withIdsBody({
-          bot_id: botId,
-            // NOTE: send perspective only if you want to force override; otherwise backend will infer
-          user_question: outgoing,
-          scope: "standard",
-          debug: true,
-        }),
-        { timeout: 30000, headers: withIdsHeaders() }
-      );
+    const payload = withIdsBody({
+      bot_id: botId,
+      user_question: outgoing,
+      scope: "standard",
+      debug: true,
+    });
 
-      const data = res?.data || {};
-      const text = data?.response_text || "";
-      const src = Array.isArray(data?.demo_buttons) ? data.demo_buttons : [];
-      const mapped = src.map((it, idx) => ({
-        id: it.id ?? it.value ?? it.url ?? it.title ?? String(idx),
-        title: it.title ?? it.button_title ?? it.label ?? "",
-        url: it.url ?? it.value ?? it.button_value ?? "",
-        description: it.description ?? it.summary ?? it.functions_text ?? "",
-      }));
+    const axiosConfig = {
+      timeout: 30000,
+      headers: { "Content-Type": "application/json", ...withIdsHeaders() },
+      validateStatus: () => true, // manual handling
+    };
 
-      // -------- Perspective / Formfill memory sync (NEW) ----------
-      // If backend returns an updated perspective (e.g. session context changed) we merge it locally
-      if (data && typeof data.perspective === "string" && data.perspective.length) {
-        const newPerspective = data.perspective.toLowerCase();
-        // Prefer helper if already added earlier
-        if (typeof updateLocalVisitorValues === "function") {
-          updateLocalVisitorValues({ perspective: newPerspective });
-        } else {
-          // Fallback: minimally update visitorDefaults so Personalize reflects the change
-          setVisitorDefaults((prev) => {
-            const next = { ...(prev || {}) };
-            next.perspective = newPerspective;
-            return next;
+    let attempt = 0;
+    const maxAttempts = 2;
+
+    while (attempt < maxAttempts) {
+      try {
+        const res = await axios.post(`${apiBase}/demo-hal`, payload, axiosConfig);
+        const status = res.status;
+        const data = res.data || {};
+        const ok =
+          data.ok !== false && status >= 200 && status < 300 && data.response_text !== undefined;
+
+        if (!ok) {
+          const serverCode = data.error || `http_${status}`;
+          const partial =
+            data.response_text ||
+            data.answer_text ||
+            data.message ||
+            (status === 500
+              ? "Internal server error"
+              : `Request failed (${status})`);
+          console.error("[/demo-hal] failure", {
+            status,
+            serverCode,
+            data,
+            payloadSent: payload,
           });
+          setResponseText(
+            partial ||
+              "Sorry—something went wrong."
+          );
+          setItems([]);
+          setLoading(false);
+          setLastError({
+            status,
+            serverCode,
+            data,
+            payloadSent: payload,
+          });
+          break;
         }
+
+        // Success
+        const text = data.response_text || "";
+        const src = Array.isArray(data.demo_buttons) ? data.demo_buttons : [];
+        const mapped = src.map((it, idx) => ({
+          id: it.id ?? it.value ?? it.url ?? it.title ?? String(idx),
+          title: it.title ?? it.button_title ?? it.label ?? "",
+          url: it.url ?? it.value ?? it.button_value ?? "",
+          description: it.description ?? it.summary ?? it.functions_text ?? "",
+        }));
+
+        if (typeof data.perspective === "string" && data.perspective.trim()) {
+          updateLocalVisitorValues({ perspective: data.perspective.toLowerCase() });
+        }
+
+        setItems(mapped.filter(Boolean));
+        setResponseText(text);
+        setLoading(false);
+        requestAnimationFrame(() =>
+          contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+        );
+        break;
+      } catch (err) {
+        attempt += 1;
+        const isNetwork = err.isAxiosError && !err.response;
+        const isTimeout = err.code === "ECONNABORTED";
+        console.error("[/demo-hal] network error", { attempt, err });
+        if (attempt < maxAttempts && (isNetwork || isTimeout)) {
+          continue;
+        }
+        const status = err.response?.status;
+        const data = err.response?.data;
+        const fallback =
+          data?.response_text ||
+          data?.message ||
+          (status ? `Request failed (HTTP ${status})` : "Network error");
+        setResponseText(
+          fallback.startsWith("Request failed") ? "Sorry—something went wrong." : fallback
+        );
+        setLastError({
+          status,
+          data,
+          message: err.message,
+          stack: err.stack,
+          payloadSent: payload,
+        });
+        setItems([]);
+        setLoading(false);
+        break;
       }
-      // (If later you return other fields (e.g. title) in response, you can merge them here too.)
-
-      setItems(mapped.filter(Boolean));
-      setResponseText(text);
-      setLoading(false);
-
-      requestAnimationFrame(() => {
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" });
-      });
-    } catch (e) {
-      setLoading(false);
-      setResponseText("Sorry—something went wrong.");
-      setItems([]);
     }
   }
 
@@ -1583,9 +1640,7 @@ export default function Welcome() {
     await doSend(outgoing);
   }
 
- /* === REPLACE the existing openPersonalize function with this version === */
   function openPersonalize() {
-    // Always refresh latest values before showing form
     refetchVisitorValues();
     setPending(null);
     setMode("formfill");
@@ -1621,7 +1676,7 @@ export default function Welcome() {
     }
   }
 
-  /* Tab handlers (Browse / Docs / Meeting / Price) */
+  /* Tab handlers */
   async function _openBrowse() {
     if (!botId) return;
     setMode("browse");
@@ -1753,7 +1808,7 @@ export default function Welcome() {
           return;
         const p = m.payload || {};
         const payloadOut = {
-            event: m.event,
+          event: m.event,
           scheduled_event: p.event || p.scheduled_event || null,
           invitee: {
             uri: p.invitee?.uri ?? null,
@@ -1996,7 +2051,11 @@ export default function Welcome() {
   /* Tabs (add Personalize ALWAYS) */
   const tabs = useMemo(() => {
     const out = [];
-    out.push({ key: "personalize", label: "Personalize", onClick: openPersonalize });
+    out.push({
+      key: "personalize",
+      label: "Personalize",
+      onClick: openPersonalize,
+    });
     if (tabsEnabled.demos)
       out.push({ key: "demos", label: "Browse Demos", onClick: openBrowse });
     if (tabsEnabled.docs)
@@ -2140,59 +2199,72 @@ export default function Welcome() {
           {(mode === "formfill" || mode === "personalize") ? (
             <div className="space-y-4">
               <div className="text-base font-semibold">
-                Update your information below (you can adjust Perspective or any other details).
+                Update your information below (adjust Perspective or any other details).
               </div>
-                <FormFillCard
-                  fields={activeFormFields}
-                  defaults={formDefaults}
-                  onSubmit={async (vals) => {
-                    if (!visitorId) return;
+              <FormFillCard
+                fields={activeFormFields}
+                defaults={formDefaults}
+                onSubmit={async (vals) => {
+                  if (!visitorId) return;
 
-                    // Normalize perspective before sending
-                    if (vals && typeof vals.perspective === "string") {
-                      vals.perspective = vals.perspective.toLowerCase();
+                  if (typeof vals.perspective === "string") {
+                    vals.perspective = vals.perspective.toLowerCase();
+                  }
+
+                  // Optimistic update
+                  updateLocalVisitorValues(vals);
+
+                  let postOk = false;
+                  try {
+                    const resp = await fetch(`${apiBase}/visitor-formfill`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        visitor_id: visitorId,
+                        values: vals,
+                        bot_id: botId || undefined,
+                      }),
+                    });
+                    postOk = resp.ok;
+                    if (!resp.ok) {
+                      console.warn(
+                        "[visitor-formfill] POST failed",
+                        resp.status,
+                        await resp.text()
+                      );
                     }
+                  } catch (e) {
+                    console.warn("[visitor-formfill] POST error", e);
+                  }
 
-                    try {
-                      await fetch(`${apiBase}/visitor-formfill`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          visitor_id: visitorId,
-                          values: vals,
-                          bot_id: botId || undefined, // helps backend session context update
-                        }),
-                      });
-                      // Immediately update local in-memory defaults so reopen shows new values
-                      updateLocalVisitorValues(vals);
-                    } catch {
-                      // Even if POST fails, continue gracefully (could add UI error)
-                    }
+                  try {
+                    sessionStorage.setItem(FORM_KEY, "1");
+                  } catch {}
 
-                    try {
-                      sessionStorage.setItem(FORM_KEY, "1");
-                    } catch {}
+                  setFormCompleted(true);
+                  const p = pending;
+                  setPending(null);
 
-                    setFormCompleted(true);
-                    const p = pending;
-                    setPending(null);
+                  if (p?.type === "ask" && p.payload?.text) {
+                    await doSend(p.payload.text);
+                  } else if (p?.type === "demos") {
+                    await _openBrowse();
+                  } else if (p?.type === "docs") {
+                    await _openBrowseDocs();
+                  } else if (p?.type === "meeting") {
+                    await _openMeeting();
+                  } else if (p?.type === "price") {
+                    _openPrice();
+                  } else {
+                    setMode("ask");
+                  }
 
-                    // If a deferred action was waiting, execute it
-                    if (p?.type === "ask" && p.payload?.text) {
-                      await doSend(p.payload.text);
-                    } else if (p?.type === "demos") {
-                      await _openBrowse();
-                    } else if (p?.type === "docs") {
-                      await _openBrowseDocs();
-                    } else if (p?.type === "meeting") {
-                      await _openMeeting();
-                    } else if (p?.type === "price") {
-                      _openPrice();
-                    } else {
-                      setMode("ask");
-                    }
-                  }}
-                />
+                  if (!postOk) {
+                    // Backend rejected; refetch authoritative state
+                    refetchVisitorValues();
+                  }
+                }}
+              />
             </div>
           ) : mode === "price" ? (
             <div className="flex-1 flex flex-col">
@@ -2465,6 +2537,16 @@ export default function Welcome() {
                     ))}
                   </div>
                 </>
+              )}
+              {lastError && (
+                <details className="mt-4 text-[11px] p-2 border border-red-300 rounded bg-red-50">
+                  <summary className="cursor-pointer text-red-700 font-semibold">
+                    Technical details
+                  </summary>
+                  <pre className="mt-2 whitespace-pre-wrap break-all">
+{JSON.stringify(lastError, null, 2)}
+                  </pre>
+                </details>
               )}
             </div>
           )}
