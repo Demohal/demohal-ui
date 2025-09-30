@@ -317,51 +317,75 @@ function ThemeLabWordingBox({ apiBase, botId, frameRef, sharedAuth }) {
     pricing_outro: "",
     pricing_custom_notice: "",
   });
+
   const [standardFields, setStandardFields] = useState([]);
   const [editingKey, setEditingKey] = useState("");
   const [draft, setDraft] = useState("");
   const stashRef = useRef(null);
 
+  const messageLabels = {
+    welcome_message: "Welcome",
+    pricing_intro: "Pricing Intro",
+    pricing_outro: "Pricing Outro",
+    pricing_custom_notice: "Custom Pricing",
+  };
+
   function markDirty() {
     setDirty(true);
+  }
+
+  function getInitialMessageKey(dataMessages) {
+    if (dataMessages?.welcome_message !== undefined) return "welcome_message";
+    return Object.keys(dataMessages || {})[0] || "";
   }
 
   async function load() {
     setLoading(true);
     try {
       const res = await fetch(
-        `${apiBase}/themelab/wording-options?bot_id=${encodeURIComponent(
-          botId
-        )}`,
+        `${apiBase}/themelab/wording-options?bot_id=${encodeURIComponent(botId)}`,
         { credentials: "include" }
       );
       const data = await res.json();
       if (!data?.ok) throw new Error();
       setOptions(data.options || {});
       setMessages(data.messages || {});
-      setStandardFields(data.standard_fields || []);
+      // standard_fields now include is_required
+      setStandardFields(
+        (data.standard_fields || []).map(f => ({
+          ...f,
+          is_required: !!f.is_required,
+          is_collected: !!f.is_collected,
+        }))
+      );
       stashRef.current = {
         options: data.options || {},
         messages: data.messages || {},
         standard_fields: data.standard_fields || [],
       };
+      const firstKey = getInitialMessageKey(data.messages);
+      if (firstKey) {
+        setEditingKey(firstKey);
+        setDraft(data.messages[firstKey] || "");
+      } else {
+        setEditingKey("");
+        setDraft("");
+      }
       setDirty(false);
-      setEditingKey("");
-      setDraft("");
+      setMsg("");
     } catch {
       setMsg("Load failed.");
-      setTimeout(() => setMsg(""), 2000);
+      setTimeout(() => setMsg(""), 2200);
     } finally {
       setLoading(false);
     }
   }
 
-  // Auth + initial load
   useEffect(() => {
     if (sharedAuth.state === "ok") load();
   }, [sharedAuth.state]); // eslint-disable-line
 
-  // Login handling (only done in wording panel)
+  // Login
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
 
@@ -393,16 +417,16 @@ function ThemeLabWordingBox({ apiBase, botId, frameRef, sharedAuth }) {
   }
 
   function toggleOption(k) {
-    setOptions((prev) => {
+    setOptions(prev => {
       const next = { ...prev, [k]: !prev[k] };
       markDirty();
       return next;
     });
   }
 
-  function toggleField(fk) {
-    setStandardFields((prev) =>
-      prev.map((f) =>
+  function toggleCollected(fk) {
+    setStandardFields(prev =>
+      prev.map(f =>
         f.field_key === fk
           ? { ...f, is_collected: !f.is_collected }
           : f
@@ -411,27 +435,30 @@ function ThemeLabWordingBox({ apiBase, botId, frameRef, sharedAuth }) {
     markDirty();
   }
 
-  const messageLabels = {
-    welcome_message: "Welcome",
-    pricing_intro: "Pricing Intro",
-    pricing_outro: "Pricing Outro",
-    pricing_custom_notice: "Custom Pricing",
-  };
+  function toggleRequired(fk) {
+    setStandardFields(prev =>
+      prev.map(f =>
+        f.field_key === fk
+          ? { ...f, is_required: !f.is_required }
+          : f
+      )
+    );
+    markDirty();
+  }
 
   function beginEdit(k) {
     setEditingKey(k);
     setDraft(messages[k] || "");
   }
+
   function applyDraft() {
     if (!editingKey) return;
-    setMessages((prev) => ({ ...prev, [editingKey]: draft }));
-    setEditingKey("");
-    setDraft("");
+    setMessages(prev => ({ ...prev, [editingKey]: draft }));
     markDirty();
   }
+
   function cancelEdit() {
-    setEditingKey("");
-    setDraft("");
+    if (editingKey) setDraft(messages[editingKey] || "");
   }
 
   async function doSave() {
@@ -441,9 +468,10 @@ function ThemeLabWordingBox({ apiBase, botId, frameRef, sharedAuth }) {
         bot_id: botId,
         options,
         messages,
-        standard_fields: standardFields.map((f) => ({
+        standard_fields: standardFields.map(f => ({
           field_key: f.field_key,
           is_collected: !!f.is_collected,
+          is_required: !!f.is_required,
         })),
       };
       const res = await fetch(`${apiBase}/themelab/wording-options/save`, {
@@ -460,7 +488,7 @@ function ThemeLabWordingBox({ apiBase, botId, frameRef, sharedAuth }) {
       setTimeout(() => setMsg(""), 1500);
     } catch {
       setMsg("Save failed.");
-      setTimeout(() => setMsg(""), 2000);
+      setTimeout(() => setMsg(""), 2200);
     } finally {
       setSaving(false);
     }
@@ -471,15 +499,38 @@ function ThemeLabWordingBox({ apiBase, botId, frameRef, sharedAuth }) {
       load();
       return;
     }
-    setOptions(stashRef.current.options || {});
-    setMessages(stashRef.current.messages || {});
-    setStandardFields(stashRef.current.standard_fields || []);
-    setEditingKey("");
-    setDraft("");
+    const snap = stashRef.current;
+    setOptions(snap.options || {});
+    setMessages(snap.messages || {});
+    setStandardFields(
+      (snap.standard_fields || []).map(f => ({
+        ...f,
+        is_collected: !!f.is_collected,
+        is_required: !!f.is_required,
+      }))
+    );
+    const firstKey = getInitialMessageKey(snap.messages);
+    setEditingKey(firstKey);
+    setDraft(firstKey ? (snap.messages[firstKey] || "") : "");
     setDirty(false);
     setMsg("Restored.");
     setTimeout(() => setMsg(""), 1400);
   }
+
+  const PencilIcon = (
+    <svg
+      className="w-3.5 h-3.5"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 14.5V17h2.5l9.1-9.1-2.5-2.5L3 14.5z" />
+      <path d="M12.3 5.4l2.6 2.6 1.3-1.3a1.8 1.8 0 0 0 0-2.6l-.7-.7a1.8 1.8 0 0 0-2.6 0l-1.3 1.3z" />
+    </svg>
+  );
 
   return (
     <div
@@ -515,7 +566,7 @@ function ThemeLabWordingBox({ apiBase, botId, frameRef, sharedAuth }) {
             placeholder="ThemeLab password"
             className="flex-1 rounded-[12px] border border-black/30 px-3 py-2 text-sm"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={e => setPassword(e.target.value)}
           />
           <button
             type="submit"
@@ -523,9 +574,9 @@ function ThemeLabWordingBox({ apiBase, botId, frameRef, sharedAuth }) {
           >
             Unlock
           </button>
-          {authError ? (
+          {authError && (
             <div className="text-xs text-red-600 ml-2">{authError}</div>
-          ) : null}
+          )}
         </form>
       )}
       {sharedAuth.state === "error" && (
@@ -537,9 +588,12 @@ function ThemeLabWordingBox({ apiBase, botId, frameRef, sharedAuth }) {
           {loading && (
             <div className="text-xs text-gray-500 mb-2">Loading…</div>
           )}
+
           <div className="grid grid-cols-2 gap-6 mb-3">
             <div>
-              <div className="font-semibold text-sm mb-1">Thing to Show</div>
+              <div className="font-semibold text-sm mb-1">
+                Things to Show
+              </div>
               <div className="space-y-1">
                 {[
                   ["show_browse_demos", "Browse Demos Tab"],
@@ -575,18 +629,30 @@ function ThemeLabWordingBox({ apiBase, botId, frameRef, sharedAuth }) {
                     onChange={() => toggleOption("show_formfill")}
                   />
                 </label>
-                {standardFields.map((f) => (
-                  <label
+                {standardFields.map(f => (
+                  <div
                     key={f.field_key}
-                    className="flex items-center justify-between text-xs gap-2 cursor-pointer"
+                    className="flex items-center justify-between text-xs gap-2"
                   >
-                    <span>{f.label}</span>
-                    <input
-                      type="checkbox"
-                      checked={!!f.is_collected}
-                      onChange={() => toggleField(f.field_key)}
-                    />
-                  </label>
+                    <span className="flex-1">{f.label}</span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        title="Collect"
+                        checked={!!f.is_collected}
+                        onChange={() => toggleCollected(f.field_key)}
+                      />
+                      <span className="text-[10px] uppercase tracking-wide opacity-70">
+                        reqd
+                      </span>
+                      <input
+                        type="checkbox"
+                        title="Required"
+                        checked={!!f.is_required}
+                        onChange={() => toggleRequired(f.field_key)}
+                      />
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -594,48 +660,72 @@ function ThemeLabWordingBox({ apiBase, botId, frameRef, sharedAuth }) {
 
           <div className="mb-2 font-semibold text-sm">Messages</div>
           <div className="space-y-1 mb-3">
-            {Object.entries({
-              welcome_message: "Welcome",
-              pricing_intro: "Pricing Intro",
-              pricing_outro: "Pricing Outro",
-              pricing_custom_notice: "Custom Pricing",
-            }).map(([k, label]) => (
-              <div
-                key={k}
-                className={classNames(
-                  "flex items-center justify-between text-xs px-2 py-1 rounded cursor-pointer",
-                  editingKey === k
-                    ? "bg-black text-white"
-                    : "bg-gray-100 hover:bg-gray-200"
-                )}
-                onClick={() => beginEdit(k)}
-              >
-                <span>{label}</span>
-                <span className="opacity-70">
-                  {messages[k]
-                    ? messages[k].slice(0, 20) +
-                      (messages[k].length > 20 ? "…" : "")
-                    : "—"}
-                </span>
-              </div>
-            ))}
+            {Object.entries(messageLabels).map(([k, label]) => {
+              const active = editingKey === k;
+              return (
+                <div
+                  key={k}
+                  className={classNames(
+                    "flex items-center justify-between text-xs px-2 py-1 rounded cursor-pointer group",
+                    active
+                      ? "bg-black text-white"
+                      : "bg-gray-100 hover:bg-gray-200"
+                  )}
+                  onClick={() => beginEdit(k)}
+                >
+                  <span className="flex-1">{label}</span>
+                  <span className="opacity-70 mr-2 truncate max-w-[140px]">
+                    {messages[k]
+                      ? messages[k].slice(0, 24) +
+                        (messages[k].length > 24 ? "…" : "")
+                      : "—"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={e => {
+                      e.stopPropagation();
+                      beginEdit(k);
+                    }}
+                    className={classNames(
+                      "p-1 rounded transition",
+                      active
+                        ? "bg-white text-black"
+                        : "bg-gray-200 text-gray-700 group-hover:bg-gray-300"
+                    )}
+                    title="Edit"
+                  >
+                    {PencilIcon}
+                  </button>
+                </div>
+              );
+            })}
           </div>
 
           {editingKey && (
             <div className="mb-3">
+              <div className="flex items-center justify-between mb-1">
+                <div className="text-xs font-semibold">
+                  Editing: {messageLabels[editingKey]}
+                </div>
+                {dirty && (
+                  <div className="text-[10px] text-orange-600">
+                    Unsaved changes
+                  </div>
+                )}
+              </div>
               <textarea
                 rows={5}
                 className="w-full border border-black/30 rounded p-2 text-xs"
                 value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder="Modify your message here"
+                onChange={e => setDraft(e.target.value)}
+                placeholder="Edit message text..."
               />
               <div className="flex items-center justify-end gap-2 mt-1">
                 <button
                   onClick={cancelEdit}
                   className="px-2 py-1 rounded bg-gray-200 text-xs"
                 >
-                  Cancel
+                  Revert
                 </button>
                 <button
                   onClick={applyDraft}
@@ -654,8 +744,8 @@ function ThemeLabWordingBox({ apiBase, botId, frameRef, sharedAuth }) {
             <input
               type="text"
               value={options.intro_video_url || ""}
-              onChange={(e) => {
-                setOptions((prev) => ({
+              onChange={e => {
+                setOptions(prev => ({
                   ...prev,
                   intro_video_url: e.target.value,
                 }));
@@ -668,8 +758,7 @@ function ThemeLabWordingBox({ apiBase, botId, frameRef, sharedAuth }) {
 
           <div className="flex items-center justify-between">
             <div className="text-xs text-gray-600">
-              {msg ||
-                (dirty ? "Unsaved changes" : saving ? "Saving…" : "")}
+              {msg || (dirty ? "Unsaved changes" : saving ? "Saving…" : "")}
             </div>
             <div className="flex items-center gap-2">
               <button
