@@ -116,6 +116,40 @@ function useFloatingPos(frameRef, side = "left", width = 460, gap = 12) {
   return pos;
 }
 
+/* === ADD near other hooks/utilities in Welcome.jsx (e.g. after ensurePerspectiveField) === */
+  // Merge freshly saved values into in-memory defaults
+  function updateLocalVisitorValues(newVals) {
+    if (!newVals || typeof newVals !== "object") return;
+    setVisitorDefaults((prev) => {
+      const merged = { ...(prev || {}) };
+      Object.entries(newVals).forEach(([k, v]) => {
+        if (typeof v === "string") merged[k] = v;
+      });
+      // Always normalize perspective
+      if (merged.perspective) {
+        merged.perspective = merged.perspective.toLowerCase();
+      }
+      return merged;
+    });
+  }
+
+  async function refetchVisitorValues() {
+    if (!visitorId) return;
+    try {
+      const res = await fetch(
+        `${apiBase}/visitor-formfill?visitor_id=${encodeURIComponent(
+          visitorId
+        )}`
+      );
+      const data = await res.json();
+      if (data?.ok && data.values) {
+        updateLocalVisitorValues(data.values);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
 /* ===================== ThemeLab Color Panel ===================== */
 function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
   // "Schedule" section removed
@@ -1420,6 +1454,11 @@ export default function Welcome() {
   useEffect(() => {
     if (botId && visitorId) fetchFormfillConfigBy(botId, null);
   }, [visitorId, botId]);
+  useEffect(() => {
+    if ((mode === "formfill" || mode === "personalize") && visitorId && botId) {
+      refetchVisitorValues();
+    }
+  }, [mode, visitorId, botId]); // ensures latest values when re-entering
 
   /* Active form fields (collected or standard, perspective forced) */
   const activeFormFields = useMemo(() => {
@@ -1521,9 +1560,10 @@ export default function Welcome() {
     await doSend(outgoing);
   }
 
-  /* Personalize Tab (always available) */
+ /* === REPLACE the existing openPersonalize function with this version === */
   function openPersonalize() {
-    // Always let user re-open form (bypass gating).
+    // Always refresh latest values before showing form
+    refetchVisitorValues();
     setPending(null);
     setMode("formfill");
     setFormShown(true);
@@ -2079,39 +2119,57 @@ export default function Welcome() {
               <div className="text-base font-semibold">
                 Update your information below (you can adjust Perspective or any other details).
               </div>
-              <FormFillCard
-                fields={activeFormFields}
-                defaults={formDefaults}
-                onSubmit={async (vals) => {
-                  // Normalize perspective to lowercase
-                  if (vals && typeof vals.perspective === "string") {
-                    vals.perspective = vals.perspective.toLowerCase();
-                  }
-                  try {
-                    await fetch(`${apiBase}/visitor-formfill`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        visitor_id: visitorId,
-                        values: vals,
-                      }),
-                    });
-                  } catch {}
-                  try {
-                    sessionStorage.setItem(FORM_KEY, "1");
-                  } catch {}
-                  setFormCompleted(true);
-                  const p = pending;
-                  setPending(null);
-                  if (p?.type === "ask" && p.payload?.text)
-                    await doSend(p.payload.text);
-                  else if (p?.type === "demos") await _openBrowse();
-                  else if (p?.type === "docs") await _openBrowseDocs();
-                  else if (p?.type === "meeting") await _openMeeting();
-                  else if (p?.type === "price") _openPrice();
-                  else setMode("ask");
-                }}
-              />
+                <FormFillCard
+                  fields={activeFormFields}
+                  defaults={formDefaults}
+                  onSubmit={async (vals) => {
+                    if (!visitorId) return;
+
+                    // Normalize perspective before sending
+                    if (vals && typeof vals.perspective === "string") {
+                      vals.perspective = vals.perspective.toLowerCase();
+                    }
+
+                    try {
+                      await fetch(`${apiBase}/visitor-formfill`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          visitor_id: visitorId,
+                          values: vals,
+                          bot_id: botId || undefined, // helps backend session context update
+                        }),
+                      });
+                      // Immediately update local in-memory defaults so reopen shows new values
+                      updateLocalVisitorValues(vals);
+                    } catch {
+                      // Even if POST fails, continue gracefully (could add UI error)
+                    }
+
+                    try {
+                      sessionStorage.setItem(FORM_KEY, "1");
+                    } catch {}
+
+                    setFormCompleted(true);
+                    const p = pending;
+                    setPending(null);
+
+                    // If a deferred action was waiting, execute it
+                    if (p?.type === "ask" && p.payload?.text) {
+                      await doSend(p.payload.text);
+                    } else if (p?.type === "demos") {
+                      await _openBrowse();
+                    } else if (p?.type === "docs") {
+                      await _openBrowseDocs();
+                    } else if (p?.type === "meeting") {
+                      await _openMeeting();
+                    } else if (p?.type === "price") {
+                      _openPrice();
+                    } else {
+                      setMode("ask");
+                    }
+                  }}
+                />
             </div>
           ) : mode === "price" ? (
             <div className="flex-1 flex flex-col">
