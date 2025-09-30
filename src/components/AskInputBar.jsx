@@ -1,22 +1,26 @@
 import React, { useEffect, useRef } from "react";
 
 /**
- * AskInputBar — FULL REPLACEMENT
+ * AskInputBar — FULL REPLACEMENT (Revision to match screenshot feedback)
  *
- * Goal: Match the provided design EXACTLY:
- *  - Flat white bar area with a top border (handled by parent container).
- *  - Inner single textarea with light gray border, large rounded corners.
- *  - Native resize handle in the bottom-right corner (so keep resize: vertical).
- *  - Green circular send button with a white upward arrow INSIDE the input on the right.
- *  - Button appearance NEVER dulls / changes (even when empty); sending is just prevented when blank.
- *  - Placeholder text left-aligned, subtle gray.
- *  - Auto-grow up to a small limit (3 lines) before scroll; still allow manual vertical resize beyond that.
+ * Addresses:
+ *  1. Question box too narrow  -> Now stretches full width minus the page padding (parent supplies px-4).
+ *  2. Missing dividing line    -> Always renders a top border line (border-t) spanning 100%.
+ *  3. Send icon too big / not perfectly centered / too far left ->
+ *        - Button size reduced to 26x26 (was 32 / 40).
+ *        - Arrow icon reduced to 11x11 (was 16).
+ *        - Button vertically centered via top-1/2 translate-y-1/2.
+ *        - Button moved closer to the right: right-8 (leaves room for native resize handle).
  *
- * Notes:
- *  - We keep the button always green; logic blocks blank sends.
- *  - Right padding leaves space for both the button AND the native resize handle.
- *  - Tailwind utility classes assumed; adjust colors if you theme via CSS vars.
- *  - Uses CSS variable --send-color if provided; fallback to bright green (#059669).
+ * Design specifics implemented:
+ *  - Native resize handle is visible (resize: vertical) and unobstructed (we reserve 34px at right).
+ *  - Textarea large rounded corners (14px) like screenshot.
+ *  - Consistent light gray border (#d1d5db Tailwind border-gray-300).
+ *  - Background white, placeholder medium gray (#6b7280).
+ *  - Send button always vivid green (uses --send-color if defined; fallback #059669).
+ *  - Arrow always white, never dims; we simply disable pointer events when empty.
+ *  - Subtle focus style: darken border slightly.
+ *  - Auto-height up to 3 lines, then scroll (still user-resizable).
  */
 
 export default function AskInputBar({
@@ -30,42 +34,40 @@ export default function AskInputBar({
   const localRef = useRef(null);
   const ref = inputRef || localRef;
 
-  const MAX_LINES = 3;
-  const LINE_HEIGHT_PX = 20; // keep consistent with design line-height
+  const MAX_AUTO_LINES = 3;
+  const LINE_HEIGHT = 20; // px
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    // Auto-height up to MAX_LINES (after manual user resize we still allow user control)
+    // Auto-grow (does not interfere with manual user vertical resize unless they drag)
     el.style.height = "auto";
-    const maxH = LINE_HEIGHT_PX * MAX_LINES;
+    const maxAuto = LINE_HEIGHT * MAX_AUTO_LINES;
     const natural = el.scrollHeight;
-    const finalH = Math.min(natural, maxH);
+    const finalH = Math.min(natural, maxAuto);
     el.style.height = finalH + "px";
-    el.style.overflowY = natural > maxH ? "auto" : "hidden";
+    el.style.overflowY = natural > maxAuto ? "auto" : "hidden";
   }, [value, ref]);
 
-  function handleKeyDown(e) {
+  function triggerSend() {
+    if (disabled) return;
+    if (!(value || "").trim()) return;
+    onSend && onSend();
+  }
+
+  function onKeyDown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       triggerSend();
     }
   }
 
-  function triggerSend() {
-    if (disabled) return;
-    const text = (value || "").trim();
-    if (!text) return;
-    onSend && onSend();
-  }
+  const canSend = !disabled && !!(value || "").trim();
 
   return (
     <div
-      // Outer bar area (parent usually has border-top; we keep spacing consistent)
-      className="w-full bg-[var(--card-bg,#ffffff)] px-4 pt-2 pb-3"
-      style={{
-        transition: "background 0.2s",
-      }}
+      className="w-full border-t border-[var(--border-default,#d1d5db)] bg-[var(--card-bg,#ffffff)] px-4 pb-3 pt-2"
+      style={{ transition: "background .2s" }}
     >
       <div className="relative w-full">
         <textarea
@@ -75,7 +77,7 @@ export default function AskInputBar({
           disabled={disabled}
           placeholder={placeholder}
           onChange={(e) => onChange && onChange(e.target.value)}
-          onKeyDown={handleKeyDown}
+          onKeyDown={onKeyDown}
           spellCheck="true"
           className="
             w-full
@@ -84,57 +86,48 @@ export default function AskInputBar({
             border border-gray-300
             rounded-[14px]
             px-4
-            pr-[92px]     /* space for send button + resize handle */
+            pr-[90px]  /* space for send (26) + gap + native resize area */
             py-2
             leading-5
             placeholder:text-gray-500
             focus:outline-none focus:border-gray-400
             resize-y
             min-h-[40px]
-            max-h-[240px]
+            max-h-[260px]
           "
-          style={{
-            lineHeight: LINE_HEIGHT_PX + "px",
-          }}
+          style={{ lineHeight: LINE_HEIGHT + "px" }}
         />
 
-        {/* Send Button (always green visually) */}
+        {/* Send button (smaller, precise positioning) */}
         <button
           type="button"
-          onClick={triggerSend}
           aria-label="Send"
           title="Send"
+          onClick={triggerSend}
+          disabled={!canSend}
           className="
             absolute
             top-1/2
             -translate-y-1/2
-            right-[44px]   /* leave room for native resize handle */
-            w-8 h-8
+            right-8
+            w-[26px] h-[26px]
             rounded-full
             flex items-center justify-center
             shadow
-            transition
             active:scale-95
+            transition
           "
           style={{
             background: "var(--send-color,#059669)",
             color: "#ffffff",
-            cursor:
-              disabled || !(value || "").trim().length
-                ? "not-allowed"
-                : "pointer",
-            opacity:
-              disabled || !(value || "").trim().length
-                ? 1 // visually unchanged per requirements
-                : 1,
-            pointerEvents:
-              disabled || !(value || "").trim().length ? "none" : "auto",
+            cursor: canSend ? "pointer" : "not-allowed",
+            pointerEvents: canSend ? "auto" : "none",
           }}
         >
           <svg
             viewBox="0 0 20 20"
-            width="16"
-            height="16"
+            width="11"
+            height="11"
             stroke="currentColor"
             strokeWidth="2"
             fill="none"
