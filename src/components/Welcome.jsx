@@ -935,7 +935,6 @@ export default function Welcome() {
   // Recommendations / browse state
   const [items, setItems] = useState([]);
   const [browseItems, setBrowseItems] = useState([]);
-  the browse docs usage
   const [browseDocs, setBrowseDocs] = useState([]);
   const [selected, setSelected] = useState(null);
 
