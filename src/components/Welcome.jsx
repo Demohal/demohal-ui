@@ -1,17 +1,21 @@
-/* Welcome.jsx — Full Replacement (2025-09-30 incremental tweaks)
+/* Welcome.jsx — Full Replacement (Personalize tab + Perspective injection)
  *
- * New Changes (this revision):
- *  1. Pricing: "Calculating…" now only appears AFTER the final required pricing question
- *     is answered (i.e., not while the last question is still on screen).
- *  2. ThemeLab Colors panel: removed the "Schedule" section (no schedule tokens).
- *  3. Schedule (Meeting) screen: display agent.schedule_header (helper text) above
- *     the embed / external link notice if provided.
+ * New Additions (Fine Tuning):
+ *  - Always-present "Personalize" tab to re-run form fill at any time.
+ *  - Perspective field is ensured (injected if missing), defaulting to "general".
+ *  - Perspective value normalized to lowercase before submit.
+ *  - Personalize tab bypasses gating (even if form already completed or show_formfill=false).
  *
- * Previous Key Updates:
- *  - first_question PREFILLS the input (not just a placeholder).
- *  - Ask input bar visible in all modes except during form fill.
- *  - Send button + question bar styling handled by AskInputBar (uses --send-color).
- *  - Persona references removed (perspective-only logic handled server‑side).
+ * Recent Prior Improvements Retained:
+ *  - first_question pre-fills the input box (user can just hit Send).
+ *  - Ask bar always visible except during form fill.
+ *  - Pricing "Calculating…" only after last question answered.
+ *  - Removed unused "Schedule" tokens from ThemeLab color panel.
+ *  - schedule_header shown on schedule screen.
+ *
+ * Environment variables:
+ *  VITE_API_URL
+ *  VITE_DEFAULT_ALIAS
  */
 
 import React, {
@@ -54,6 +58,17 @@ const DEFAULT_THEME_VARS = {
   "--send-color": "#000000",
   "--border-default": "#9ca3af",
 };
+
+const PERSPECTIVE_OPTIONS = [
+  { key: "general", label: "General" },
+  { key: "financial", label: "Financial" },
+  { key: "operational", label: "Operational" },
+  { key: "executive", label: "Owner / Executive" },
+  { key: "technical", label: "Technical / IT" },
+  { key: "user", label: "User / Functional" },
+  { key: "customer", label: "Customer / Market" },
+  { key: "compliance", label: "Governance / Compliance" },
+];
 
 const classNames = (...xs) => xs.filter(Boolean).join(" ");
 function inverseBW(hex) {
@@ -103,7 +118,7 @@ function useFloatingPos(frameRef, side = "left", width = 460, gap = 12) {
 
 /* ===================== ThemeLab Color Panel ===================== */
 function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
-  // Removed "Schedule" tokens section (meeting) per request.
+  // "Schedule" section removed
   const TOKEN_TO_CSS = {
     "banner.background": "--banner-bg",
     "banner.foreground": "--banner-fg",
@@ -130,7 +145,6 @@ function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
     { key: "browse_demos", label: "Browse Demos" },
     { key: "browse_docs", label: "Browse Documents" },
     { key: "price", label: "Price Estimate" },
-    // Removed { key: "meeting", label: "Schedule" }
   ];
 
   const [rows, setRows] = useState([]);
@@ -373,11 +387,9 @@ function ThemeLabWordingBox({
     if (sharedAuth.token) headers["X-ThemeLab-Token"] = sharedAuth.token;
     return fetch(url, { ...init, headers, credentials: "include" });
   }
-
   function markDirty() {
     setDirty(true);
   }
-
   function propagateFormfill(show = options.show_formfill, fields = standardFields) {
     onFormfillChange &&
       onFormfillChange({
@@ -389,7 +401,6 @@ function ThemeLabWordingBox({
         })),
       });
   }
-
   function getInitialMessageKey(ms) {
     if (ms?.welcome_message !== undefined) return "welcome_message";
     return Object.keys(ms || {})[0] || "";
@@ -506,7 +517,6 @@ function ThemeLabWordingBox({
   function cancelEdit() {
     if (editingKey) setDraft(messages[editingKey] || "");
   }
-
   async function doSave() {
     try {
       setSaving(true);
@@ -541,7 +551,6 @@ function ThemeLabWordingBox({
       setSaving(false);
     }
   }
-
   function doReset() {
     if (!stashRef.current) {
       load();
@@ -619,65 +628,65 @@ function ThemeLabWordingBox({
             <div className="text-xs text-gray-500 mb-2">Loading…</div>
           )}
 
-            <div className="grid grid-cols-2 gap-6 mb-3">
-              <div>
-                <div className="font-semibold text-sm mb-1">Things to Show</div>
-                <div className="space-y-1">
-                  {[
-                    ["show_browse_demos", "Browse Demos Tab"],
-                    ["show_browse_docs", "Browse Docs Tab"],
-                    ["show_price_estimate", "Price Estimate Tab"],
-                    ["show_schedule_meeting", "Schedule Meeting Tab"],
-                    ["show_intro_video", "Introduction Video"],
-                    ["show_formfill", "Show Form Fill"],
-                  ].map(([k, label]) => (
-                    <label
-                      key={k}
-                      className="flex items-center justify-between text-xs gap-2 cursor-pointer"
-                    >
-                      <span>{label}</span>
-                      <input
-                        type="checkbox"
-                        checked={!!options[k]}
-                        onChange={() => toggleOption(k)}
-                      />
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="font-semibold text-sm mb-1">
-                  Form Fill Fields
-                </div>
-                <div className="space-y-1">
-                  {standardFields.map((f) => (
-                    <div
-                      key={f.field_key}
-                      className="flex items-center justify-between text-xs gap-2"
-                    >
-                      <span className="flex-1">{f.label}</span>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          title="Collect"
-                          checked={!!f.is_collected}
-                          onChange={() => toggleCollected(f.field_key)}
-                        />
-                        <span className="text-[10px] uppercase tracking-wide opacity-70">
-                          reqd
-                        </span>
-                        <input
-                          type="checkbox"
-                          title="Required"
-                          checked={!!f.is_required}
-                          onChange={() => toggleRequired(f.field_key)}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+          <div className="grid grid-cols-2 gap-6 mb-3">
+            <div>
+              <div className="font-semibold text-sm mb-1">Things to Show</div>
+              <div className="space-y-1">
+                {[
+                  ["show_browse_demos", "Browse Demos Tab"],
+                  ["show_browse_docs", "Browse Docs Tab"],
+                  ["show_price_estimate", "Price Estimate Tab"],
+                  ["show_schedule_meeting", "Schedule Meeting Tab"],
+                  ["show_intro_video", "Introduction Video"],
+                  ["show_formfill", "Show Form Fill"],
+                ].map(([k, label]) => (
+                  <label
+                    key={k}
+                    className="flex items-center justify-between text-xs gap-2 cursor-pointer"
+                  >
+                    <span>{label}</span>
+                    <input
+                      type="checkbox"
+                      checked={!!options[k]}
+                      onChange={() => toggleOption(k)}
+                    />
+                  </label>
+                ))}
               </div>
             </div>
+            <div>
+              <div className="font-semibold text-sm mb-1">
+                Form Fill Fields
+              </div>
+              <div className="space-y-1">
+                {standardFields.map((f) => (
+                  <div
+                    key={f.field_key}
+                    className="flex items-center justify-between text-xs gap-2"
+                  >
+                    <span className="flex-1">{f.label}</span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        title="Collect"
+                        checked={!!f.is_collected}
+                        onChange={() => toggleCollected(f.field_key)}
+                      />
+                      <span className="text-[10px] uppercase tracking-wide opacity-70">
+                        reqd
+                      </span>
+                      <input
+                        type="checkbox"
+                        title="Required"
+                        checked={!!f.is_required}
+                        onChange={() => toggleRequired(f.field_key)}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
 
           <div className="mb-2 font-semibold text-sm">Messages</div>
           <div className="space-y-1 mb-3">
@@ -1146,6 +1155,44 @@ export default function Welcome() {
     });
   }
 
+  /* Ensure Perspective field exists & normalized */
+  function ensurePerspectiveField(incomingFields, incomingDefaults) {
+    let hasPerspective = false;
+    const updated = (incomingFields || []).map((f) => {
+      if (f.field_key === "perspective") {
+        hasPerspective = true;
+        return {
+          ...f,
+          type: f.type || "single_select",
+          is_standard: true,
+          is_collected: true,
+          is_required: true,
+          options: PERSPECTIVE_OPTIONS, // override to canonical list
+        };
+      }
+      return f;
+    });
+    if (!hasPerspective) {
+      updated.push({
+        field_key: "perspective",
+        label: "Perspective",
+        type: "single_select",
+        is_standard: true,
+        is_collected: true,
+        is_required: true,
+        options: PERSPECTIVE_OPTIONS,
+      });
+    }
+    // Normalize defaults
+    const d = { ...(incomingDefaults || {}) };
+    if (d.perspective) {
+      d.perspective = String(d.perspective).toLowerCase();
+    } else {
+      d.perspective = "general";
+    }
+    return { fields: updated, defaults: d };
+  }
+
   // Identity helpers
   const withIdsBody = (obj) => ({
     ...obj,
@@ -1163,7 +1210,7 @@ export default function Welcome() {
     return u.toString();
   };
 
-  /* ----------- Bot Resolution (alias) ----------- */
+  /* ----------- Bot Resolution / Bootstrapping (alias) ----------- */
   useEffect(() => {
     if (botId || !alias) return;
     let cancel = false;
@@ -1336,7 +1383,7 @@ export default function Welcome() {
     };
   }, [botId, apiBase]);
 
-  /* Formfill configuration retrieval */
+  /* Formfill configuration + perspective ensure */
   async function fetchFormfillConfigBy(botIdArg, aliasArg) {
     try {
       const params = new URLSearchParams();
@@ -1349,11 +1396,16 @@ export default function Welcome() {
       );
       const data = await res.json();
       if (data?.ok) {
+        const rawFields = Array.isArray(data.fields) ? data.fields : [];
+        const visitorVals =
+          (data.visitor_values && typeof data.visitor_values === "object"
+            ? data.visitor_values
+            : {}) || {};
+        const { fields: patched, defaults: patchedDefaults } =
+          ensurePerspectiveField(rawFields, visitorVals);
         setShowFormfill(!!data.show_formfill);
-        setFormFields(Array.isArray(data.fields) ? data.fields : []);
-        if (data.visitor_values && typeof data.visitor_values === "object") {
-          setVisitorDefaults(data.visitor_values);
-        }
+        setFormFields(patched);
+        setVisitorDefaults(patchedDefaults);
       }
     } catch {
       /* ignore */
@@ -1369,14 +1421,27 @@ export default function Welcome() {
     if (botId && visitorId) fetchFormfillConfigBy(botId, null);
   }, [visitorId, botId]);
 
-  const activeFormFields = useMemo(
-    () =>
-      (Array.isArray(formFields) ? formFields : []).filter(
-        (f) => f && (f.is_standard || f.is_collected)
-      ),
-    [formFields]
-  );
+  /* Active form fields (collected or standard, perspective forced) */
+  const activeFormFields = useMemo(() => {
+    const base = (Array.isArray(formFields) ? formFields : []).filter(
+      (f) => f && (f.is_standard || f.is_collected)
+    );
+    // Ensure perspective still there if something stripped it
+    if (!base.some((f) => f.field_key === "perspective")) {
+      base.push({
+        field_key: "perspective",
+        label: "Perspective",
+        type: "single_select",
+        is_standard: true,
+        is_collected: true,
+        is_required: true,
+        options: PERSPECTIVE_OPTIONS,
+      });
+    }
+    return base;
+  }, [formFields]);
 
+  /* Defaults merged with visitor & URL-supplied overrides */
   const formDefaults = useMemo(() => {
     const o = { ...(visitorDefaults || {}) };
     activeFormFields.forEach((f) => {
@@ -1384,10 +1449,12 @@ export default function Welcome() {
       const urlV = urlParams[k];
       if (typeof urlV === "string" && urlV.length) o[k] = urlV;
     });
+    if (!o.perspective) o.perspective = "general";
+    o.perspective = String(o.perspective).toLowerCase();
     return o;
   }, [activeFormFields, visitorDefaults, urlParams]);
 
-  /* Send question */
+  /* Sending a question */
   async function doSend(outgoing) {
     setMode("ask");
     setLastQuestion(outgoing);
@@ -1454,6 +1521,14 @@ export default function Welcome() {
     await doSend(outgoing);
   }
 
+  /* Personalize Tab (always available) */
+  function openPersonalize() {
+    // Always let user re-open form (bypass gating).
+    setPending(null);
+    setMode("formfill");
+    setFormShown(true);
+  }
+
   /* Demo selection normalization */
   async function normalizeAndSelectDemo(item) {
     try {
@@ -1483,7 +1558,7 @@ export default function Welcome() {
     }
   }
 
-  /* Tab handlers */
+  /* Tab handlers (Browse / Docs / Meeting / Price) */
   async function _openBrowse() {
     if (!botId) return;
     setMode("browse");
@@ -1532,7 +1607,7 @@ export default function Welcome() {
           id: it.id ?? it.value ?? it.url ?? it.title,
           title: it.title ?? it.button_title ?? it.label ?? "",
           url: it.url ?? it.value ?? it.button_value ?? "",
-            description:
+          description:
             it.description ?? it.summary ?? it.functions_text ?? "",
         }))
       );
@@ -1601,7 +1676,7 @@ export default function Welcome() {
     _openPrice();
   }
 
-  /* Calendly listener */
+  /* Calendly event listener */
   useEffect(() => {
     if (mode !== "meeting" || !botId || !sessionId || !visitorId) return;
     function onCalendlyMessage(e) {
@@ -1615,7 +1690,7 @@ export default function Welcome() {
           return;
         const p = m.payload || {};
         const payloadOut = {
-          event: m.event,
+            event: m.event,
           scheduled_event: p.event || p.scheduled_event || null,
           invitee: {
             uri: p.invitee?.uri ?? null,
@@ -1689,7 +1764,7 @@ export default function Welcome() {
     };
   }, [mode, botId, apiBase]);
 
-  /* Pricing: compute estimate after final question only */
+  /* Pricing: compute estimate only when all answered */
   const nextPriceQuestion = useMemo(() => {
     if (!priceQuestions.length) return null;
     for (const q of priceQuestions) {
@@ -1706,7 +1781,6 @@ export default function Welcome() {
   }, [priceQuestions, priceAnswers]);
 
   useEffect(() => {
-    // Only fire estimation when NO remaining question.
     if (mode !== "price" || !botId || nextPriceQuestion) {
       setPriceEstimate((prev) => (nextPriceQuestion ? null : prev));
       return;
@@ -1731,7 +1805,7 @@ export default function Welcome() {
               "",
           },
           session_id: sessionId || undefined,
-            visitor_id: visitorId || undefined,
+          visitor_id: visitorId || undefined,
         };
         const res = await fetch(`${apiBase}/pricing/estimate`, {
           method: "POST",
@@ -1856,8 +1930,10 @@ export default function Welcome() {
     return lines;
   }, [priceEstimate, priceQuestions, priceAnswers]);
 
+  /* Tabs (add Personalize ALWAYS) */
   const tabs = useMemo(() => {
     const out = [];
+    out.push({ key: "personalize", label: "Personalize", onClick: openPersonalize });
     if (tabsEnabled.demos)
       out.push({ key: "demos", label: "Browse Demos", onClick: openBrowse });
     if (tabsEnabled.docs)
@@ -1977,20 +2053,20 @@ export default function Welcome() {
             <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
               {selected
                 ? selected.title
+                : mode === "personalize" || mode === "formfill"
+                ? "Personalize"
                 : mode === "browse"
                 ? "Browse Demos"
                 : mode === "docs"
                 ? "Browse Documents"
                 : mode === "meeting"
                 ? "Schedule Meeting"
-                : mode === "formfill"
-                ? "Tell us about yourself"
                 : mode === "price"
                 ? "Price Estimate"
                 : "Ask the Assistant"}
             </div>
           </div>
-          <TabsNav mode={mode} tabs={tabs} />
+          <TabsNav mode={mode === "formfill" ? "personalize" : mode} tabs={tabs} />
         </div>
 
         {/* BODY */}
@@ -1998,17 +2074,19 @@ export default function Welcome() {
           ref={contentRef}
           className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto"
         >
-          {mode === "formfill" ? (
+          {(mode === "formfill" || mode === "personalize") ? (
             <div className="space-y-4">
               <div className="text-base font-semibold">
-                Before we get started, please take a minute to tell us a little
-                about yourself so that we can give you the best experience
-                possible.
+                Update your information below (you can adjust Perspective or any other details).
               </div>
               <FormFillCard
                 fields={activeFormFields}
                 defaults={formDefaults}
                 onSubmit={async (vals) => {
+                  // Normalize perspective to lowercase
+                  if (vals && typeof vals.perspective === "string") {
+                    vals.perspective = vals.perspective.toLowerCase();
+                  }
                   try {
                     await fetch(`${apiBase}/visitor-formfill`, {
                       method: "POST",
@@ -2070,7 +2148,6 @@ export default function Welcome() {
                     outroText={pricingCopy.outro || ""}
                   />
                 )}
-                {/* "Calculating…" only after all questions answered and before estimate/custom resolves */}
                 {!nextPriceQuestion && priceBusy && (
                   <div className="text-sm text-[var(--helper-fg)]">
                     Calculating…
@@ -2083,7 +2160,6 @@ export default function Welcome() {
             </div>
           ) : mode === "meeting" ? (
             <div className="w-full flex-1 flex flex-col">
-              {/* schedule_header helper text */}
               {agent?.schedule_header ? (
                 <div className="text-sm italic text-[var(--helper-fg)] mb-3 whitespace-pre-line">
                   {agent.schedule_header}
