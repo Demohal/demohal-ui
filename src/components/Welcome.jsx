@@ -1,24 +1,17 @@
-/* Welcome.jsx — Full Replacement
+/* Welcome.jsx — Full Replacement (2025-09-30 incremental tweaks)
  *
- * Key Updates (2025-09-30):
- *  - Removed persona logic (server now uses perspective only; not handled here).
- *  - first_question now PREFILLS the input (not a placeholder); user can hit Send immediately.
- *  - Ask input bar always visible in every mode except during the form-fill gate.
- *  - Pricing mode no longer hides the ask bar.
- *  - Cleaned previous placeholder-based logic; removed firstQuestionPlaceholder state.
- *  - Integrated with updated AskInputBar (separate component) that uses --send-color and supports resize.
+ * New Changes (this revision):
+ *  1. Pricing: "Calculating…" now only appears AFTER the final required pricing question
+ *     is answered (i.e., not while the last question is still on screen).
+ *  2. ThemeLab Colors panel: removed the "Schedule" section (no schedule tokens).
+ *  3. Schedule (Meeting) screen: display agent.schedule_header (helper text) above
+ *     the embed / external link notice if provided.
  *
- * Core Features:
- *  - Ask assistant (RAG) + recommended demos/documents.
- *  - Browse Demos / Browse Documents / Schedule Meeting / Price Estimate tabs.
- *  - Form Fill gating (bot-level + ThemeLab overrides).
- *  - ThemeLab panels (Colors + Wording & Options) with live CSS token + copy + field controls.
- *  - Intro video support.
- *  - Pricing estimator (questions → mirror → estimate/custom flow).
- *
- * Environment variables:
- *  VITE_API_URL (API base)  | Fallback: https://demohal-app.onrender.com
- *  VITE_DEFAULT_ALIAS (optional default bot alias)
+ * Previous Key Updates:
+ *  - first_question PREFILLS the input (not just a placeholder).
+ *  - Ask input bar visible in all modes except during form fill.
+ *  - Send button + question bar styling handled by AskInputBar (uses --send-color).
+ *  - Persona references removed (perspective-only logic handled server‑side).
  */
 
 import React, {
@@ -110,6 +103,7 @@ function useFloatingPos(frameRef, side = "left", width = 460, gap = 12) {
 
 /* ===================== ThemeLab Color Panel ===================== */
 function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
+  // Removed "Schedule" tokens section (meeting) per request.
   const TOKEN_TO_CSS = {
     "banner.background": "--banner-bg",
     "banner.foreground": "--banner-fg",
@@ -136,7 +130,7 @@ function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
     { key: "browse_demos", label: "Browse Demos" },
     { key: "browse_docs", label: "Browse Documents" },
     { key: "price", label: "Price Estimate" },
-    { key: "meeting", label: "Schedule" },
+    // Removed { key: "meeting", label: "Schedule" }
   ];
 
   const [rows, setRows] = useState([]);
@@ -566,21 +560,6 @@ function ThemeLabWordingBox({
     setTimeout(() => setMsg(""), 1400);
   }
 
-  const PencilIcon = (
-    <svg
-      className="w-3.5 h-3.5"
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M3 14.5V17h2.5l9.1-9.1-2.5-2.5L3 14.5z" />
-      <path d="M12.3 5.4l2.6 2.6 1.3-1.3a1.8 1.8 0 0 0 0-2.6l-.7-.7a1.8 1.8 0 0 0-2.6 0l-1.3 1.3z" />
-    </svg>
-  );
-
   return (
     <div
       style={{
@@ -640,65 +619,65 @@ function ThemeLabWordingBox({
             <div className="text-xs text-gray-500 mb-2">Loading…</div>
           )}
 
-          <div className="grid grid-cols-2 gap-6 mb-3">
-            <div>
-              <div className="font-semibold text-sm mb-1">Things to Show</div>
-              <div className="space-y-1">
-                {[
-                  ["show_browse_demos", "Browse Demos Tab"],
-                  ["show_browse_docs", "Browse Docs Tab"],
-                  ["show_price_estimate", "Price Estimate Tab"],
-                  ["show_schedule_meeting", "Schedule Meeting Tab"],
-                  ["show_intro_video", "Introduction Video"],
-                  ["show_formfill", "Show Form Fill"],
-                ].map(([k, label]) => (
-                  <label
-                    key={k}
-                    className="flex items-center justify-between text-xs gap-2 cursor-pointer"
-                  >
-                    <span>{label}</span>
-                    <input
-                      type="checkbox"
-                      checked={!!options[k]}
-                      onChange={() => toggleOption(k)}
-                    />
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div>
-              <div className="font-semibold text-sm mb-1">
-                Form Fill Fields
-              </div>
-              <div className="space-y-1">
-                {standardFields.map((f) => (
-                  <div
-                    key={f.field_key}
-                    className="flex items-center justify-between text-xs gap-2"
-                  >
-                    <span className="flex-1">{f.label}</span>
-                    <div className="flex items-center gap-2">
+            <div className="grid grid-cols-2 gap-6 mb-3">
+              <div>
+                <div className="font-semibold text-sm mb-1">Things to Show</div>
+                <div className="space-y-1">
+                  {[
+                    ["show_browse_demos", "Browse Demos Tab"],
+                    ["show_browse_docs", "Browse Docs Tab"],
+                    ["show_price_estimate", "Price Estimate Tab"],
+                    ["show_schedule_meeting", "Schedule Meeting Tab"],
+                    ["show_intro_video", "Introduction Video"],
+                    ["show_formfill", "Show Form Fill"],
+                  ].map(([k, label]) => (
+                    <label
+                      key={k}
+                      className="flex items-center justify-between text-xs gap-2 cursor-pointer"
+                    >
+                      <span>{label}</span>
                       <input
                         type="checkbox"
-                        title="Collect"
-                        checked={!!f.is_collected}
-                        onChange={() => toggleCollected(f.field_key)}
+                        checked={!!options[k]}
+                        onChange={() => toggleOption(k)}
                       />
-                      <span className="text-[10px] uppercase tracking-wide opacity-70">
-                        reqd
-                      </span>
-                      <input
-                        type="checkbox"
-                        title="Required"
-                        checked={!!f.is_required}
-                        onChange={() => toggleRequired(f.field_key)}
-                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="font-semibold text-sm mb-1">
+                  Form Fill Fields
+                </div>
+                <div className="space-y-1">
+                  {standardFields.map((f) => (
+                    <div
+                      key={f.field_key}
+                      className="flex items-center justify-between text-xs gap-2"
+                    >
+                      <span className="flex-1">{f.label}</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          title="Collect"
+                          checked={!!f.is_collected}
+                          onChange={() => toggleCollected(f.field_key)}
+                        />
+                        <span className="text-[10px] uppercase tracking-wide opacity-70">
+                          reqd
+                        </span>
+                        <input
+                          type="checkbox"
+                          title="Required"
+                          checked={!!f.is_required}
+                          onChange={() => toggleRequired(f.field_key)}
+                        />
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
 
           <div className="mb-2 font-semibold text-sm">Messages</div>
           <div className="space-y-1 mb-3">
@@ -1073,7 +1052,7 @@ export default function Welcome() {
   const [responseText, setResponseText] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Demo/Doc recommendation lists
+  // Lists / selections
   const [items, setItems] = useState([]);
   const [browseItems, setBrowseItems] = useState([]);
   const [browseDocs, setBrowseDocs] = useState([]);
@@ -1086,7 +1065,7 @@ export default function Welcome() {
   const contentRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Visitor/session IDs
+  // IDs
   const [visitorId, setVisitorId] = useState("");
   const [sessionId, setSessionId] = useState("");
 
@@ -1112,7 +1091,7 @@ export default function Welcome() {
   );
   const [brandReady, setBrandReady] = useState(initialBrandReady);
 
-  // Tab visibility flags
+  // Tabs
   const [tabsEnabled, setTabsEnabled] = useState({
     demos: false,
     docs: false,
@@ -1120,7 +1099,7 @@ export default function Welcome() {
     price: false,
   });
 
-  // FormFill gating
+  // Formfill gating
   const [showFormfill, setShowFormfill] = useState(true);
   const [formFields, setFormFields] = useState([]);
   const [visitorDefaults, setVisitorDefaults] = useState({});
@@ -1154,9 +1133,8 @@ export default function Welcome() {
   const [introVideoUrl, setIntroVideoUrl] = useState("");
   const [showIntroVideo, setShowIntroVideo] = useState(false);
 
-  // Track first_question prefill
+  // first_question prefill
   const firstPrefillDone = useRef(false);
-
   function maybePrefillFirstQuestion(firstQ) {
     if (!firstQ || firstPrefillDone.current) return;
     setInput((curr) => {
@@ -1185,7 +1163,7 @@ export default function Welcome() {
     return u.toString();
   };
 
-  /* ----------- Bot Resolution / Bootstrapping (alias) ----------- */
+  /* ----------- Bot Resolution (alias) ----------- */
   useEffect(() => {
     if (botId || !alias) return;
     let cancel = false;
@@ -1207,25 +1185,20 @@ export default function Welcome() {
           maybePrefillFirstQuestion(b.first_question || "");
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
-          setTabsEnabled((prev) => ({
-            ...prev,
+          setTabsEnabled({
             demos: !!b.show_browse_demos,
             docs: !!b.show_browse_docs,
             meeting: !!b.show_schedule_meeting,
             price: !!b.show_price_estimate,
-          }));
+          });
           setPricingCopy({
             intro: b.pricing_intro || "",
             outro: b.pricing_outro || "",
             custom_notice: b.pricing_custom_notice || "",
           });
         }
-        if (id) {
-          setBotId(id);
-          setFatal("");
-        } else if (!res.ok || data?.ok === false) {
-          setFatal("Invalid or inactive alias.");
-        }
+        if (id) setBotId(id);
+        else if (!res.ok || data?.ok === false) setFatal("Invalid or inactive alias.");
       } catch {
         if (!cancel) setFatal("Invalid or inactive alias.");
       }
@@ -1256,13 +1229,12 @@ export default function Welcome() {
           maybePrefillFirstQuestion(b.first_question || "");
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
-          setTabsEnabled((prev) => ({
-            ...prev,
+          setTabsEnabled({
             demos: !!b.show_browse_demos,
             docs: !!b.show_browse_docs,
             meeting: !!b.show_schedule_meeting,
             price: !!b.show_price_estimate,
-          }));
+          });
           setPricingCopy({
             intro: b.pricing_intro || "",
             outro: b.pricing_outro || "",
@@ -1300,13 +1272,12 @@ export default function Welcome() {
           maybePrefillFirstQuestion(b.first_question || "");
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
-          setTabsEnabled((prev) => ({
-            ...prev,
+          setTabsEnabled({
             demos: !!b.show_browse_demos,
             docs: !!b.show_browse_docs,
             meeting: !!b.show_schedule_meeting,
             price: !!b.show_price_estimate,
-          }));
+          });
           setPricingCopy({
             intro: b.pricing_intro || "",
             outro: b.pricing_outro || "",
@@ -1365,7 +1336,7 @@ export default function Welcome() {
     };
   }, [botId, apiBase]);
 
-  /* Formfill configuration */
+  /* Formfill configuration retrieval */
   async function fetchFormfillConfigBy(botIdArg, aliasArg) {
     try {
       const params = new URLSearchParams();
@@ -1398,7 +1369,6 @@ export default function Welcome() {
     if (botId && visitorId) fetchFormfillConfigBy(botId, null);
   }, [visitorId, botId]);
 
-  /* Active form fields */
   const activeFormFields = useMemo(
     () =>
       (Array.isArray(formFields) ? formFields : []).filter(
@@ -1407,7 +1377,6 @@ export default function Welcome() {
     [formFields]
   );
 
-  /* Visitor defaults + URL overrides */
   const formDefaults = useMemo(() => {
     const o = { ...(visitorDefaults || {}) };
     activeFormFields.forEach((f) => {
@@ -1418,7 +1387,7 @@ export default function Welcome() {
     return o;
   }, [activeFormFields, visitorDefaults, urlParams]);
 
-  /* Send a question */
+  /* Send question */
   async function doSend(outgoing) {
     setMode("ask");
     setLastQuestion(outgoing);
@@ -1485,7 +1454,7 @@ export default function Welcome() {
     await doSend(outgoing);
   }
 
-  /* Demo selection */
+  /* Demo selection normalization */
   async function normalizeAndSelectDemo(item) {
     try {
       const r = await fetch(`${apiBase}/render-video-iframe`, {
@@ -1514,7 +1483,7 @@ export default function Welcome() {
     }
   }
 
-  /* Tabs */
+  /* Tab handlers */
   async function _openBrowse() {
     if (!botId) return;
     setMode("browse");
@@ -1563,7 +1532,7 @@ export default function Welcome() {
           id: it.id ?? it.value ?? it.url ?? it.title,
           title: it.title ?? it.button_title ?? it.label ?? "",
           url: it.url ?? it.value ?? it.button_value ?? "",
-          description:
+            description:
             it.description ?? it.summary ?? it.functions_text ?? "",
         }))
       );
@@ -1675,7 +1644,7 @@ export default function Welcome() {
     return () => window.removeEventListener("message", onCalendlyMessage);
   }, [mode, botId, sessionId, visitorId, apiBase]);
 
-  /* Autosize fallback */
+  /* Fallback autosize */
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
@@ -1720,33 +1689,33 @@ export default function Welcome() {
     };
   }, [mode, botId, apiBase]);
 
-  /* Pricing: compute estimate */
-  useEffect(() => {
-    const haveAll = (() => {
-      if (!priceQuestions.length) return false;
-      const req = priceQuestions.filter(
-        (q) =>
-          (q.group ?? "estimation") === "estimation" && q.required !== false
-      );
-      if (!req.length) return false;
-      return req.every((q) => {
-        const v = priceAnswers[q.q_key];
-        const isMulti = String(q.type).toLowerCase().includes("multi");
-        return isMulti
-          ? Array.isArray(v) && v.length > 0
-          : !(v === undefined || v === null || v === "");
-      });
-    })();
+  /* Pricing: compute estimate after final question only */
+  const nextPriceQuestion = useMemo(() => {
+    if (!priceQuestions.length) return null;
+    for (const q of priceQuestions) {
+      if ((q.group ?? "estimation") !== "estimation" || q.required === false)
+        continue;
+      const v = priceAnswers[q.q_key];
+      const isMulti = String(q.type).toLowerCase().includes("multi");
+      const empty = isMulti
+        ? !(Array.isArray(v) && v.length > 0)
+        : v === undefined || v === null || v === "";
+      if (empty) return q;
+    }
+    return null;
+  }, [priceQuestions, priceAnswers]);
 
-    if (mode !== "price" || !botId || !haveAll) {
-      setPriceEstimate(null);
+  useEffect(() => {
+    // Only fire estimation when NO remaining question.
+    if (mode !== "price" || !botId || nextPriceQuestion) {
+      setPriceEstimate((prev) => (nextPriceQuestion ? null : prev));
       return;
     }
-
     let cancel = false;
     (async () => {
       try {
         setPriceBusy(true);
+        setPriceErr("");
         const body = {
           bot_id: botId,
           answers: {
@@ -1762,7 +1731,7 @@ export default function Welcome() {
               "",
           },
           session_id: sessionId || undefined,
-          visitor_id: visitorId || undefined,
+            visitor_id: visitorId || undefined,
         };
         const res = await fetch(`${apiBase}/pricing/estimate`, {
           method: "POST",
@@ -1771,8 +1740,7 @@ export default function Welcome() {
         });
         const data = await res.json();
         if (cancel) return;
-        if (!data?.ok)
-          throw new Error(data?.error || "Failed to compute estimate");
+        if (!data?.ok) throw new Error();
         setPriceEstimate(data);
       } catch {
         if (!cancel) setPriceErr("Unable to compute estimate.");
@@ -1789,6 +1757,7 @@ export default function Welcome() {
     apiBase,
     priceQuestions,
     priceAnswers,
+    nextPriceQuestion,
     sessionId,
     visitorId,
   ]);
@@ -1807,21 +1776,6 @@ export default function Welcome() {
       return { ...prev, [q.q_key]: opt.key };
     });
   }
-
-  const nextPriceQuestion = useMemo(() => {
-    if (!priceQuestions.length) return null;
-    for (const q of priceQuestions) {
-      if ((q.group ?? "estimation") !== "estimation" || q.required === false)
-        continue;
-      const v = priceAnswers[q.q_key];
-      const isMulti = String(q.type).toLowerCase().includes("multi");
-      const empty = isMulti
-        ? !(Array.isArray(v) && v.length > 0)
-        : v === undefined || v === null || v === "";
-      if (empty) return q;
-    }
-    return null;
-  }, [priceQuestions, priceAnswers]);
 
   const mirrorLines = useMemo(() => {
     const labelFor = (q_key) => {
@@ -1977,7 +1931,6 @@ export default function Welcome() {
       : []
     : listSource;
 
-  // Always show ask bar except during formfill
   const showAskBottom = mode !== "formfill";
 
   function handleThemeLabFormfillChange({ show_formfill, standard_fields }) {
@@ -2040,7 +1993,7 @@ export default function Welcome() {
           <TabsNav mode={mode} tabs={tabs} />
         </div>
 
-        {/* Body */}
+        {/* BODY */}
         <div
           ref={contentRef}
           className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto"
@@ -2117,7 +2070,8 @@ export default function Welcome() {
                     outroText={pricingCopy.outro || ""}
                   />
                 )}
-                {priceBusy && (
+                {/* "Calculating…" only after all questions answered and before estimate/custom resolves */}
+                {!nextPriceQuestion && priceBusy && (
                   <div className="text-sm text-[var(--helper-fg)]">
                     Calculating…
                   </div>
@@ -2129,6 +2083,12 @@ export default function Welcome() {
             </div>
           ) : mode === "meeting" ? (
             <div className="w-full flex-1 flex flex-col">
+              {/* schedule_header helper text */}
+              {agent?.schedule_header ? (
+                <div className="text-sm italic text-[var(--helper-fg)] mb-3 whitespace-pre-line">
+                  {agent.schedule_header}
+                </div>
+              ) : null}
               {!agent ? (
                 <div className="text-sm text-[var(--helper-fg)]">
                   Loading scheduling…
@@ -2353,7 +2313,7 @@ export default function Welcome() {
           )}
         </div>
 
-        {/* Ask Input Bar (visible except during formfill) */}
+        {/* Ask Input Bar */}
         {showAskBottom && (
           <AskInputBar
             value={input}
