@@ -1494,7 +1494,8 @@ export default function Welcome() {
   }, [activeFormFields, visitorDefaults, urlParams]);
 
   /* Sending a question */
-  async function doSend(outgoing) {
+    async function doSend(outgoing) {
+    if (!outgoing || !botId) return;
     setMode("ask");
     setLastQuestion(outgoing);
     setInput("");
@@ -1502,17 +1503,20 @@ export default function Welcome() {
     setResponseText("");
     setItems([]);
     setLoading(true);
+
     try {
       const res = await axios.post(
         `${apiBase}/demo-hal`,
         withIdsBody({
           bot_id: botId,
+            // NOTE: send perspective only if you want to force override; otherwise backend will infer
           user_question: outgoing,
           scope: "standard",
           debug: true,
         }),
         { timeout: 30000, headers: withIdsHeaders() }
       );
+
       const data = res?.data || {};
       const text = data?.response_text || "";
       const src = Array.isArray(data?.demo_buttons) ? data.demo_buttons : [];
@@ -1520,16 +1524,35 @@ export default function Welcome() {
         id: it.id ?? it.value ?? it.url ?? it.title ?? String(idx),
         title: it.title ?? it.button_title ?? it.label ?? "",
         url: it.url ?? it.value ?? it.button_value ?? "",
-        description:
-          it.description ?? it.summary ?? it.functions_text ?? "",
+        description: it.description ?? it.summary ?? it.functions_text ?? "",
       }));
+
+      // -------- Perspective / Formfill memory sync (NEW) ----------
+      // If backend returns an updated perspective (e.g. session context changed) we merge it locally
+      if (data && typeof data.perspective === "string" && data.perspective.length) {
+        const newPerspective = data.perspective.toLowerCase();
+        // Prefer helper if already added earlier
+        if (typeof updateLocalVisitorValues === "function") {
+          updateLocalVisitorValues({ perspective: newPerspective });
+        } else {
+          // Fallback: minimally update visitorDefaults so Personalize reflects the change
+          setVisitorDefaults((prev) => {
+            const next = { ...(prev || {}) };
+            next.perspective = newPerspective;
+            return next;
+          });
+        }
+      }
+      // (If later you return other fields (e.g. title) in response, you can merge them here too.)
+
       setItems(mapped.filter(Boolean));
       setResponseText(text);
       setLoading(false);
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
-    } catch {
+
+      requestAnimationFrame(() => {
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" });
+      });
+    } catch (e) {
       setLoading(false);
       setResponseText("Sorry—something went wrong.");
       setItems([]);
