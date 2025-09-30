@@ -1,16 +1,22 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef } from "react";
 
 /**
- * AskInputBar (FULL REPLACEMENT)
+ * AskInputBar — FULL REPLACEMENT
  *
- * Changes vs prior version:
- * 1. Custom resize "grab handle" placed just to the LEFT of the send button at the lower right corner.
- *    - Native textarea resize disabled (resize: none).
- *    - Drag vertically to resize (within min/max height constraints).
- * 2. Send button visual style stays consistent (no dull / dark arrow when input is empty).
- *    - Arrow always white, background always var(--send-color).
- *    - Button still disabled logically (no send) but only shows reduced pointer events & subtle opacity.
- * 3. Maintains auto-grow up to MAX_AUTO_LINES; beyond that user can drag larger.
+ * Goal: Match the provided design EXACTLY:
+ *  - Flat white bar area with a top border (handled by parent container).
+ *  - Inner single textarea with light gray border, large rounded corners.
+ *  - Native resize handle in the bottom-right corner (so keep resize: vertical).
+ *  - Green circular send button with a white upward arrow INSIDE the input on the right.
+ *  - Button appearance NEVER dulls / changes (even when empty); sending is just prevented when blank.
+ *  - Placeholder text left-aligned, subtle gray.
+ *  - Auto-grow up to a small limit (3 lines) before scroll; still allow manual vertical resize beyond that.
+ *
+ * Notes:
+ *  - We keep the button always green; logic blocks blank sends.
+ *  - Right padding leaves space for both the button AND the native resize handle.
+ *  - Tailwind utility classes assumed; adjust colors if you theme via CSS vars.
+ *  - Uses CSS variable --send-color if provided; fallback to bright green (#059669).
  */
 
 export default function AskInputBar({
@@ -19,176 +25,116 @@ export default function AskInputBar({
   onSend,
   inputRef,
   placeholder = "Ask your question here",
-  disabled,
+  disabled = false,
 }) {
   const localRef = useRef(null);
   const ref = inputRef || localRef;
 
-  // Auto-grow config
-  const MAX_AUTO_LINES = 3;
-  const LINE_HEIGHT = 20; // px
+  const MAX_LINES = 3;
+  const LINE_HEIGHT_PX = 20; // keep consistent with design line-height
 
-  // Manual resize config
-  const MIN_HEIGHT = LINE_HEIGHT;          // minimum single line
-  const MAX_DRAG_HEIGHT = 320;             // absolute cap when dragging
-  const [manualHeight, setManualHeight] = useState(null); // null => auto mode
-
-  const dragState = useRef({
-    dragging: false,
-    startY: 0,
-    startH: 0,
-  });
-
-  // Auto-size effect (only when not manually resized)
   useEffect(() => {
-    if (!ref.current) return;
-    if (manualHeight != null) return; // manual override active
     const el = ref.current;
+    if (!el) return;
+    // Auto-height up to MAX_LINES (after manual user resize we still allow user control)
     el.style.height = "auto";
+    const maxH = LINE_HEIGHT_PX * MAX_LINES;
     const natural = el.scrollHeight;
-    const maxAuto = LINE_HEIGHT * MAX_AUTO_LINES;
-    const finalH = Math.min(natural, maxAuto);
+    const finalH = Math.min(natural, maxH);
     el.style.height = finalH + "px";
-    el.style.overflowY = natural > maxAuto ? "auto" : "hidden";
-  }, [value, manualHeight, ref]);
-
-  // Apply manual height
-  useEffect(() => {
-    if (!ref.current) return;
-    if (manualHeight != null) {
-      ref.current.style.height = manualHeight + "px";
-      ref.current.style.overflowY = "auto";
-    }
-  }, [manualHeight, ref]);
-
-  function canSend() {
-    return !disabled && !!value.trim();
-  }
+    el.style.overflowY = natural > maxH ? "auto" : "hidden";
+  }, [value, ref]);
 
   function handleKeyDown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (canSend()) onSend && onSend();
+      triggerSend();
     }
   }
 
-  const beginDrag = useCallback((e) => {
+  function triggerSend() {
     if (disabled) return;
-    const target = ref.current;
-    if (!target) return;
-    dragState.current.dragging = true;
-    dragState.current.startY = e.clientY;
-    dragState.current.startH =
-      manualHeight != null ? manualHeight : target.clientHeight;
-    document.addEventListener("mousemove", onDrag);
-    document.addEventListener("mouseup", endDrag);
-    document.addEventListener("mouseleave", endDrag);
-    e.preventDefault();
-  }, [manualHeight, disabled]);
-
-  const onDrag = (e) => {
-    if (!dragState.current.dragging) return;
-    const dy = e.clientY - dragState.current.startY;
-    let nh = dragState.current.startH + dy;
-    nh = Math.max(MIN_HEIGHT, Math.min(MAX_DRAG_HEIGHT, nh));
-    setManualHeight(nh);
-  };
-
-  const endDrag = () => {
-    if (dragState.current.dragging) {
-      dragState.current.dragging = false;
-      document.removeEventListener("mousemove", onDrag);
-      document.removeEventListener("mouseup", endDrag);
-      document.removeEventListener("mouseleave", endDrag);
-    }
-  };
+    const text = (value || "").trim();
+    if (!text) return;
+    onSend && onSend();
+  }
 
   return (
     <div
-      className="w-full border-t border-[var(--border-default)] bg-[var(--card-bg)] px-4 pb-3 pt-2"
-      style={{ transition: "background 0.2s" }}
+      // Outer bar area (parent usually has border-top; we keep spacing consistent)
+      className="w-full bg-[var(--card-bg,#ffffff)] px-4 pt-2 pb-3"
+      style={{
+        transition: "background 0.2s",
+      }}
     >
-      <div
-        className="relative w-full"
-        style={{
-          background: "#fff",
-          border: "1px solid var(--border-default)",
-            borderRadius: 14,
-          paddingRight: 74, // more space for grab + button
-          paddingLeft: 14,
-          paddingTop: 6,
-          paddingBottom: 6,
-        }}
-      >
+      <div className="relative w-full">
         <textarea
           ref={ref}
-          className="w-full outline-none text-sm leading-5 bg-transparent placeholder:text-gray-400"
-          style={{
-            lineHeight: LINE_HEIGHT + "px",
-            resize: "none",               // disable native resize
-            minHeight: LINE_HEIGHT,
-            maxHeight: MAX_DRAG_HEIGHT,
-          }}
           rows={1}
           value={value}
-          placeholder={placeholder}
           disabled={disabled}
-          onChange={(e) => {
-            onChange && onChange(e.target.value);
-            if (manualHeight == null) {
-              // let auto effect run; nothing else needed
-            }
-          }}
+          placeholder={placeholder}
+          onChange={(e) => onChange && onChange(e.target.value)}
           onKeyDown={handleKeyDown}
           spellCheck="true"
+          className="
+            w-full
+            text-sm
+            bg-white
+            border border-gray-300
+            rounded-[14px]
+            px-4
+            pr-[92px]     /* space for send button + resize handle */
+            py-2
+            leading-5
+            placeholder:text-gray-500
+            focus:outline-none focus:border-gray-400
+            resize-y
+            min-h-[40px]
+            max-h-[240px]
+          "
+          style={{
+            lineHeight: LINE_HEIGHT_PX + "px",
+          }}
         />
 
-        {/* Custom grab handle (left of send button) */}
+        {/* Send Button (always green visually) */}
         <button
           type="button"
-          aria-label="Resize input"
-          title="Drag to resize"
-          onMouseDown={beginDrag}
-          className="absolute bottom-1 right-[52px] w-5 h-5 flex items-center justify-center cursor-ns-resize rounded hover:bg-black/5 active:bg-black/10 group"
-          style={{
-            border: "1px solid var(--border-default)",
-            background: "var(--card-bg)",
-          }}
-        >
-          <svg
-            viewBox="0 0 20 20"
-            width="14"
-            height="14"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            fill="none"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="text-gray-500 group-active:text-gray-700"
-          >
-            <path d="M6 7h8M6 10h8M6 13h8" />
-          </svg>
-        </button>
-
-        {/* Send button (consistent styling always) */}
-        <button
-          type="button"
-          onClick={() => canSend() && onSend && onSend()}
-          disabled={!canSend()}
+          onClick={triggerSend}
           aria-label="Send"
-          title={canSend() ? "Send" : "Enter text to enable send"}
-          className={`absolute top-1/2 -translate-y-1/2 right-2 w-10 h-10 flex items-center justify-center rounded-full transition
-            ${!canSend() ? "cursor-not-allowed" : "hover:brightness-110 active:brightness-95"}`}
+          title="Send"
+          className="
+            absolute
+            top-1/2
+            -translate-y-1/2
+            right-[44px]   /* leave room for native resize handle */
+            w-8 h-8
+            rounded-full
+            flex items-center justify-center
+            shadow
+            transition
+            active:scale-95
+          "
           style={{
-            background: "var(--send-color)",
-            color: "#fff",
-            opacity: !canSend() ? 0.85 : 1,
+            background: "var(--send-color,#059669)",
+            color: "#ffffff",
+            cursor:
+              disabled || !(value || "").trim().length
+                ? "not-allowed"
+                : "pointer",
+            opacity:
+              disabled || !(value || "").trim().length
+                ? 1 // visually unchanged per requirements
+                : 1,
+            pointerEvents:
+              disabled || !(value || "").trim().length ? "none" : "auto",
           }}
         >
           <svg
             viewBox="0 0 20 20"
-            width="18"
-            height="18"
+            width="16"
+            height="16"
             stroke="currentColor"
             strokeWidth="2"
             fill="none"
