@@ -1,4 +1,5 @@
-/* Welcome.jsx — updated with Price Estimate integration + formfill gating */
+/* Welcome.jsx — updated with Price Estimate integration + formfill gating
+   + ThemeLab dual panels (Colors + Wording & Options) */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -51,8 +52,43 @@ function inverseBW(hex) {
   return L > 0.5 ? "#000000" : "#ffffff";
 }
 
-// ================== ThemeLabInline (embedded) ==================
-function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
+/* =========================================================
+   THEME LAB PANELS (NEW) — Colors + Wording & Options
+   ========================================================= */
+
+function useFloatingPos(frameRef, side = "left", width = 460, gap = 12) {
+  const [pos, setPos] = useState({ left: 16, top: 16, width });
+  useEffect(() => {
+    function updatePos() {
+      const r = frameRef?.current?.getBoundingClientRect?.();
+      if (!r) return setPos({ left: 16, top: 16, width });
+      if (side === "left") {
+        setPos({
+          left: Math.max(8, r.left - width - gap),
+          top: Math.max(8, r.top + 8),
+          width,
+        });
+      } else {
+        setPos({
+          left: Math.min(window.innerWidth - width - 8, r.right + gap),
+          top: Math.max(8, r.top + 8),
+          width,
+        });
+      }
+    }
+    updatePos();
+    const h = () => updatePos();
+    window.addEventListener("resize", h);
+    window.addEventListener("scroll", h, { passive: true });
+    return () => {
+      window.removeEventListener("resize", h);
+      window.removeEventListener("scroll", h);
+    };
+  }, [frameRef, side, width, gap]);
+  return pos;
+}
+
+function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
   const TOKEN_TO_CSS = {
     "banner.background": "--banner-bg",
     "banner.foreground": "--banner-fg",
@@ -87,54 +123,7 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
-  const [authState, setAuthState] = useState("checking");
-  const [password, setPassword] = useState("");
-  const [authError, setAuthError] = useState("");
-
-  const [pos, setPos] = useState({ left: 16, top: 16, width: 460 });
-  useEffect(() => {
-    function updatePos() {
-      const r = frameRef?.current?.getBoundingClientRect?.();
-      const width = 460,
-        gap = 12;
-      if (!r) return setPos({ left: 16, top: 16, width });
-      setPos({
-        left: Math.max(8, r.left - width - gap),
-        top: Math.max(8, r.top + 8),
-        width,
-      });
-    }
-    updatePos();
-    const h = () => updatePos();
-    window.addEventListener("resize", h);
-    window.addEventListener("scroll", h, { passive: true });
-    return () => {
-      window.removeEventListener("resize", h);
-      window.removeEventListener("scroll", h);
-    };
-  }, [frameRef]);
-
-  async function checkStatusAndMaybeLoad() {
-    try {
-      setAuthError("");
-      setAuthState("checking");
-      const res = await fetch(
-        `${apiBase}/themelab/status?bot_id=${encodeURIComponent(botId)}`,
-        { credentials: "include" }
-      );
-      if (res.status === 200) {
-        setAuthState("ok");
-        await load();
-      } else if (res.status === 401) setAuthState("need_password");
-      else if (res.status === 403) setAuthState("disabled");
-      else setAuthState("error");
-    } catch {
-      setAuthState("error");
-    }
-  }
-  useEffect(() => {
-    if (apiBase && botId) checkStatusAndMaybeLoad();
-  }, [apiBase, botId]); // eslint-disable-line
+  const pos = useFloatingPos(frameRef, "left", 460);
 
   async function load() {
     const res = await fetch(
@@ -158,6 +147,10 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
     });
     onVars && onVars(cssPatch);
   }
+
+  useEffect(() => {
+    if (sharedAuth.state === "ok") load();
+  }, [sharedAuth.state]); // eslint-disable-line
 
   function updateToken(tokenKey, value) {
     const v = value || "";
@@ -192,29 +185,8 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
   }
   async function doReset() {
     await load();
-    setMsg("Restored from database.");
+    setMsg("Restored.");
     setTimeout(() => setMsg(""), 1400);
-  }
-  async function doLogin(e) {
-    e?.preventDefault();
-    try {
-      setAuthError("");
-      const res = await fetch(`${apiBase}/themelab/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ bot_id: botId, password }),
-      });
-      const data = await res.json();
-      if (res.status === 200 && data?.ok) {
-        setAuthState("ok");
-        setPassword("");
-        await load();
-      } else if (res.status === 403) setAuthState("disabled");
-      else setAuthError("Invalid password.");
-    } catch {
-      setAuthError("Login failed.");
-    }
   }
 
   const groups = useMemo(() => {
@@ -250,39 +222,9 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
         boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
       }}
     >
-      <div className="text-base font-bold mb-2">ThemeLab</div>
+      <div className="text-base font-bold mb-2">ThemeLab Colors</div>
 
-      {authState === "checking" && (
-        <div className="text-sm text-gray-600">Checking access…</div>
-      )}
-      {authState === "disabled" && (
-        <div className="text-sm text-gray-600">
-          ThemeLab is disabled for this bot.
-        </div>
-      )}
-
-      {authState === "need_password" && (
-        <form onSubmit={doLogin} className="flex items-center gap-2">
-          <input
-            type="password"
-            placeholder="Enter ThemeLab password"
-            className="flex-1 rounded-[12px] border border-black/20 px-3 py-2"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          <button
-            type="submit"
-            className="px-3 py-2 rounded-[12px] bg-black text-white"
-          >
-            Unlock
-          </button>
-          {authError ? (
-            <div className="text-xs text-red-600 ml-2">{authError}</div>
-          ) : null}
-        </form>
-      )}
-
-      {authState === "ok" && (
+      {sharedAuth.state === "ok" ? (
         <>
           {SCREEN_ORDER.map(({ key, label }) => (
             <div key={key} className="mb-2">
@@ -336,15 +278,478 @@ function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
             </div>
           </div>
         </>
-      )}
-
-      {authState === "error" && (
-        <div className="text-sm text-red-600">Unable to verify access.</div>
+      ) : sharedAuth.state === "checking" ? (
+        <div className="text-sm text-gray-600">Checking access…</div>
+      ) : sharedAuth.state === "need_password" ? (
+        <div className="text-xs text-gray-600">
+          Enter password in Wording panel.
+        </div>
+      ) : sharedAuth.state === "disabled" ? (
+        <div className="text-xs text-gray-600">ThemeLab disabled.</div>
+      ) : (
+        <div className="text-xs text-red-600">Auth error.</div>
       )}
     </div>
   );
 }
-// ================== /ThemeLabInline ==================
+
+function ThemeLabWordingBox({ apiBase, botId, frameRef, sharedAuth }) {
+  const pos = useFloatingPos(frameRef, "right", 460);
+
+  const [loading, setLoading] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const [options, setOptions] = useState({
+    show_browse_demos: false,
+    show_browse_docs: false,
+    show_price_estimate: false,
+    show_schedule_meeting: false,
+    show_intro_video: false,
+    show_formfill: false,
+    intro_video_url: "",
+  });
+
+  const [messages, setMessages] = useState({
+    welcome_message: "",
+    pricing_intro: "",
+    pricing_outro: "",
+    pricing_custom_notice: "",
+  });
+  const [standardFields, setStandardFields] = useState([]);
+  const [editingKey, setEditingKey] = useState("");
+  const [draft, setDraft] = useState("");
+  const stashRef = useRef(null);
+
+  function markDirty() {
+    setDirty(true);
+  }
+
+  async function load() {
+    setLoading(true);
+    try {
+      const res = await fetch(
+        `${apiBase}/themelab/wording-options?bot_id=${encodeURIComponent(
+          botId
+        )}`,
+        { credentials: "include" }
+      );
+      const data = await res.json();
+      if (!data?.ok) throw new Error();
+      setOptions(data.options || {});
+      setMessages(data.messages || {});
+      setStandardFields(data.standard_fields || []);
+      stashRef.current = {
+        options: data.options || {},
+        messages: data.messages || {},
+        standard_fields: data.standard_fields || [],
+      };
+      setDirty(false);
+      setEditingKey("");
+      setDraft("");
+    } catch {
+      setMsg("Load failed.");
+      setTimeout(() => setMsg(""), 2000);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Auth + initial load
+  useEffect(() => {
+    if (sharedAuth.state === "ok") load();
+  }, [sharedAuth.state]); // eslint-disable-line
+
+  // Login handling (only done in wording panel)
+  const [password, setPassword] = useState("");
+  const [authError, setAuthError] = useState("");
+
+  async function doLogin(e) {
+    e?.preventDefault();
+    try {
+      setAuthError("");
+      const res = await fetch(`${apiBase}/themelab/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ bot_id: botId, password }),
+      });
+      const data = await res.json();
+      if (res.status === 200 && data?.ok) {
+        sharedAuth.set({ state: "ok" });
+        setPassword("");
+        await load();
+      } else if (res.status === 403) {
+        sharedAuth.set({ state: "disabled" });
+      } else {
+        setAuthError("Invalid password.");
+        sharedAuth.set({ state: "need_password" });
+      }
+    } catch {
+      setAuthError("Login failed.");
+      sharedAuth.set({ state: "error" });
+    }
+  }
+
+  function toggleOption(k) {
+    setOptions((prev) => {
+      const next = { ...prev, [k]: !prev[k] };
+      markDirty();
+      return next;
+    });
+  }
+
+  function toggleField(fk) {
+    setStandardFields((prev) =>
+      prev.map((f) =>
+        f.field_key === fk
+          ? { ...f, is_collected: !f.is_collected }
+          : f
+      )
+    );
+    markDirty();
+  }
+
+  const messageLabels = {
+    welcome_message: "Welcome",
+    pricing_intro: "Pricing Intro",
+    pricing_outro: "Pricing Outro",
+    pricing_custom_notice: "Custom Pricing",
+  };
+
+  function beginEdit(k) {
+    setEditingKey(k);
+    setDraft(messages[k] || "");
+  }
+  function applyDraft() {
+    if (!editingKey) return;
+    setMessages((prev) => ({ ...prev, [editingKey]: draft }));
+    setEditingKey("");
+    setDraft("");
+    markDirty();
+  }
+  function cancelEdit() {
+    setEditingKey("");
+    setDraft("");
+  }
+
+  async function doSave() {
+    try {
+      setSaving(true);
+      const payload = {
+        bot_id: botId,
+        options,
+        messages,
+        standard_fields: standardFields.map((f) => ({
+          field_key: f.field_key,
+          is_collected: !!f.is_collected,
+        })),
+      };
+      const res = await fetch(`${apiBase}/themelab/wording-options/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!data?.ok) throw new Error();
+      setMsg("Saved.");
+      setDirty(false);
+      stashRef.current = payload;
+      setTimeout(() => setMsg(""), 1500);
+    } catch {
+      setMsg("Save failed.");
+      setTimeout(() => setMsg(""), 2000);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function doReset() {
+    if (!stashRef.current) {
+      load();
+      return;
+    }
+    setOptions(stashRef.current.options || {});
+    setMessages(stashRef.current.messages || {});
+    setStandardFields(stashRef.current.standard_fields || []);
+    setEditingKey("");
+    setDraft("");
+    setDirty(false);
+    setMsg("Restored.");
+    setTimeout(() => setMsg(""), 1400);
+  }
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        left: pos.left,
+        top: pos.top,
+        width: pos.width,
+        maxHeight: "90vh",
+        overflowY: "auto",
+        background: "#fff",
+        border: "1px solid rgba(0,0,0,0.2)",
+        borderRadius: "12px",
+        padding: 14,
+        zIndex: 50,
+        boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+      }}
+    >
+      <div className="text-base font-bold mb-2">Wording &amp; Options</div>
+
+      {sharedAuth.state === "checking" && (
+        <div className="text-sm text-gray-600">Checking access…</div>
+      )}
+      {sharedAuth.state === "disabled" && (
+        <div className="text-sm text-gray-600">
+          ThemeLab is disabled for this bot.
+        </div>
+      )}
+      {sharedAuth.state === "need_password" && (
+        <form onSubmit={doLogin} className="flex items-center gap-2 mb-3">
+          <input
+            type="password"
+            placeholder="ThemeLab password"
+            className="flex-1 rounded-[12px] border border-black/30 px-3 py-2 text-sm"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <button
+            type="submit"
+            className="px-3 py-2 rounded-[12px] bg-black text-white text-sm"
+          >
+            Unlock
+          </button>
+          {authError ? (
+            <div className="text-xs text-red-600 ml-2">{authError}</div>
+          ) : null}
+        </form>
+      )}
+      {sharedAuth.state === "error" && (
+        <div className="text-sm text-red-600">Unable to verify access.</div>
+      )}
+
+      {sharedAuth.state === "ok" && (
+        <>
+          {loading && (
+            <div className="text-xs text-gray-500 mb-2">Loading…</div>
+          )}
+          <div className="grid grid-cols-2 gap-6 mb-3">
+            <div>
+              <div className="font-semibold text-sm mb-1">Thing to Show</div>
+              <div className="space-y-1">
+                {[
+                  ["show_browse_demos", "Browse Demos Tab"],
+                  ["show_browse_docs", "Browse Docs Tab"],
+                  ["show_price_estimate", "Price Estimate Tab"],
+                  ["show_schedule_meeting", "Schedule Meeting Tab"],
+                  ["show_intro_video", "Introduction Video"],
+                ].map(([k, label]) => (
+                  <label
+                    key={k}
+                    className="flex items-center justify-between text-xs gap-2 cursor-pointer"
+                  >
+                    <span>{label}</span>
+                    <input
+                      type="checkbox"
+                      checked={!!options[k]}
+                      onChange={() => toggleOption(k)}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="font-semibold text-sm mb-1">
+                Form Fill Options
+              </div>
+              <div className="space-y-1">
+                <label className="flex items-center justify-between text-xs gap-2 cursor-pointer">
+                  <span>Show Form Fill</span>
+                  <input
+                    type="checkbox"
+                    checked={!!options.show_formfill}
+                    onChange={() => toggleOption("show_formfill")}
+                  />
+                </label>
+                {standardFields.map((f) => (
+                  <label
+                    key={f.field_key}
+                    className="flex items-center justify-between text-xs gap-2 cursor-pointer"
+                  >
+                    <span>{f.label}</span>
+                    <input
+                      type="checkbox"
+                      checked={!!f.is_collected}
+                      onChange={() => toggleField(f.field_key)}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-2 font-semibold text-sm">Messages</div>
+          <div className="space-y-1 mb-3">
+            {Object.entries({
+              welcome_message: "Welcome",
+              pricing_intro: "Pricing Intro",
+              pricing_outro: "Pricing Outro",
+              pricing_custom_notice: "Custom Pricing",
+            }).map(([k, label]) => (
+              <div
+                key={k}
+                className={classNames(
+                  "flex items-center justify-between text-xs px-2 py-1 rounded cursor-pointer",
+                  editingKey === k
+                    ? "bg-black text-white"
+                    : "bg-gray-100 hover:bg-gray-200"
+                )}
+                onClick={() => beginEdit(k)}
+              >
+                <span>{label}</span>
+                <span className="opacity-70">
+                  {messages[k]
+                    ? messages[k].slice(0, 20) +
+                      (messages[k].length > 20 ? "…" : "")
+                    : "—"}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {editingKey && (
+            <div className="mb-3">
+              <textarea
+                rows={5}
+                className="w-full border border-black/30 rounded p-2 text-xs"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="Modify your message here"
+              />
+              <div className="flex items-center justify-end gap-2 mt-1">
+                <button
+                  onClick={cancelEdit}
+                  className="px-2 py-1 rounded bg-gray-200 text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={applyDraft}
+                  className="px-2 py-1 rounded bg-black text-white text-xs"
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="mb-3">
+            <label className="text-xs font-semibold block mb-1">
+              Intro Video URL
+            </label>
+            <input
+              type="text"
+              value={options.intro_video_url || ""}
+              onChange={(e) => {
+                setOptions((prev) => ({
+                  ...prev,
+                  intro_video_url: e.target.value,
+                }));
+                markDirty();
+              }}
+              className="w-full text-xs border border-black/30 rounded px-2 py-1"
+              placeholder="https://..."
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="text-xs text-gray-600">
+              {msg ||
+                (dirty ? "Unsaved changes" : saving ? "Saving…" : "")}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={doReset}
+                disabled={saving}
+                className="px-3 py-1 rounded-[12px] border border-black/20 bg-white text-xs"
+              >
+                Reset
+              </button>
+              <button
+                onClick={doSave}
+                disabled={saving || !dirty}
+                className={classNames(
+                  "px-3 py-1 rounded-[12px] text-xs",
+                  dirty
+                    ? "bg-black text-white"
+                    : "bg-gray-300 text-gray-600 cursor-not-allowed"
+                )}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ThemeLabPanels({ apiBase, botId, frameRef, onVars }) {
+  const [authState, setAuthState] = useState("checking");
+
+  // Initial status check
+  useEffect(() => {
+    let cancel = false;
+    async function check() {
+      try {
+        setAuthState("checking");
+        const res = await fetch(
+          `${apiBase}/themelab/status?bot_id=${encodeURIComponent(botId)}`,
+          { credentials: "include" }
+        );
+        if (cancel) return;
+        if (res.status === 200) setAuthState("ok");
+        else if (res.status === 401) setAuthState("need_password");
+        else if (res.status === 403) setAuthState("disabled");
+        else setAuthState("error");
+      } catch {
+        if (!cancel) setAuthState("error");
+      }
+    }
+    check();
+    return () => {
+      cancel = true;
+    };
+  }, [apiBase, botId]);
+
+  const sharedAuth = {
+    state: authState,
+    set: (s) => setAuthState(s.state),
+  };
+
+  return (
+    <>
+      <ThemeLabColorBox
+        apiBase={apiBase}
+        botId={botId}
+        frameRef={frameRef}
+        onVars={onVars}
+        sharedAuth={sharedAuth}
+      />
+      <ThemeLabWordingBox
+        apiBase={apiBase}
+        botId={botId}
+        frameRef={frameRef}
+        sharedAuth={sharedAuth}
+      />
+    </>
+  );
+}
 
 /* ================== Pricing UI Small Components ================== */
 
@@ -491,7 +896,7 @@ function EstimateCard({ estimate, outroText }) {
   );
 }
 
-/* ================== /Pricing UI Components ================== */
+/* ================== MAIN COMPONENT ================== */
 
 export default function Welcome() {
   const apiBase =
@@ -518,8 +923,7 @@ export default function Welcome() {
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [fatal, setFatal] = useState("");
 
-  // Modes now include 'price'
-  // 'ask' | 'browse' | 'docs' | 'meeting' | 'formfill' | 'price'
+  // Modes: 'ask' | 'browse' | 'docs' | 'meeting' | 'formfill' | 'price'
   const [mode, setMode] = useState("ask");
 
   // Q&A state
@@ -531,6 +935,7 @@ export default function Welcome() {
   // Recommendations / browse state
   const [items, setItems] = useState([]);
   const [browseItems, setBrowseItems] = useState([]);
+  the browse docs usage
   const [browseDocs, setBrowseDocs] = useState([]);
   const [selected, setSelected] = useState(null);
 
@@ -597,7 +1002,7 @@ export default function Welcome() {
     } catch {}
   }, [FORM_KEY]);
 
-  // ---------- Pricing State ----------
+  // Pricing state
   const [pricingCopy, setPricingCopy] = useState({
     intro: "",
     outro: "",
@@ -641,8 +1046,8 @@ export default function Welcome() {
         const id = data?.ok ? data?.bot?.id : null;
 
         if (data?.ok) {
-            setVisitorId(data.visitor_id || "");
-            setSessionId(data.session_id || "");
+          setVisitorId(data.visitor_id || "");
+          setSessionId(data.session_id || "");
         }
 
         const b = data?.ok ? data?.bot : null;
@@ -996,11 +1401,11 @@ export default function Welcome() {
       setBrowseDocs(
         src.map((it) => ({
           id: it.id ?? it.value ?? it.url ?? it.title,
-            title: it.title ?? it.button_title ?? it.label ?? "",
-            url: it.url ?? it.value ?? it.button_value ?? "",
-            description:
-              it.description ?? it.summary ?? it.functions_text ?? "",
-          }))
+          title: it.title ?? it.button_title ?? it.label ?? "",
+          url: it.url ?? it.value ?? it.button_value ?? "",
+          description:
+            it.description ?? it.summary ?? it.functions_text ?? "",
+        }))
       );
       requestAnimationFrame(() =>
         contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
@@ -1035,13 +1440,13 @@ export default function Welcome() {
       ) {
         try {
           const base = ag.calendar_link || "";
-          const withQS = `${base}${
-            base.includes("?") ? "&" : "?"
-          }session_id=${encodeURIComponent(
-            sessionId || ""
-          )}&visitor_id=${encodeURIComponent(
-            visitorId || ""
-          )}&bot_id=${encodeURIComponent(botId || "")}`;
+            const withQS = `${base}${
+              base.includes("?") ? "&" : "?"
+            }session_id=${encodeURIComponent(
+              sessionId || ""
+            )}&visitor_id=${encodeURIComponent(
+              visitorId || ""
+            )}&bot_id=${encodeURIComponent(botId || "")}`;
           window.open(withQS, "_blank", "noopener,noreferrer");
         } catch {}
       }
@@ -1057,7 +1462,6 @@ export default function Welcome() {
     await _openMeeting();
   }
 
-  // ----- Price Mode open (gated) -----
   function _openPrice() {
     if (!botId) return;
     setMode("price");
@@ -1119,8 +1523,7 @@ export default function Welcome() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  // ---------- Pricing Effects ----------
-  // Load pricing questions on entering price mode
+  // Pricing effects
   useEffect(() => {
     if (mode !== "price" || !botId) return;
     let cancel = false;
@@ -1151,7 +1554,6 @@ export default function Welcome() {
     };
   }, [mode, botId, apiBase]);
 
-  // Compute estimate when all required answered
   useEffect(() => {
     const haveAll = (() => {
       if (!priceQuestions.length) return false;
@@ -1224,7 +1626,6 @@ export default function Welcome() {
     visitorId,
   ]);
 
-  // Pricing option selection
   function handlePickPriceOption(q, opt) {
     const isMulti = String(q?.type || "").toLowerCase().includes("multi");
     setPriceAnswers((prev) => {
@@ -1240,7 +1641,6 @@ export default function Welcome() {
     });
   }
 
-  // Next unanswered pricing question
   const nextPriceQuestion = useMemo(() => {
     if (!priceQuestions.length) return null;
     for (const q of priceQuestions) {
@@ -1256,7 +1656,6 @@ export default function Welcome() {
     return null;
   }, [priceQuestions, priceAnswers]);
 
-  // Mirror lines
   const mirrorLines = useMemo(() => {
     const labelFor = (q_key) => {
       const q = priceQuestions.find((qq) => qq.q_key === q_key);
@@ -1336,7 +1735,6 @@ export default function Welcome() {
     return lines;
   }, [priceEstimate, priceQuestions, priceAnswers]);
 
-  // Tabs
   const tabs = useMemo(() => {
     const out = [];
     if (tabsEnabled.demos)
@@ -1412,7 +1810,6 @@ export default function Welcome() {
       : []
     : listSource;
 
-  // Ask bar visibility: hide during price questionnaire until estimate (parity with legacy)
   const showAskBottom = mode !== "price" || !!priceEstimate;
 
   return (
@@ -1778,20 +2175,23 @@ export default function Welcome() {
       </div>
 
       {themeLabOn && botId ? (
-        <ThemeLabInline
+        <ThemeLabPanels
           apiBase={apiBase}
-            botId={botId}
-            frameRef={contentRef}
-            onVars={(varsUpdate) => {
-              if (typeof varsUpdate === "function") {
-                setPickerVars((prev) => {
-                  const produced = varsUpdate(prev) || {};
-                  return { ...prev, ...produced };
-                });
-              } else {
-                setPickerVars((prev) => ({ ...prev, ...(varsUpdate || {}) }));
-              }
-            }}
+          botId={botId}
+          frameRef={contentRef}
+          onVars={(varsUpdate) => {
+            if (typeof varsUpdate === "function") {
+              setPickerVars((prev) => {
+                const produced = varsUpdate(prev) || {};
+                return { ...prev, ...produced };
+              });
+            } else {
+              setPickerVars((prev) => ({
+                ...prev,
+                ...(varsUpdate || {}),
+              }));
+            }
+          }}
         />
       ) : null}
     </div>
