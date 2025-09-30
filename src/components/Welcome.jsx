@@ -1032,6 +1032,12 @@ function EstimateCard({ estimate, outroText }) {
   );
 }
 
+// Add near other helpers:
+function maybePrefillFirstQuestion(firstQ) {
+  if (!firstQ) return;
+  setInput((curr) => (curr.trim().length === 0 ? firstQ : curr));
+}
+
 /* ================== MAIN COMPONENT ================== */
 export default function Welcome() {
   const apiBase =
@@ -1181,7 +1187,7 @@ export default function Welcome() {
         const b = data?.ok ? data?.bot : null;
         if (b) {
           setResponseText(b.welcome_message || "");
-          setFirstQuestionPlaceholder(b.first_question || "");
+          maybePrefillFirstQuestion(b.first_question || "");
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
           setTabsEnabled((prev) => ({
@@ -1230,7 +1236,7 @@ export default function Welcome() {
         const b = data?.ok ? data?.bot : null;
         if (b) {
           setResponseText(b.welcome_message || "");
-          setFirstQuestionPlaceholder(b.first_question || "");
+         maybePrefillFirstQuestion(b.first_question || "");
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
           setTabsEnabled((prev) => ({
@@ -1274,7 +1280,7 @@ export default function Welcome() {
         const b = data?.ok ? data?.bot : null;
         if (b) {
           setResponseText(b.welcome_message || "");
-          setFirstQuestionPlaceholder(b.first_question || "");
+          maybePrefillFirstQuestion(b.first_question || "");
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
           setTabsEnabled((prev) => ({
