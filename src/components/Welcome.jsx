@@ -1,19 +1,20 @@
-/* Welcome.jsx — Full replacement
+/* Welcome.jsx — Full Replacement
  *
- * Features:
- *  - Ask assistant + RAG + demo/doc recommendations
- *  - Browse Demos / Browse Documents / Schedule Meeting / Price Estimate tabs
- *  - Form Fill gating (configurable via bots_v2 + ThemeLab panel)
- *  - ThemeLab side panels (Colors + Wording & Options) with:
- *        * Token (color) editing
- *        * Show/Hide toggles
- *        * Form Fill collect/required toggles
- *        * Message editing (welcome/pricing copy)
- *        * Intro video URL
- *  - Header token fallback for ThemeLab auth (3P cookie blocking resilient)
- *  - first_question placeholder support
- *  - Live gating updates from ThemeLab (no reload)
- *  - Price Estimate flow with mirror + baseline/product + custom tier handling
+ * Key Updates (2025-09-30):
+ *  - Removed persona logic (server now uses perspective only; not handled here).
+ *  - first_question now PREFILLS the input (not a placeholder); user can hit Send immediately.
+ *  - Ask input bar always visible in every mode except during the form-fill gate.
+ *  - Pricing mode no longer hides the ask bar.
+ *  - Cleaned previous placeholder-based logic; removed firstQuestionPlaceholder state.
+ *  - Integrated with updated AskInputBar (separate component) that uses --send-color and supports resize.
+ *
+ * Core Features:
+ *  - Ask assistant (RAG) + recommended demos/documents.
+ *  - Browse Demos / Browse Documents / Schedule Meeting / Price Estimate tabs.
+ *  - Form Fill gating (bot-level + ThemeLab overrides).
+ *  - ThemeLab panels (Colors + Wording & Options) with live CSS token + copy + field controls.
+ *  - Intro video support.
+ *  - Pricing estimator (questions → mirror → estimate/custom flow).
  *
  * Environment variables:
  *  VITE_API_URL (API base)  | Fallback: https://demohal-app.onrender.com
@@ -199,7 +200,7 @@ function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
         `${apiBase}/brand/client-tokens/save`,
         {
           method: "POST",
-            headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ bot_id: botId, updates }),
         }
       );
@@ -640,7 +641,6 @@ function ThemeLabWordingBox({
           )}
 
           <div className="grid grid-cols-2 gap-6 mb-3">
-            {/* Left column: all primary feature toggles INCLUDING Show Form Fill */}
             <div>
               <div className="font-semibold text-sm mb-1">Things to Show</div>
               <div className="space-y-1">
@@ -666,8 +666,6 @@ function ThemeLabWordingBox({
                 ))}
               </div>
             </div>
-
-            {/* Right column: field-level controls */}
             <div>
               <div className="font-semibold text-sm mb-1">
                 Form Fill Fields
@@ -702,7 +700,6 @@ function ThemeLabWordingBox({
             </div>
           </div>
 
-          {/* Messages */}
           <div className="mb-2 font-semibold text-sm">Messages</div>
           <div className="space-y-1 mb-3">
             {Object.entries(messageLabels).map(([k, label]) => {
@@ -739,7 +736,18 @@ function ThemeLabWordingBox({
                     )}
                     title="Edit"
                   >
-                    {PencilIcon}
+                    <svg
+                      className="w-3.5 h-3.5"
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M3 14.5V17h2.5l9.1-9.1-2.5-2.5L3 14.5z" />
+                      <path d="M12.3 5.4l2.6 2.6 1.3-1.3a1.8 1.8 0 0 0 0-2.6l-.7-.7a1.8 1.8 0 0 0-2.6 0l-1.3 1.3z" />
+                    </svg>
                   </button>
                 </div>
               );
@@ -1032,12 +1040,6 @@ function EstimateCard({ estimate, outroText }) {
   );
 }
 
-// Add near other helpers:
-function maybePrefillFirstQuestion(firstQ) {
-  if (!firstQ) return;
-  setInput((curr) => (curr.trim().length === 0 ? firstQ : curr));
-}
-
 /* ================== MAIN COMPONENT ================== */
 export default function Welcome() {
   const apiBase =
@@ -1070,9 +1072,6 @@ export default function Welcome() {
   const [lastQuestion, setLastQuestion] = useState("");
   const [responseText, setResponseText] = useState("");
   const [loading, setLoading] = useState(false);
-
-  // Placeholder for first question
-  const [firstQuestionPlaceholder, setFirstQuestionPlaceholder] = useState("");
 
   // Demo/Doc recommendation lists
   const [items, setItems] = useState([]);
@@ -1150,6 +1149,24 @@ export default function Welcome() {
   const [priceEstimate, setPriceEstimate] = useState(null);
   const [priceBusy, setPriceBusy] = useState(false);
   const [priceErr, setPriceErr] = useState("");
+
+  // Intro video
+  const [introVideoUrl, setIntroVideoUrl] = useState("");
+  const [showIntroVideo, setShowIntroVideo] = useState(false);
+
+  // Track first_question prefill
+  const firstPrefillDone = useRef(false);
+
+  function maybePrefillFirstQuestion(firstQ) {
+    if (!firstQ || firstPrefillDone.current) return;
+    setInput((curr) => {
+      if (curr.trim().length === 0) {
+        firstPrefillDone.current = true;
+        return firstQ;
+      }
+      return curr;
+    });
+  }
 
   // Identity helpers
   const withIdsBody = (obj) => ({
@@ -1236,7 +1253,7 @@ export default function Welcome() {
         const b = data?.ok ? data?.bot : null;
         if (b) {
           setResponseText(b.welcome_message || "");
-         maybePrefillFirstQuestion(b.first_question || "");
+          maybePrefillFirstQuestion(b.first_question || "");
           setIntroVideoUrl(b.intro_video_url || "");
           setShowIntroVideo(!!b.show_intro_video);
           setTabsEnabled((prev) => ({
@@ -1306,11 +1323,6 @@ export default function Welcome() {
     };
   }, [botIdFromUrl, apiBase]);
 
-  /*  Remove placeholder after first question is asked */
-  useEffect(() => {
-    if (lastQuestion) setFirstQuestionPlaceholder("");
-  }, [lastQuestion]);
-
   useEffect(() => {
     if (!botId && !alias && !brandReady) setBrandReady(true);
   }, [botId, alias, brandReady]);
@@ -1320,9 +1332,6 @@ export default function Welcome() {
     const th = (qs.get("themelab") || "").trim().toLowerCase();
     return th === "1" || th === "true";
   }, []);
-
-  const [introVideoUrl, setIntroVideoUrl] = useState("");
-  const [showIntroVideo, setShowIntroVideo] = useState(false);
 
   /* Brand (CSS tokens + logos) */
   useEffect(() => {
@@ -1356,7 +1365,7 @@ export default function Welcome() {
     };
   }, [botId, apiBase]);
 
-  /* Formfill configuration retrieval (bots_v2.formfill_fields) */
+  /* Formfill configuration */
   async function fetchFormfillConfigBy(botIdArg, aliasArg) {
     try {
       const params = new URLSearchParams();
@@ -1389,7 +1398,7 @@ export default function Welcome() {
     if (botId && visitorId) fetchFormfillConfigBy(botId, null);
   }, [visitorId, botId]);
 
-  /* Active/gatable fields (collected or standard) */
+  /* Active form fields */
   const activeFormFields = useMemo(
     () =>
       (Array.isArray(formFields) ? formFields : []).filter(
@@ -1398,7 +1407,7 @@ export default function Welcome() {
     [formFields]
   );
 
-  /* Defaults merged with visitor & URL-supplied overrides */
+  /* Visitor defaults + URL overrides */
   const formDefaults = useMemo(() => {
     const o = { ...(visitorDefaults || {}) };
     activeFormFields.forEach((f) => {
@@ -1409,7 +1418,7 @@ export default function Welcome() {
     return o;
   }, [activeFormFields, visitorDefaults, urlParams]);
 
-  /* Sending a question (with form gating) */
+  /* Send a question */
   async function doSend(outgoing) {
     setMode("ask");
     setLastQuestion(outgoing);
@@ -1476,7 +1485,7 @@ export default function Welcome() {
     await doSend(outgoing);
   }
 
-  /* Demo selection normalization */
+  /* Demo selection */
   async function normalizeAndSelectDemo(item) {
     try {
       const r = await fetch(`${apiBase}/render-video-iframe`, {
@@ -1505,7 +1514,7 @@ export default function Welcome() {
     }
   }
 
-  /* Tab handlers (Browse / Docs / Meeting / Price) */
+  /* Tabs */
   async function _openBrowse() {
     if (!botId) return;
     setMode("browse");
@@ -1623,7 +1632,7 @@ export default function Welcome() {
     _openPrice();
   }
 
-  /* Calendly event listener */
+  /* Calendly listener */
   useEffect(() => {
     if (mode !== "meeting" || !botId || !sessionId || !visitorId) return;
     function onCalendlyMessage(e) {
@@ -1666,7 +1675,7 @@ export default function Welcome() {
     return () => window.removeEventListener("message", onCalendlyMessage);
   }, [mode, botId, sessionId, visitorId, apiBase]);
 
-  /* Autosize ask box */
+  /* Autosize fallback */
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
@@ -1674,7 +1683,7 @@ export default function Welcome() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  /* Pricing: load questions on entering price tab */
+  /* Pricing: load questions */
   useEffect(() => {
     if (mode !== "price" || !botId) return;
     let cancel = false;
@@ -1711,7 +1720,7 @@ export default function Welcome() {
     };
   }, [mode, botId, apiBase]);
 
-  /* Pricing: compute estimate when answers complete */
+  /* Pricing: compute estimate */
   useEffect(() => {
     const haveAll = (() => {
       if (!priceQuestions.length) return false;
@@ -1968,14 +1977,13 @@ export default function Welcome() {
       : []
     : listSource;
 
-  const showAskBottom = mode !== "price" || !!priceEstimate;
+  // Always show ask bar except during formfill
+  const showAskBottom = mode !== "formfill";
 
-  /* Live updates from ThemeLab panel */
   function handleThemeLabFormfillChange({ show_formfill, standard_fields }) {
     setShowFormfill(!!show_formfill);
     if (Array.isArray(standard_fields)) {
       setFormFields((prev) => {
-        // Merge collected/required flags into existing formFields
         const byKey = {};
         prev.forEach((f) => {
           if (f?.field_key) byKey[f.field_key] = { ...f };
@@ -2032,7 +2040,7 @@ export default function Welcome() {
           <TabsNav mode={mode} tabs={tabs} />
         </div>
 
-        {/* BODY */}
+        {/* Body */}
         <div
           ref={contentRef}
           className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto"
@@ -2345,18 +2353,14 @@ export default function Welcome() {
           )}
         </div>
 
-        {/* Ask Input Bar */}
-        {mode !== "formfill" && showAskBottom && (
+        {/* Ask Input Bar (visible except during formfill) */}
+        {showAskBottom && (
           <AskInputBar
             value={input}
             onChange={setInput}
             onSend={onSendClick}
             inputRef={inputRef}
-            placeholder={
-              !lastQuestion && !input.trim()
-                ? firstQuestionPlaceholder || ""
-                : ""
-            }
+            placeholder="Ask your question here"
           />
         )}
       </div>
