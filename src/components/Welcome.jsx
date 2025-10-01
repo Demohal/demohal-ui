@@ -272,7 +272,6 @@ function ThemeLabWordingBox({ apiBase, botId, frameRef, sharedAuth, onFormfillCh
         if(!f.field_key) return;
         mergeSynonymInto(map,f);
       });
-      // Normalize perspective options if exists
       if (map.has("perspective")) {
         const pf=map.get("perspective");
         pf.field_type="single_select";
@@ -1199,14 +1198,14 @@ export default function Welcome() {
         standard_fields.forEach(sf=>{
           if(!sf.field_key) return;
           const canonical=FIELD_SYNONYMS[sf.field_key]||sf.field_key;
-          if(!byKey[canonical]){
-            byKey[canonical]={
-              field_key:canonical,
-              label: CANON_LABELS[canonical] || canonical.replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase()),
-              field_type: canonical==="email"?"email":(canonical==="perspective"?"single_select":"text"),
-              options: canonical==="perspective"?PERSPECTIVE_OPTIONS:undefined,
-            };
-          }
+            if(!byKey[canonical]){
+              byKey[canonical]={
+                field_key:canonical,
+                label: CANON_LABELS[canonical] || canonical.replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase()),
+                field_type: canonical==="email"?"email":(canonical==="perspective"?"single_select":"text"),
+                options: canonical==="perspective"?PERSPECTIVE_OPTIONS:undefined,
+              };
+            }
           byKey[canonical].is_collected=!!sf.is_collected;
           byKey[canonical].is_required=!!sf.is_required;
         });
@@ -1426,11 +1425,12 @@ export default function Welcome() {
           apiBase={apiBase}
           botId={botId}
           frameRef={contentRef}
-            onVars={(varsUpdate)=>{
+          onVars={(varsUpdate)=>{
             if(typeof varsUpdate==="function"){
               setPickerVars(prev=>({...prev,...(varsUpdate(prev)||{})}));
             } else {
-              setPickerVars(prev=>({...prev,(varsUpdate||{})}));
+              // FIX: added spread for varsUpdate object
+              setPickerVars(prev=>({...prev,...(varsUpdate||{})}));
             }
           }}
           onFormfillChange={handleThemeLabFormfillChange}
