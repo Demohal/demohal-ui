@@ -27,10 +27,10 @@ export default function AskInputBar({
 
   // Layout constants
   const MAX_AUTO_LINES = 3;
-  const LINE_HEIGHT = 20; // px
-  const BUTTON_SIZE = 26;
+  const LINE_HEIGHT = 25; // px
+  const BUTTON_SIZE = 30;
   const ICON_SIZE = 14; // enlarged arrow
-  const BUTTON_RIGHT_GAP = 3; // px from question box right edge
+  const BUTTON_RIGHT_GAP = 8; // px from question box right edge
   const EXTRA_WIDTH = 3; // total width increase
   const HALF_EXTRA = EXTRA_WIDTH / 2; // symmetrical offset
 
