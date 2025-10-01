@@ -1,15 +1,17 @@
 import React, { useEffect, useRef } from "react";
 
 /**
- * AskInputBar — FULL REPLACEMENT (Micro‑adjusted)
+ * AskInputBar — FULL REPLACEMENT (Spec tweaks)
  *
- * Changes in this revision (per requested visual adjustments):
- *  - Added a lighter hairline divider (#d1d5db) via explicit border color reference.
- *  - Increased top padding (pt-4) and bottom padding (pb-4) for balanced vertical breathing room.
- *  - Textarea right padding increased to pr-[100px] to give more space between text and send button + native resize grip.
- *  - Send button: precise 26x26px, arrow icon 11x11px, moved slightly further right (right-8) while preserving resize handle clearance.
- *  - Ensured symmetric padding around the bar and consistent field height.
- *  - Kept visually consistent (button never “dulls” when disabled; only pointer events blocked).
+ * User requests implemented:
+ * 1. Larger white arrow inside green button (icon size increased from 11px → 14px).
+ * 2. Increase starting width of the question box by exactly 3px (input bar widened by 3px using a wrapper width calc and negative horizontal offset).
+ * 3. Send button vertically centered in the (now wider) question box and positioned 3px from the right inner boundary of the question box.
+ *
+ * Notes:
+ * - Native vertical resize remains enabled.
+ * - Button remains visually active (no dulling); blank submission still prevented logically.
+ * - Right padding inside the textarea updated so typed text does not overlap the button.
  */
 
 export default function AskInputBar({
@@ -27,7 +29,10 @@ export default function AskInputBar({
   const MAX_AUTO_LINES = 3;
   const LINE_HEIGHT = 20; // px
   const BUTTON_SIZE = 26;
-  const ICON_SIZE = 11;
+  const ICON_SIZE = 14; // enlarged arrow
+  const BUTTON_RIGHT_GAP = 3; // px from question box right edge
+  const EXTRA_WIDTH = 3; // total width increase
+  const HALF_EXTRA = EXTRA_WIDTH / 2; // symmetrical offset
 
   // Auto-grow (up to MAX_AUTO_LINES). After that user scrolls / can resize manually.
   useEffect(() => {
@@ -63,7 +68,15 @@ export default function AskInputBar({
         transition: "background .2s",
       }}
     >
-      <div className="relative w-full">
+      {/* Wrapper widened by +3px and centered by negative half-margins */}
+      <div
+        className="relative"
+        style={{
+            width: `calc(100% + ${EXTRA_WIDTH}px)`,
+          marginLeft: `-${HALF_EXTRA}px`,
+          marginRight: `-${HALF_EXTRA}px`,
+        }}
+      >
         <textarea
           ref={ref}
           rows={1}
@@ -80,7 +93,7 @@ export default function AskInputBar({
             border border-gray-300
             rounded-[14px]
             px-4
-            pr-[100px]
+            pr-[72px]             /* space for button + gap + text clearance */
             py-2
             leading-5
             placeholder:text-gray-500
@@ -92,7 +105,7 @@ export default function AskInputBar({
           style={{ lineHeight: LINE_HEIGHT + "px" }}
         />
 
-        {/* Send button */}
+        {/* Send button (centered vertically, fixed gap from right edge) */}
         <button
           type="button"
           aria-label="Send"
@@ -103,7 +116,6 @@ export default function AskInputBar({
             absolute
             top-1/2
             -translate-y-1/2
-            right-8
             flex items-center justify-center
             rounded-full
             shadow
@@ -113,6 +125,7 @@ export default function AskInputBar({
           style={{
             width: BUTTON_SIZE,
             height: BUTTON_SIZE,
+            right: BUTTON_RIGHT_GAP,
             background: "var(--send-color,#059669)",
             color: "#ffffff",
             cursor: canSend ? "pointer" : "not-allowed",
