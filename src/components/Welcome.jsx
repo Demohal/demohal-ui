@@ -1,3 +1,17 @@
+// Welcome.jsx — FULL REPLACEMENT (Spec Update: unified form fill management)
+// CHANGES (Spec Rev):
+//  1. All form fill fields INCLUDING perspective, first_name, last_name, email appear in ThemeLab list.
+//  2. Each has is_collected & is_required toggles (no is_standard logic).
+//  3. Dynamic hide/show: if an admin unchecks is_collected the field disappears from the personalization form.
+//  4. Perspective is now treated exactly like any other field.
+//  5. Removed special ALWAYS_FORM_FIELDS enforcement — core fields are configurable.
+//  6. FormFillCard renders only fields whose is_collected === true (handled inside component).
+//  7. Wording panel updated to list every field (no filtering).
+//  8. Active form fields logic simplified.
+//
+// NOTE: Server endpoints must deliver fields (formfill_fields) including perspective & core fields.
+//       See corresponding routes.py function patches for backend changes.
+//
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import fallbackLogo from "../assets/logo.png";
@@ -43,12 +57,6 @@ const PERSPECTIVE_OPTIONS = [
   { key: "user", label: "User / Functional" },
   { key: "customer", label: "Customer / Market" },
   { key: "compliance", label: "Governance / Compliance" },
-];
-
-const ALWAYS_FORM_FIELDS = [
-  { field_key: "first_name", label: "First Name" },
-  { field_key: "last_name", label: "Last Name" },
-  { field_key: "email", label: "Email" },
 ];
 
 const DEMO_PRUNE_MAX = 6;
@@ -197,13 +205,11 @@ function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
       const data = await res.json();
       const toks = (data?.ok ? data.tokens : []) || [];
       setRows(toks);
-
       const v = {};
       toks.forEach((t) => {
         v[t.token_key] = t.value || "#000000";
       });
       setValues(v);
-
       const cssPatch = {};
       toks.forEach((t) => {
         const cssVar = TOKEN_TO_CSS[t.token_key];
@@ -363,7 +369,7 @@ function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
 }
 
 /* -----------------------------------------------------------------------------
-   ThemeLab Wording Panel (with live Apply)
+   ThemeLab Wording Panel (Spec Rev)
 ----------------------------------------------------------------------------- */
 function ThemeLabWordingBox({
   apiBase,
@@ -411,10 +417,6 @@ function ThemeLabWordingBox({
     pricing_custom_notice: "Custom Pricing",
   };
 
-  const ALWAYS_FIELD_KEYS = new Set(
-    ALWAYS_FORM_FIELDS.map((f) => f.field_key.toLowerCase())
-  );
-
   function fetchWithToken(url, init = {}) {
     const headers = { ...(init.headers || {}) };
     if (sharedAuth.token) headers["X-ThemeLab-Token"] = sharedAuth.token;
@@ -425,16 +427,13 @@ function ThemeLabWordingBox({
     setDirty(true);
   }
 
-  function propagateFormfill(
-    show = options.show_formfill,
-    fields = standardFields
-  ) {
+  function propagateFormfill(show = options.show_formfill, fields = standardFields) {
     onFormfillChange &&
       onFormfillChange({
         show_formfill: show,
         standard_fields: fields.map((f) => ({
           field_key: f.field_key,
-            is_collected: !!f.is_collected,
+          is_collected: !!f.is_collected,
           is_required: !!f.is_required,
         })),
       });
@@ -524,8 +523,8 @@ function ThemeLabWordingBox({
       return next;
     });
   }
+
   function toggleCollected(fk) {
-    if (ALWAYS_FIELD_KEYS.has(String(fk).toLowerCase())) return;
     setStandardFields((prev) => {
       const next = prev.map((f) =>
         f.field_key === fk ? { ...f, is_collected: !f.is_collected } : f
@@ -535,8 +534,8 @@ function ThemeLabWordingBox({
       return next;
     });
   }
+
   function toggleRequired(fk) {
-    if (ALWAYS_FIELD_KEYS.has(String(fk).toLowerCase())) return;
     setStandardFields((prev) => {
       const next = prev.map((f) =>
         f.field_key === fk ? { ...f, is_required: !f.is_required } : f
@@ -681,7 +680,7 @@ function ThemeLabWordingBox({
             <div className="text-xs text-gray-500 mb-2">Loading…</div>
           )}
           <div className="grid grid-cols-2 gap-6 mb-3">
-            {/* Options */}
+            {/* Feature Toggles */}
             <div>
               <div className="font-semibold text-sm mb-1">Things to Show</div>
               <div className="space-y-1">
@@ -707,51 +706,48 @@ function ThemeLabWordingBox({
                 ))}
               </div>
             </div>
-            {/* Form Fill Fields (excluding always-required) */}
+            {/* Form Fill Fields (ALL) */}
             <div>
               <div className="font-semibold text-sm mb-1">
                 Form Fill Fields
               </div>
               <div className="space-y-1">
-                {standardFields
-                  .filter(
-                    (f) =>
-                      f?.field_key &&
-                      !ALWAYS_FIELD_KEYS.has(f.field_key.toLowerCase())
-                  )
-                  .map((f) => (
-                    <div
-                      key={f.field_key}
-                      className="flex items-center justify-between text-xs gap-2"
-                    >
-                      <span className="flex-1">{f.label}</span>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          title="Collect"
-                          checked={!!f.is_collected}
-                          onChange={() => toggleCollected(f.field_key)}
-                        />
-                        <span className="text-[10px] uppercase tracking-wide opacity-70">
-                          reqd
-                        </span>
-                        <input
-                          type="checkbox"
-                          title="Required"
-                          checked={!!f.is_required}
-                          onChange={() => toggleRequired(f.field_key)}
-                        />
-                      </div>
+                {standardFields.map((f) => (
+                  <div
+                    key={f.field_key}
+                    className="flex items-center justify-between text-xs gap-2"
+                  >
+                    <span className="flex-1 truncate">{f.label || f.field_key}</span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        title="Collect"
+                        checked={!!f.is_collected}
+                        onChange={() => toggleCollected(f.field_key)}
+                      />
+                      <span className="text-[10px] uppercase tracking-wide opacity-70">
+                        reqd
+                      </span>
+                      <input
+                        type="checkbox"
+                        title="Required"
+                        checked={!!f.is_required}
+                        onChange={() => toggleRequired(f.field_key)}
+                      />
                     </div>
-                  ))}
-                <div className="text-[10px] italic text-gray-500 pt-1">
-                  First Name, Last Name, and Email are always collected & required.
-                </div>
+                  </div>
+                ))}
+                {standardFields.length === 0 && (
+                  <div className="text-[10px] italic text-gray-500">
+                    No fields defined.
+                  </div>
+                )}
               </div>
             </div>
           </div>
+
           {/* Messages */}
-            <div className="mb-2 font-semibold text-sm">Messages</div>
+          <div className="mb-2 font-semibold text-sm">Messages</div>
           <div className="space-y-1 mb-3">
             {Object.entries(messageLabels).map(([k, label]) => {
               const active = editingKey === k;
@@ -955,7 +951,7 @@ function ThemeLabPanels({
 }
 
 /* -----------------------------------------------------------------------------
-   Pricing Helpers
+   Pricing Helpers (unchanged)
 ----------------------------------------------------------------------------- */
 function normalizeOptions(q) {
   const raw = q?.options ?? q?.choices ?? q?.buttons ?? q?.values ?? [];
@@ -1112,14 +1108,12 @@ export default function Welcome() {
 
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
 
-  // ORIGINAL SIMPLE THEMELAB ACTIVATION (restored)
   const themeLabOn = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     const th = (qs.get("themelab") || "").trim().toLowerCase();
     return th === "1" || th === "true";
   }, []);
 
-  /* --- State declarations (unchanged content) --- */
   const urlParams = useMemo(() => {
     const q = new URLSearchParams(window.location.search);
     const o = {};
@@ -1169,6 +1163,7 @@ export default function Welcome() {
     meeting: false,
     price: false,
   });
+
   const [showFormfill, setShowFormfill] = useState(true);
   const [formFields, setFormFields] = useState([]);
   const [visitorDefaults, setVisitorDefaults] = useState({});
@@ -1184,6 +1179,7 @@ export default function Welcome() {
       if (sessionStorage.getItem(FORM_KEY) === "1") setFormCompleted(true);
     } catch {}
   }, [FORM_KEY]);
+
   const [pricingCopy, setPricingCopy] = useState({
     intro: "",
     outro: "",
@@ -1211,6 +1207,7 @@ export default function Welcome() {
   }
 
   function ensurePerspectiveField(incomingFields, incomingDefaults) {
+    // Now perspective should already be part; ensure options if present.
     let hasPerspective = false;
     const updated = (incomingFields || []).map((f) => {
       if (f.field_key === "perspective") {
@@ -1218,10 +1215,7 @@ export default function Welcome() {
         return {
           ...f,
           field_type: f.field_type || "single_select",
-          is_standard: true,
-          is_collected: true,
-          is_required: true,
-          options: PERSPECTIVE_OPTIONS,
+          options: f.options && f.options.length ? f.options : PERSPECTIVE_OPTIONS,
         };
       }
       return f;
@@ -1231,16 +1225,13 @@ export default function Welcome() {
         field_key: "perspective",
         label: "Perspective",
         field_type: "single_select",
-        is_standard: true,
+        options: PERSPECTIVE_OPTIONS,
         is_collected: true,
         is_required: true,
-        options: PERSPECTIVE_OPTIONS,
       });
     }
     const d = { ...(incomingDefaults || {}) };
-    d.perspective = d.perspective
-      ? String(d.perspective).toLowerCase()
-      : "general";
+    if (!d.perspective) d.perspective = "general";
     return { fields: updated, defaults: d };
   }
 
@@ -1287,7 +1278,6 @@ export default function Welcome() {
     } catch {}
   }
 
-  /* --- Bot / alias resolution & brand/theme loading (same logic as before) --- */
   useEffect(() => {
     if (botId || !alias) return;
     let cancel = false;
@@ -1308,7 +1298,7 @@ export default function Welcome() {
           setResponseText(b.welcome_message || "");
           maybePrefillFirstQuestion(b.first_question || "");
           setIntroVideoUrl(b.intro_video_url || "");
-          setShowIntroVideo(!!b.show_intro_video);
+            setShowIntroVideo(!!b.show_intro_video);
           setTabsEnabled({
             demos: !!b.show_browse_demos,
             docs: !!b.show_browse_docs,
@@ -1451,48 +1441,18 @@ export default function Welcome() {
     }
   }, [mode, visitorId, botId]);
 
+  // Active form fields: use entire formFields list (collected subset handled inside FormFillCard)
   const activeFormFields = useMemo(() => {
-    const byKey = new Map();
-    (Array.isArray(formFields) ? formFields : []).forEach((f) => {
-      if (f?.field_key) byKey.set(f.field_key.toLowerCase(), { ...f });
-    });
-    // Always inject required core fields
-    ALWAYS_FORM_FIELDS.forEach((core) => {
-      const k = core.field_key.toLowerCase();
-      const existing = byKey.get(k) || {};
-      byKey.set(k, {
-        ...existing,
-        field_key: core.field_key,
-        label: core.label,
-        is_standard: true,
-        is_collected: true,
-        is_required: true,
-        field_type:
-          existing.field_type || (core.field_key === "email" ? "email" : "text"),
-      });
-    });
-    // Ensure perspective
-    if (!byKey.has("perspective")) {
-      byKey.set("perspective", {
-        field_key: "perspective",
-        label: "Perspective",
-        field_type: "single_select",
-        is_standard: true,
-        is_collected: true,
-        is_required: true,
-        options: PERSPECTIVE_OPTIONS,
-      });
-    } else {
-      const pv = byKey.get("perspective");
-      byKey.set("perspective", {
-        ...pv,
-        field_type: "single_select",
-        is_collected: true,
-        is_required: true,
-        options: pv.options || PERSPECTIVE_OPTIONS,
-      });
-    }
-    return Array.from(byKey.values());
+    // Ensure perspective has options if present.
+    return (formFields || []).map((f) =>
+      f.field_key === "perspective"
+        ? {
+            ...f,
+            field_type: "single_select",
+            options: f.options && f.options.length ? f.options : PERSPECTIVE_OPTIONS,
+          }
+        : f
+    );
   }, [formFields]);
 
   const formDefaults = useMemo(() => {
@@ -2022,7 +1982,6 @@ export default function Welcome() {
     return lines;
   }, [priceEstimate, priceQuestions, priceAnswers]);
 
-  /* Tabs */
   const tabs = useMemo(() => {
     const out = [];
     out.push({
@@ -2053,7 +2012,6 @@ export default function Welcome() {
     return out;
   }, [tabsEnabled]);
 
-  /* Live wording updates */
   function handleLiveMessages(updated) {
     if (!updated || typeof updated !== "object") return;
     if ("welcome_message" in updated) {
@@ -2071,7 +2029,6 @@ export default function Welcome() {
     }));
   }
 
-  /* Failure or missing bot conditions */
   if (fatal) {
     return (
       <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
@@ -2129,17 +2086,29 @@ export default function Welcome() {
     if (Array.isArray(standard_fields)) {
       setFormFields((prev) => {
         const byKey = {};
+        // Keep existing metadata
         prev.forEach((f) => {
           if (f?.field_key) byKey[f.field_key] = { ...f };
         });
+        // Apply toggles (add if missing)
         standard_fields.forEach((sf) => {
-          if (sf.field_key && byKey[sf.field_key]) {
-            byKey[sf.field_key] = {
-              ...byKey[sf.field_key],
-              is_collected: sf.is_collected,
-              is_required: sf.is_required,
-            };
-          }
+          if (!sf.field_key) return;
+            if (!byKey[sf.field_key]) {
+              byKey[sf.field_key] = {
+                field_key: sf.field_key,
+                label: sf.field_key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+                field_type:
+                  sf.field_key === "email"
+                    ? "email"
+                    : sf.field_key === "perspective"
+                    ? "single_select"
+                    : "text",
+                options:
+                  sf.field_key === "perspective" ? PERSPECTIVE_OPTIONS : undefined,
+              };
+            }
+          byKey[sf.field_key].is_collected = !!sf.is_collected;
+          byKey[sf.field_key].is_required = !!sf.is_required;
         });
         return Object.values(byKey);
       });
@@ -2195,8 +2164,7 @@ export default function Welcome() {
           {(mode === "formfill" || mode === "personalize") ? (
             <div className="space-y-4">
               <div className="text-base font-semibold">
-                Update your information below (adjust Perspective or any other
-                details).
+                Update your information below.
               </div>
               <FormFillCard
                 fields={activeFormFields}
