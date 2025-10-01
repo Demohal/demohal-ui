@@ -1,9 +1,4 @@
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import fallbackLogo from "../assets/logo.png";
 
@@ -13,6 +8,9 @@ import DocIframe from "./DocIframe";
 import AskInputBar from "./AskInputBar";
 import FormFillCard from "./FormFillCard";
 
+/* --------------------------------------------------------------------------------
+   Constants & Helpers
+-------------------------------------------------------------------------------- */
 const DEFAULT_THEME_VARS = {
   "--banner-bg": "#000000",
   "--banner-fg": "#ffffff",
@@ -47,16 +45,16 @@ const PERSPECTIVE_OPTIONS = [
   { key: "compliance", label: "Governance / Compliance" },
 ];
 
-const DEMO_PRUNE_MAX = 6;
-const DEMO_STRONG_THRESHOLD = 2;
-const DEMO_STRONG_RATIO = 2.2;
-const DEMO_SECONDARY_KEEP = 2;
-
 const ALWAYS_FORM_FIELDS = [
   { field_key: "first_name", label: "First Name" },
   { field_key: "last_name", label: "Last Name" },
   { field_key: "email", label: "Email" },
 ];
+
+const DEMO_PRUNE_MAX = 6;
+const DEMO_STRONG_THRESHOLD = 2;
+const DEMO_STRONG_RATIO = 2.2;
+const DEMO_SECONDARY_KEEP = 2;
 
 const classNames = (...xs) => xs.filter(Boolean).join(" ");
 function inverseBW(hex) {
@@ -77,32 +75,33 @@ function scoreDemo(question, demo) {
       .toLowerCase()
       .match(/[a-z0-9]{3,}/g) || []
   );
-  const text = (
-    (demo.title || "") +
-    " " +
-    (demo.description || "")
-  )
-    .toLowerCase()
-    .match(/[a-z0-9]{3,}/g) || [];
-  const dTokens = new Set(text);
+  const textTokens =
+    (
+      (demo.title || "") +
+      " " +
+      (demo.description || "")
+    )
+      .toLowerCase()
+      .match(/[a-z0-9]{3,}/g) || [];
+  const dTokens = new Set(textTokens);
   let overlap = 0;
   qTokens.forEach((t) => {
-    if (dTokens.has(t)) overlap += 1;
+    if (dTokens.has(t)) overlap++;
   });
   return overlap;
 }
 
-function pruneDemoButtons(question, buttons) {
+function pruneDemoButtons(q, buttons) {
   if (!Array.isArray(buttons) || buttons.length <= 2) return buttons;
-  const scored = buttons.map((b) => ({ b, s: scoreDemo(question, b) }));
+  const scored = buttons.map((b) => ({ b, s: scoreDemo(q, b) }));
   scored.sort((a, b) => b.s - a.s);
-  const topScore = scored[0].s;
-  const secondScore = scored[1]?.s ?? 0;
-  if (topScore < DEMO_STRONG_THRESHOLD) {
+  const top = scored[0].s;
+  const second = scored[1]?.s ?? 0;
+  if (top < DEMO_STRONG_THRESHOLD) {
     return scored.slice(0, Math.min(DEMO_PRUNE_MAX, buttons.length)).map((x) => x.b);
   }
-  if (secondScore === 0 || topScore >= secondScore * DEMO_STRONG_RATIO) {
-    return scored.slice(0, 1).map((x) => x.b);
+  if (second === 0 || top >= second * DEMO_STRONG_RATIO) {
+    return [scored[0].b];
   }
   const cap = Math.min(
     Math.max(DEMO_SECONDARY_KEEP, 2),
@@ -116,7 +115,7 @@ function pruneDemoButtons(question, buttons) {
 function useFloatingPos(frameRef, side = "left", width = 460, gap = 12) {
   const [pos, setPos] = useState({ left: 16, top: 16, width });
   useEffect(() => {
-    function updatePos() {
+    function update() {
       const r = frameRef?.current?.getBoundingClientRect?.();
       if (!r) return setPos({ left: 16, top: 16, width });
       if (side === "left") {
@@ -133,8 +132,8 @@ function useFloatingPos(frameRef, side = "left", width = 460, gap = 12) {
         });
       }
     }
-    updatePos();
-    const h = () => updatePos();
+    update();
+    const h = () => update();
     window.addEventListener("resize", h);
     window.addEventListener("scroll", h, { passive: true });
     return () => {
@@ -145,7 +144,9 @@ function useFloatingPos(frameRef, side = "left", width = 460, gap = 12) {
   return pos;
 }
 
-/* ThemeLab Color Panel */
+/* -----------------------------------------------------------------------------
+   ThemeLab Color Panel
+----------------------------------------------------------------------------- */
 function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
   const TOKEN_TO_CSS = {
     "banner.background": "--banner-bg",
@@ -196,11 +197,13 @@ function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
       const data = await res.json();
       const toks = (data?.ok ? data.tokens : []) || [];
       setRows(toks);
+
       const v = {};
       toks.forEach((t) => {
         v[t.token_key] = t.value || "#000000";
       });
       setValues(v);
+
       const cssPatch = {};
       toks.forEach((t) => {
         const cssVar = TOKEN_TO_CSS[t.token_key];
@@ -255,16 +258,18 @@ function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
 
   const groups = useMemo(() => {
     const by = new Map();
-    for (const r of rows) {
+    rows.forEach((r) => {
       const k = r.screen_key || "welcome";
       if (!by.has(k)) by.set(k, []);
       by.get(k).push(r);
-    }
+    });
     SCREEN_ORDER.forEach(({ key }) => {
       if (by.has(key)) {
-        by.get(key).sort((a, b) =>
-          String(a.label || "").localeCompare(String(b.label || ""))
-        );
+        by
+          .get(key)
+          .sort((a, b) =>
+            String(a.label || "").localeCompare(String(b.label || ""))
+          );
       }
     });
     return by;
@@ -357,7 +362,9 @@ function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
   );
 }
 
-/* ThemeLab Wording Panel */
+/* -----------------------------------------------------------------------------
+   ThemeLab Wording Panel (with live Apply)
+----------------------------------------------------------------------------- */
 function ThemeLabWordingBox({
   apiBase,
   botId,
@@ -413,9 +420,11 @@ function ThemeLabWordingBox({
     if (sharedAuth.token) headers["X-ThemeLab-Token"] = sharedAuth.token;
     return fetch(url, { ...init, headers, credentials: "include" });
   }
+
   function markDirty() {
     setDirty(true);
   }
+
   function propagateFormfill(
     show = options.show_formfill,
     fields = standardFields
@@ -425,11 +434,12 @@ function ThemeLabWordingBox({
         show_formfill: show,
         standard_fields: fields.map((f) => ({
           field_key: f.field_key,
-          is_collected: !!f.is_collected,
+            is_collected: !!f.is_collected,
           is_required: !!f.is_required,
         })),
       });
   }
+
   function getInitialMessageKey(ms) {
     if (ms?.welcome_message !== undefined) return "welcome_message";
     return Object.keys(ms || {})[0] || "";
@@ -541,6 +551,7 @@ function ThemeLabWordingBox({
     setEditingKey(k);
     setDraft(messages[k] || "");
   }
+
   function applyDraft() {
     if (!editingKey) return;
     setMessages((prev) => {
@@ -550,9 +561,11 @@ function ThemeLabWordingBox({
     });
     markDirty();
   }
+
   function cancelEdit() {
     if (editingKey) setDraft(messages[editingKey] || "");
   }
+
   async function doSave() {
     try {
       setSaving(true);
@@ -587,6 +600,7 @@ function ThemeLabWordingBox({
       setSaving(false);
     }
   }
+
   function doReset() {
     if (!stashRef.current) {
       load();
@@ -646,7 +660,7 @@ function ThemeLabWordingBox({
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-            <button
+          <button
             type="submit"
             className="px-3 py-2 rounded-[12px] bg-black text-white text-sm"
           >
@@ -667,6 +681,7 @@ function ThemeLabWordingBox({
             <div className="text-xs text-gray-500 mb-2">Loading…</div>
           )}
           <div className="grid grid-cols-2 gap-6 mb-3">
+            {/* Options */}
             <div>
               <div className="font-semibold text-sm mb-1">Things to Show</div>
               <div className="space-y-1">
@@ -692,6 +707,7 @@ function ThemeLabWordingBox({
                 ))}
               </div>
             </div>
+            {/* Form Fill Fields (excluding always-required) */}
             <div>
               <div className="font-semibold text-sm mb-1">
                 Form Fill Fields
@@ -734,7 +750,8 @@ function ThemeLabWordingBox({
               </div>
             </div>
           </div>
-          <div className="mb-2 font-semibold text-sm">Messages</div>
+          {/* Messages */}
+            <div className="mb-2 font-semibold text-sm">Messages</div>
           <div className="space-y-1 mb-3">
             {Object.entries(messageLabels).map(([k, label]) => {
               const active = editingKey === k;
@@ -872,6 +889,9 @@ function ThemeLabWordingBox({
   );
 }
 
+/* -----------------------------------------------------------------------------
+   ThemeLab Panels Wrapper
+----------------------------------------------------------------------------- */
 function ThemeLabPanels({
   apiBase,
   botId,
@@ -885,7 +905,7 @@ function ThemeLabPanels({
 
   useEffect(() => {
     let cancel = false;
-    async function check() {
+    (async () => {
       try {
         setAuthState("checking");
         const res = await fetch(
@@ -900,8 +920,7 @@ function ThemeLabPanels({
       } catch {
         if (!cancel) setAuthState("error");
       }
-    }
-    check();
+    })();
     return () => {
       cancel = true;
     };
@@ -935,15 +954,15 @@ function ThemeLabPanels({
   );
 }
 
-/* Pricing helpers */
+/* -----------------------------------------------------------------------------
+   Pricing Helpers
+----------------------------------------------------------------------------- */
 function normalizeOptions(q) {
   const raw = q?.options ?? q?.choices ?? q?.buttons ?? q?.values ?? [];
   return (Array.isArray(raw) ? raw : [])
     .map((o, idx) => {
       if (o == null) return null;
-      if (typeof o === "string") {
-        return { key: o, label: o, id: String(idx) };
-      }
+      if (typeof o === "string") return { key: o, label: o, id: String(idx) };
       const key = o.key ?? o.value ?? o.id ?? String(idx);
       const label = o.label ?? o.title ?? o.name ?? String(key);
       const tooltip = o.tooltip ?? o.description ?? o.help ?? undefined;
@@ -951,6 +970,7 @@ function normalizeOptions(q) {
     })
     .filter(Boolean);
 }
+
 function OptionButton({ opt, selected, onClick }) {
   return (
     <button
@@ -971,6 +991,7 @@ function OptionButton({ opt, selected, onClick }) {
     </button>
   );
 }
+
 function QuestionBlock({ q, value, onPick }) {
   const opts = normalizeOptions(q);
   const type = String(q?.type || "").toLowerCase();
@@ -1007,6 +1028,7 @@ function QuestionBlock({ q, value, onPick }) {
     </div>
   );
 }
+
 function PriceMirror({ lines }) {
   if (!lines?.length) return null;
   return (
@@ -1022,14 +1044,15 @@ function PriceMirror({ lines }) {
     </div>
   );
 }
+
 function EstimateCard({ estimate, outroText }) {
   if (!estimate) return null;
   const items = Array.isArray(estimate.line_items) ? estimate.line_items : [];
-  const fmtAmount = (ccy, v) => `${ccy} ${Number(v).toLocaleString()}`;
-  const fmtRange = (ccy, min, max) =>
+  const fmtAmount = (c, v) => `${c} ${Number(v).toLocaleString()}`;
+  const fmtRange = (c, min, max) =>
     Number(min) === Number(max)
-      ? fmtAmount(ccy, max)
-      : `${fmtAmount(ccy, min)} – ${fmtAmount(ccy, max)}`;
+      ? fmtAmount(c, max)
+      : `${fmtAmount(c, min)} – ${fmtAmount(c, max)}`;
   const totalText = fmtRange(
     estimate.currency_code,
     estimate.total_min,
@@ -1072,51 +1095,54 @@ function EstimateCard({ estimate, outroText }) {
   );
 }
 
-/* MAIN COMPONENT */
+/* -----------------------------------------------------------------------------
+   Main Component
+----------------------------------------------------------------------------- */
 export default function Welcome() {
   const apiBase =
     import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
   const { alias, botIdFromUrl } = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
-    const a = (qs.get("alias") || qs.get("alais") || "").trim();
-    const b = (qs.get("bot_id") || "").trim();
-    return { alias: a, botIdFromUrl: b };
+    return {
+      alias: (qs.get("alias") || qs.get("alais") || "").trim(),
+      botIdFromUrl: (qs.get("bot_id") || "").trim(),
+    };
   }, []);
 
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
 
+  // ORIGINAL SIMPLE THEMELAB ACTIVATION (restored)
+  const themeLabOn = useMemo(() => {
+    const qs = new URLSearchParams(window.location.search);
+    const th = (qs.get("themelab") || "").trim().toLowerCase();
+    return th === "1" || th === "true";
+  }, []);
+
+  /* --- State declarations (unchanged content) --- */
   const urlParams = useMemo(() => {
     const q = new URLSearchParams(window.location.search);
     const o = {};
-    q.forEach((v, k) => {
-      o[k] = v;
-    });
+    q.forEach((v, k) => (o[k] = v));
     return o;
   }, []);
 
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [fatal, setFatal] = useState("");
   const [mode, setMode] = useState("ask");
-
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
   const [responseText, setResponseText] = useState("");
   const [loading, setLoading] = useState(false);
-
   const [items, setItems] = useState([]);
   const [browseItems, setBrowseItems] = useState([]);
   const [browseDocs, setBrowseDocs] = useState([]);
   const [selected, setSelected] = useState(null);
-
   const [agent, setAgent] = useState(null);
-
   const contentRef = useRef(null);
   const inputRef = useRef(null);
-
   const [visitorId, setVisitorId] = useState("");
   const [sessionId, setSessionId] = useState("");
-
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
   const derivedTheme = useMemo(() => {
     const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
@@ -1127,7 +1153,6 @@ export default function Welcome() {
     () => ({ ...derivedTheme, ...pickerVars }),
     [derivedTheme, pickerVars]
   );
-
   const [brandAssets, setBrandAssets] = useState({
     logo_url: null,
     logo_light_url: null,
@@ -1138,39 +1163,18 @@ export default function Welcome() {
     [botIdFromUrl, alias]
   );
   const [brandReady, setBrandReady] = useState(initialBrandReady);
-
   const [tabsEnabled, setTabsEnabled] = useState({
     demos: false,
     docs: false,
     meeting: false,
     price: false,
   });
-
-  function handleLiveMessages(updated) {
-    if (!updated || typeof updated !== "object") return;
-    if (Object.prototype.hasOwnProperty.call(updated, "welcome_message")) {
-      setResponseText(updated.welcome_message || "");
-    }
-    setPricingCopy((prev) => ({
-      intro: Object.prototype.hasOwnProperty.call(updated, "pricing_intro")
-        ? (updated.pricing_intro || "")
-        : prev.intro,
-      outro: Object.prototype.hasOwnProperty.call(updated, "pricing_outro")
-        ? (updated.pricing_outro || "")
-        : prev.outro,
-      custom_notice: Object.prototype.hasOwnProperty.call(updated, "pricing_custom_notice")
-        ? (updated.pricing_custom_notice || "")
-        : prev.custom_notice,
-    }));
-  }
-
   const [showFormfill, setShowFormfill] = useState(true);
   const [formFields, setFormFields] = useState([]);
   const [visitorDefaults, setVisitorDefaults] = useState({});
   const [formShown, setFormShown] = useState(false);
   const [formCompleted, setFormCompleted] = useState(false);
   const [pending, setPending] = useState(null);
-
   const FORM_KEY = useMemo(
     () => `formfill_completed:${botId || alias || "_"}`,
     [botId, alias]
@@ -1180,7 +1184,6 @@ export default function Welcome() {
       if (sessionStorage.getItem(FORM_KEY) === "1") setFormCompleted(true);
     } catch {}
   }, [FORM_KEY]);
-
   const [pricingCopy, setPricingCopy] = useState({
     intro: "",
     outro: "",
@@ -1191,13 +1194,11 @@ export default function Welcome() {
   const [priceEstimate, setPriceEstimate] = useState(null);
   const [priceBusy, setPriceBusy] = useState(false);
   const [priceErr, setPriceErr] = useState("");
-
   const [introVideoUrl, setIntroVideoUrl] = useState("");
   const [showIntroVideo, setShowIntroVideo] = useState(false);
-
   const [lastError, setLastError] = useState(null);
-
   const firstPrefillDone = useRef(false);
+
   function maybePrefillFirstQuestion(firstQ) {
     if (!firstQ || firstPrefillDone.current) return;
     setInput((curr) => {
@@ -1216,7 +1217,7 @@ export default function Welcome() {
         hasPerspective = true;
         return {
           ...f,
-            field_type: f.field_type || "single_select",
+          field_type: f.field_type || "single_select",
           is_standard: true,
           is_collected: true,
           is_required: true,
@@ -1266,10 +1267,12 @@ export default function Welcome() {
       Object.entries(newVals).forEach(([k, v]) => {
         if (typeof v === "string") merged[k] = v;
       });
-      if (merged.perspective) merged.perspective = merged.perspective.toLowerCase();
+      if (merged.perspective)
+        merged.perspective = merged.perspective.toLowerCase();
       return merged;
     });
   }
+
   async function refetchVisitorValues() {
     if (!visitorId) return;
     try {
@@ -1284,6 +1287,7 @@ export default function Welcome() {
     } catch {}
   }
 
+  /* --- Bot / alias resolution & brand/theme loading (same logic as before) --- */
   useEffect(() => {
     if (botId || !alias) return;
     let cancel = false;
@@ -1318,7 +1322,8 @@ export default function Welcome() {
           });
         }
         if (id) setBotId(id);
-        else if (!res.ok || data?.ok === false) setFatal("Invalid or inactive alias.");
+        else if (!res.ok || data?.ok === false)
+          setFatal("Invalid or inactive alias.");
       } catch {
         if (!cancel) setFatal("Invalid or inactive alias.");
       }
@@ -1371,12 +1376,6 @@ export default function Welcome() {
   useEffect(() => {
     if (!botId && !alias && !brandReady) setBrandReady(true);
   }, [botId, alias, brandReady]);
-
-  const themeLabOn = useMemo(() => {
-    const qs = new URLSearchParams(window.location.search);
-    const th = (qs.get("themelab") || "").trim().toLowerCase();
-    return th === "1" || th === "true";
-  }, []);
 
   useEffect(() => {
     if (!botId) return;
@@ -1443,18 +1442,21 @@ export default function Welcome() {
     if (botId && visitorId) fetchFormfillConfigBy(botId, null);
   }, [visitorId, botId]);
   useEffect(() => {
-    if ((mode === "formfill" || mode === "personalize") && visitorId && botId) {
+    if (
+      (mode === "formfill" || mode === "personalize") &&
+      visitorId &&
+      botId
+    ) {
       refetchVisitorValues();
     }
   }, [mode, visitorId, botId]);
 
   const activeFormFields = useMemo(() => {
-    // Map existing fields
     const byKey = new Map();
     (Array.isArray(formFields) ? formFields : []).forEach((f) => {
       if (f?.field_key) byKey.set(f.field_key.toLowerCase(), { ...f });
     });
-    // Inject always fields with required flags
+    // Always inject required core fields
     ALWAYS_FORM_FIELDS.forEach((core) => {
       const k = core.field_key.toLowerCase();
       const existing = byKey.get(k) || {};
@@ -1465,10 +1467,11 @@ export default function Welcome() {
         is_standard: true,
         is_collected: true,
         is_required: true,
-        field_type: existing.field_type || (core.field_key === "email" ? "email" : "text"),
+        field_type:
+          existing.field_type || (core.field_key === "email" ? "email" : "text"),
       });
     });
-    // Perspective
+    // Ensure perspective
     if (!byKey.has("perspective")) {
       byKey.set("perspective", {
         field_key: "perspective",
@@ -1559,7 +1562,9 @@ export default function Welcome() {
       }));
       mapped = pruneDemoButtons(outgoing, mapped);
       if (typeof data.perspective === "string" && data.perspective.trim()) {
-        updateLocalVisitorValues({ perspective: data.perspective.toLowerCase() });
+        updateLocalVisitorValues({
+          perspective: data.perspective.toLowerCase(),
+        });
       }
       setItems(mapped.filter(Boolean));
       setResponseText(text);
@@ -1575,7 +1580,9 @@ export default function Welcome() {
         data?.message ||
         (status ? `Request failed (HTTP ${status})` : "Network error");
       setResponseText(
-        fallback.startsWith("Request failed") ? "Sorry—something went wrong." : fallback
+        fallback.startsWith("Request failed")
+          ? "Sorry—something went wrong."
+          : fallback
       );
       setLastError({
         status,
@@ -1826,7 +1833,9 @@ export default function Welcome() {
         const data = await res.json();
         if (cancel) return;
         if (!data?.ok)
-          throw new Error(data?.error || "Failed to load pricing questions");
+          throw new Error(
+            data?.error || "Failed to load pricing questions"
+          );
         setPriceQuestions(
           Array.isArray(data.questions) ? data.questions : []
         );
@@ -2013,6 +2022,7 @@ export default function Welcome() {
     return lines;
   }, [priceEstimate, priceQuestions, priceAnswers]);
 
+  /* Tabs */
   const tabs = useMemo(() => {
     const out = [];
     out.push({
@@ -2043,6 +2053,25 @@ export default function Welcome() {
     return out;
   }, [tabsEnabled]);
 
+  /* Live wording updates */
+  function handleLiveMessages(updated) {
+    if (!updated || typeof updated !== "object") return;
+    if ("welcome_message" in updated) {
+      setResponseText(updated.welcome_message || "");
+    }
+    setPricingCopy((prev) => ({
+      intro:
+        "pricing_intro" in updated ? updated.pricing_intro || "" : prev.intro,
+      outro:
+        "pricing_outro" in updated ? updated.pricing_outro || "" : prev.outro,
+      custom_notice:
+        "pricing_custom_notice" in updated
+          ? updated.pricing_custom_notice || ""
+          : prev.custom_notice,
+    }));
+  }
+
+  /* Failure or missing bot conditions */
   if (fatal) {
     return (
       <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
@@ -2087,7 +2116,11 @@ export default function Welcome() {
     fallbackLogo;
 
   const listSource = mode === "browse" ? browseItems : items;
-  const visibleUnderVideo = selected ? (mode === "ask" ? items : []) : listSource;
+  const visibleUnderVideo = selected
+    ? mode === "ask"
+      ? items
+      : []
+    : listSource;
 
   const showAskBottom = mode !== "formfill";
 
@@ -2122,6 +2155,7 @@ export default function Welcome() {
       style={liveTheme}
     >
       <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all">
+        {/* Header */}
         <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)]">
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
@@ -2147,9 +2181,13 @@ export default function Welcome() {
                 : "Ask the Assistant"}
             </div>
           </div>
-          <TabsNav mode={mode === "formfill" ? "personalize" : mode} tabs={tabs} />
+          <TabsNav
+            mode={mode === "formfill" ? "personalize" : mode}
+            tabs={tabs}
+          />
         </div>
 
+        {/* Body */}
         <div
           ref={contentRef}
           className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto"
@@ -2157,16 +2195,16 @@ export default function Welcome() {
           {(mode === "formfill" || mode === "personalize") ? (
             <div className="space-y-4">
               <div className="text-base font-semibold">
-                Update your information below (adjust Perspective or any other details).
+                Update your information below (adjust Perspective or any other
+                details).
               </div>
               <FormFillCard
                 fields={activeFormFields}
                 defaults={formDefaults}
                 onSubmit={async (vals) => {
                   if (!visitorId) return;
-                  if (typeof vals.perspective === "string") {
+                  if (typeof vals.perspective === "string")
                     vals.perspective = vals.perspective.toLowerCase();
-                  }
                   updateLocalVisitorValues(vals);
                   let postOk = false;
                   try {
@@ -2207,9 +2245,7 @@ export default function Welcome() {
           ) : mode === "price" ? (
             <div className="flex-1 flex flex-col">
               <div className="pt-0 pb-0">
-                <PriceMirror
-                  lines={mirrorLines.length ? mirrorLines : [""]}
-                />
+                <PriceMirror lines={mirrorLines.length ? mirrorLines : [""]} />
                 {!mirrorLines.length && (
                   <div className="text-base font-bold whitespace-pre-line">
                     {pricingCopy.intro ||
@@ -2511,10 +2547,7 @@ export default function Welcome() {
                 return { ...prev, ...produced };
               });
             } else {
-              setPickerVars((prev) => ({
-                ...prev,
-                ...(varsUpdate || {}),
-              }));
+              setPickerVars((prev) => ({ ...prev, ...(varsUpdate || {}) }));
             }
           }}
           onFormfillChange={handleThemeLabFormfillChange}
