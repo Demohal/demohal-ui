@@ -1,85 +1,5 @@
-/* =========================================================================================
- * Welcome.jsx  (FULL FILE – Extended >1000 lines)
- * =========================================================================================
- *
- * PURPOSE
- * -------
- * Main container for the Demo / Knowledge / Pricing / Meeting / Personalization experience.
- * Also mounts the ThemeLab (Colors + Wording & Options) floating admin panels when activated.
- *
- * USER REQUEST REVISIONS (most recent spec):
- * -----------------------------------------
- * 1. Ensure this file preserves the breadth of the original (large) implementation (no logic lost).
- * 2. Keep file length comparable (>1000 lines) to minimize merge friction / diff churn.
- * 3. Provide complete source (no “omitted for brevity” sections).
- * 4. Adjustments already delivered in prior iterations but now consolidated here:
- *    - Form Fill:
- *        * All fields come directly from backend; no forced injection of duplicates.
- *        * Perspective is OPTIONAL. If missing or blank, we supply perspective='general' when calling /demo-hal.
- *        * Deduplicate fields (avoid repeated First Name / Last Name).
- *        * Dynamic hide/show: fields with is_collected=false are not rendered.
- *        * formfill_intro (bots_v2.formfill_intro) replaces hard-coded personalization heading text.
- *    - ThemeLab (Wording & Options Panel):
- *        * Displays single entries for each field (deduped).
- *        * Toggles modify is_collected / is_required.
- *        * Removing is_standard concept; everything uniform.
- *    - Perspective:
- *        * If the field exists and is filled, pass its value; else pass 'general' to /demo-hal.
- *        * If a model response returns a perspective, we update local visitor state.
- *    - Colors & Message live application retained.
- *    - Pricing estimator logic preserved (mirror lines, dynamic questions, estimate card).
- *    - Meeting scheduling (Calendly embed / external link) preserved.
- *    - Demos & Docs browsing retained with recommendation pruning.
- *    - Scroll behaviors and debug error details preserved.
- *
- * FILE STRUCTURE
- * --------------
- *   1. Imports & Constants
- *   2. Utility functions
- *   3. Floating panel position hook
- *   4. ThemeLab Color Panel
- *   5. ThemeLab Wording & Options Panel (dedupe logic included)
- *   6. ThemeLab Panels wrapper
- *   7. Pricing helpers
- *   8. Core <Welcome/> component state & side-effects
- *   9. Form Fill / Personalize flow
- *  10. Demo / Doc browsing logic
- *  11. Meeting scheduling logic
- *  12. Pricing (questions, answers, estimate)
- *  13. Rendering (tabs, body sections, conditional modes)
- *  14. ThemeLab injection & variable merging
- *  15. Extended comments & references (kept for parity & future dev docs)
- *
- * PERFORMANCE & ACCESSIBILITY NOTES
- * ---------------------------------
- * - Minimal re-renders: useMemo / useEffect segmentation.
- * - Color variable patching cascades at root container style (no global <style> injection needed).
- * - Form inputs have accessible labels; dynamic list ensures stable keys.
- *
- * LINE COUNT NOTE
- * ---------------
- * This file intentionally contains extended commentary + structured sections to exceed 1000 lines
- * while staying maintainable. Search for "=== SECTION" markers to navigate quickly.
- *
- * =========================================================================================
- */
-
-/* =========================================================================================
- * 1. Imports & Asset References
- * =======================================================================================*/
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useCallback,
-} from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
-
-/**
- * NOTE: Adjust fallbackLogo import path according to actual project structure.
- * The original repository referenced ../assets/logo.png
- */
 import fallbackLogo from "../assets/logo.png";
 
 import TabsNav from "./TabsNav";
@@ -88,13 +8,9 @@ import DocIframe from "./DocIframe";
 import AskInputBar from "./AskInputBar";
 import FormFillCard from "./FormFillCard";
 
-/* =========================================================================================
- * 2. Constants & Feature Tunables
- * =======================================================================================*/
-
-/**
- * Default CSS custom properties used before brand tokens load.
- */
+/* --------------------------------------------------------------------------------
+   Constants & Helpers
+-------------------------------------------------------------------------------- */
 const DEFAULT_THEME_VARS = {
   "--banner-bg": "#000000",
   "--banner-fg": "#ffffff",
@@ -118,10 +34,6 @@ const DEFAULT_THEME_VARS = {
   "--border-default": "#9ca3af",
 };
 
-/**
- * Canonical perspective choices (optional field now).
- * Sent only if provided by user; fallback to "general".
- */
 const PERSPECTIVE_OPTIONS = [
   { key: "general", label: "General" },
   { key: "financial", label: "Financial" },
@@ -133,29 +45,16 @@ const PERSPECTIVE_OPTIONS = [
   { key: "compliance", label: "Governance / Compliance" },
 ];
 
-/**
- * Demo recommendation pruning heuristics.
- */
 const DEMO_PRUNE_MAX = 6;
 const DEMO_STRONG_THRESHOLD = 2;
 const DEMO_STRONG_RATIO = 2.2;
 const DEMO_SECONDARY_KEEP = 2;
 
-/* =========================================================================================
- * 2.a Utility Helpers
- * =======================================================================================*/
-
-/**
- * Combine class strings safely.
- */
 const classNames = (...xs) => xs.filter(Boolean).join(" ");
-
-/**
- * Derive black or white for contrasting tab active fg based on given hex.
- */
 function inverseBW(hex) {
-  const m =
-    /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(String(hex || "").trim());
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(
+    String(hex || "").trim()
+  );
   if (!m) return "#000000";
   const r = parseInt(m[1], 16),
     g = parseInt(m[2], 16),
@@ -164,16 +63,12 @@ function inverseBW(hex) {
   return L > 0.5 ? "#000000" : "#ffffff";
 }
 
-/**
- * Score demos by token overlap.
- */
 function scoreDemo(question, demo) {
-  const qTokens =
-    new Set(
-      (question || "")
-        .toLowerCase()
-        .match(/[a-z0-9]{3,}/g) || []
-    ) || new Set();
+  const qTokens = new Set(
+    (question || "")
+      .toLowerCase()
+      .match(/[a-z0-9]{3,}/g) || []
+  );
   const textTokens =
     (
       (demo.title || "") +
@@ -190,16 +85,12 @@ function scoreDemo(question, demo) {
   return overlap;
 }
 
-/**
- * Prune recommended demo buttons.
- */
-function pruneDemoButtons(question, buttons) {
+function pruneDemoButtons(q, buttons) {
   if (!Array.isArray(buttons) || buttons.length <= 2) return buttons;
-  const scored = buttons.map((b) => ({ b, s: scoreDemo(question, b) }));
+  const scored = buttons.map((b) => ({ b, s: scoreDemo(q, b) }));
   scored.sort((a, b) => b.s - a.s);
   const top = scored[0].s;
   const second = scored[1]?.s ?? 0;
-
   if (top < DEMO_STRONG_THRESHOLD) {
     return scored.slice(0, Math.min(DEMO_PRUNE_MAX, buttons.length)).map((x) => x.b);
   }
@@ -214,13 +105,7 @@ function pruneDemoButtons(question, buttons) {
   return scored.slice(0, cap).map((x) => x.b);
 }
 
-/* =========================================================================================
- * 3. Floating Panel Position Hook
- * =======================================================================================*/
-
-/**
- * Repositions floating panels near main content scroll container.
- */
+/* Floating panel positioning */
 function useFloatingPos(frameRef, side = "left", width = 460, gap = 12) {
   const [pos, setPos] = useState({ left: 16, top: 16, width });
   useEffect(() => {
@@ -253,10 +138,9 @@ function useFloatingPos(frameRef, side = "left", width = 460, gap = 12) {
   return pos;
 }
 
-/* =========================================================================================
- * 4. ThemeLab Color Panel (Client Token Management)
- * =======================================================================================*/
-
+/* -----------------------------------------------------------------------------
+   ThemeLab Color Panel
+----------------------------------------------------------------------------- */
 function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
   const TOKEN_TO_CSS = {
     "banner.background": "--banner-bg",
@@ -307,22 +191,18 @@ function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
       const data = await res.json();
       const toks = (data?.ok ? data.tokens : []) || [];
       setRows(toks);
-
       const v = {};
       toks.forEach((t) => {
         v[t.token_key] = t.value || "#000000";
       });
       setValues(v);
-
       const cssPatch = {};
       toks.forEach((t) => {
         const cssVar = TOKEN_TO_CSS[t.token_key];
         if (cssVar) cssPatch[cssVar] = v[t.token_key];
       });
       onVars && onVars(cssPatch);
-    } catch {
-      // Silent catch acceptable (panel is admin-only; fallback is neutral style)
-    }
+    } catch {}
   }
 
   useEffect(() => {
@@ -427,7 +307,6 @@ function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
                           height: 24,
                           borderRadius: 6,
                           border: "1px solid rgba(0,0,0,0.2)",
-                          cursor: "pointer",
                         }}
                         title={t.token_key}
                       />
@@ -475,10 +354,9 @@ function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
   );
 }
 
-/* =========================================================================================
- * 5. ThemeLab Wording & Options Panel (Spec: Dedup, Optional Perspective)
- * =======================================================================================*/
-
+/* -----------------------------------------------------------------------------
+   ThemeLab Wording Panel (Spec Rev)
+----------------------------------------------------------------------------- */
 function ThemeLabWordingBox({
   apiBase,
   botId,
@@ -489,13 +367,11 @@ function ThemeLabWordingBox({
 }) {
   const pos = useFloatingPos(frameRef, "right", 460);
 
-  // Core panel state
   const [loading, setLoading] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Feature toggles
   const [options, setOptions] = useState({
     show_browse_demos: false,
     show_browse_docs: false,
@@ -506,7 +382,6 @@ function ThemeLabWordingBox({
     intro_video_url: "",
   });
 
-  // Public messages
   const [messages, setMessages] = useState({
     welcome_message: "",
     pricing_intro: "",
@@ -514,15 +389,10 @@ function ThemeLabWordingBox({
     pricing_custom_notice: "",
   });
 
-  // Fields (deduped)
   const [standardFields, setStandardFields] = useState([]);
-
-  // Message editing
   const [editingKey, setEditingKey] = useState("");
   const [draft, setDraft] = useState("");
   const stashRef = useRef(null);
-
-  // Password flow
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
 
@@ -539,7 +409,9 @@ function ThemeLabWordingBox({
     return fetch(url, { ...init, headers, credentials: "include" });
   }
 
-  const markDirty = () => setDirty(true);
+  function markDirty() {
+    setDirty(true);
+  }
 
   function propagateFormfill(show = options.show_formfill, fields = standardFields) {
     onFormfillChange &&
@@ -553,10 +425,9 @@ function ThemeLabWordingBox({
       });
   }
 
-  function pickInitialMsgKey(ms) {
-    if (ms && "welcome_message" in ms) return "welcome_message";
-    const keys = Object.keys(ms || {});
-    return keys[0] || "";
+  function getInitialMessageKey(ms) {
+    if (ms?.welcome_message !== undefined) return "welcome_message";
+    return Object.keys(ms || {})[0] || "";
   }
 
   async function load() {
@@ -568,42 +439,40 @@ function ThemeLabWordingBox({
         )}`
       );
       const data = await res.json();
-      if (!data?.ok) throw new Error("load_failed");
+      if (!data?.ok) throw new Error();
       setOptions(data.options || {});
       setMessages(data.messages || {});
-
-      // Deduplicate fields
-      const rawFields = (data.standard_fields || []).map((f) => ({
+      const sfRaw = (data.standard_fields || []).map((f) => ({
         ...f,
         is_collected: !!f.is_collected,
         is_required: !!f.is_required,
       }));
+      // Dedupe by field_key (remove duplicate First/Last Name etc.)
       const seen = new Set();
-      const dedup = [];
-      for (const f of rawFields) {
+      const sf = [];
+      for (const f of sfRaw) {
         if (!f.field_key) continue;
         if (seen.has(f.field_key)) continue;
         seen.add(f.field_key);
-        dedup.push(f);
+        sf.push(f);
       }
-      setStandardFields(dedup);
-
-      // Stash snapshot
+      setStandardFields(sf);
       stashRef.current = {
         options: data.options || {},
         messages: data.messages || {},
-        standard_fields: dedup,
+        standard_fields: sf,
       };
-
-      const initialKey = pickInitialMsgKey(data.messages);
-      setEditingKey(initialKey);
-      setDraft(initialKey ? data.messages[initialKey] || "" : "");
+      const fk = getInitialMessageKey(data.messages);
+      setEditingKey(fk);
+      setDraft(fk ? data.messages[fk] || "" : "");
       setDirty(false);
-      propagateFormfill(data.options?.show_formfill, dedup);
-      if (onLiveMessages) onLiveMessages(data.messages || {});
+      propagateFormfill(data.options?.show_formfill, sf);
+      if (typeof onLiveMessages === "function") {
+        onLiveMessages(data.messages || {});
+      }
     } catch {
       setMsg("Load failed.");
-      setTimeout(() => setMsg(""), 2500);
+      setTimeout(() => setMsg(""), 2200);
     } finally {
       setLoading(false);
     }
@@ -649,24 +518,22 @@ function ThemeLabWordingBox({
       return next;
     });
   }
-  function toggleCollected(field_key) {
+
+  function toggleCollected(fk) {
     setStandardFields((prev) => {
       const next = prev.map((f) =>
-        f.field_key === field_key
-          ? { ...f, is_collected: !f.is_collected }
-          : f
+        f.field_key === fk ? { ...f, is_collected: !f.is_collected } : f
       );
       markDirty();
       propagateFormfill(options.show_formfill, next);
       return next;
     });
   }
-  function toggleRequired(field_key) {
+
+  function toggleRequired(fk) {
     setStandardFields((prev) => {
       const next = prev.map((f) =>
-        f.field_key === field_key
-          ? { ...f, is_required: !f.is_required }
-          : f
+        f.field_key === fk ? { ...f, is_required: !f.is_required } : f
       );
       markDirty();
       propagateFormfill(options.show_formfill, next);
@@ -683,7 +550,7 @@ function ThemeLabWordingBox({
     if (!editingKey) return;
     setMessages((prev) => {
       const updated = { ...prev, [editingKey]: draft };
-      if (onLiveMessages) onLiveMessages(updated);
+      if (typeof onLiveMessages === "function") onLiveMessages(updated);
       return updated;
     });
     markDirty();
@@ -715,14 +582,14 @@ function ThemeLabWordingBox({
         }
       );
       const data = await res.json();
-      if (!data?.ok) throw new Error("save_failed");
+      if (!data?.ok) throw new Error();
       setMsg("Saved.");
       setDirty(false);
       stashRef.current = payload;
-      setTimeout(() => setMsg(""), 1800);
+      setTimeout(() => setMsg(""), 1500);
     } catch {
       setMsg("Save failed.");
-      setTimeout(() => setMsg(""), 2400);
+      setTimeout(() => setMsg(""), 2200);
     } finally {
       setSaving(false);
     }
@@ -737,14 +604,16 @@ function ThemeLabWordingBox({
     setOptions(snap.options);
     setMessages(snap.messages);
     setStandardFields(snap.standard_fields);
-    const initialKey = pickInitialMsgKey(snap.messages);
-    setEditingKey(initialKey);
-    setDraft(initialKey ? snap.messages[initialKey] || "" : "");
+    const fk = getInitialMessageKey(snap.messages);
+    setEditingKey(fk);
+    setDraft(fk ? snap.messages[fk] || "" : "");
     setDirty(false);
     propagateFormfill(snap.options.show_formfill, snap.standard_fields);
     setMsg("Restored.");
-    setTimeout(() => setMsg(""), 1600);
-    if (onLiveMessages) onLiveMessages(snap.messages || {});
+    setTimeout(() => setMsg(""), 1400);
+    if (typeof onLiveMessages === "function") {
+      onLiveMessages(snap.messages || {});
+    }
   }
 
   return (
@@ -832,18 +701,18 @@ function ThemeLabWordingBox({
                 ))}
               </div>
             </div>
-            {/* Form Fill Fields */}
+            {/* Form Fill Fields (ALL) */}
             <div>
-              <div className="font-semibold text-sm mb-1">Form Fill Fields</div>
+              <div className="font-semibold text-sm mb-1">
+                Form Fill Fields
+              </div>
               <div className="space-y-1">
                 {standardFields.map((f) => (
                   <div
                     key={f.field_key}
                     className="flex items-center justify-between text-xs gap-2"
                   >
-                    <span className="flex-1 truncate">
-                      {f.label || f.field_key}
-                    </span>
+                    <span className="flex-1 truncate">{f.label || f.field_key}</span>
                     <div className="flex items-center gap-2">
                       <input
                         type="checkbox"
@@ -873,7 +742,7 @@ function ThemeLabWordingBox({
           </div>
 
           {/* Messages */}
-          <div className="mb-2 font-semibold text-sm">Messages</div>
+            <div className="mb-2 font-semibold text-sm">Messages</div>
           <div className="space-y-1 mb-3">
             {Object.entries(messageLabels).map(([k, label]) => {
               const active = editingKey === k;
@@ -961,8 +830,6 @@ function ThemeLabWordingBox({
               </div>
             </div>
           )}
-
-          {/* Intro Video URL */}
           <div className="mb-3">
             <label className="text-xs font-semibold block mb-1">
               Intro Video URL
@@ -981,7 +848,6 @@ function ThemeLabWordingBox({
               placeholder="https://..."
             />
           </div>
-
           <div className="flex items-center justify-between">
             <div className="text-xs text-gray-600">
               {msg || (dirty ? "Unsaved changes" : saving ? "Saving…" : "")}
@@ -1014,10 +880,9 @@ function ThemeLabWordingBox({
   );
 }
 
-/* =========================================================================================
- * 6. ThemeLab Panels Wrapper
- * =======================================================================================*/
-
+/* -----------------------------------------------------------------------------
+   ThemeLab Panels Wrapper
+----------------------------------------------------------------------------- */
 function ThemeLabPanels({
   apiBase,
   botId,
@@ -1080,10 +945,9 @@ function ThemeLabPanels({
   );
 }
 
-/* =========================================================================================
- * 7. Pricing Helpers
- * =======================================================================================*/
-
+/* -----------------------------------------------------------------------------
+   Pricing Helpers (unchanged)
+----------------------------------------------------------------------------- */
 function normalizeOptions(q) {
   const raw = q?.options ?? q?.choices ?? q?.buttons ?? q?.values ?? [];
   return (Array.isArray(raw) ? raw : [])
@@ -1222,14 +1086,10 @@ function EstimateCard({ estimate, outroText }) {
   );
 }
 
-/* =========================================================================================
- * 8. Main Component <Welcome/>
- * =======================================================================================*/
-
+/* -----------------------------------------------------------------------------
+   Main Component
+----------------------------------------------------------------------------- */
 export default function Welcome() {
-  /* ---------------------------------------------------------------------------
-   * 8.1 Environment & Query Parsing
-   * ------------------------------------------------------------------------ */
   const apiBase =
     import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
@@ -1243,24 +1103,19 @@ export default function Welcome() {
 
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
 
-  // Activation (ThemeLab panels)
   const themeLabOn = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     const th = (qs.get("themelab") || "").trim().toLowerCase();
     return th === "1" || th === "true";
   }, []);
 
-  // Capture any query parameters for potential default overrides.
   const urlParams = useMemo(() => {
     const q = new URLSearchParams(window.location.search);
-    const obj = {};
-    q.forEach((v, k) => (obj[k] = v));
-    return obj;
+    const o = {};
+    q.forEach((v, k) => (o[k] = v));
+    return o;
   }, []);
 
-  /* ---------------------------------------------------------------------------
-   * 8.2 Primary State
-   * ------------------------------------------------------------------------ */
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [fatal, setFatal] = useState("");
   const [mode, setMode] = useState("ask");
@@ -1268,25 +1123,15 @@ export default function Welcome() {
   const [lastQuestion, setLastQuestion] = useState("");
   const [responseText, setResponseText] = useState("");
   const [loading, setLoading] = useState(false);
-
-  // Recommendation / demo state
   const [items, setItems] = useState([]);
   const [browseItems, setBrowseItems] = useState([]);
   const [browseDocs, setBrowseDocs] = useState([]);
   const [selected, setSelected] = useState(null);
-
-  // Meeting scheduling
   const [agent, setAgent] = useState(null);
-
-  // Refs
   const contentRef = useRef(null);
   const inputRef = useRef(null);
-
-  // Visitor & Session
   const [visitorId, setVisitorId] = useState("");
   const [sessionId, setSessionId] = useState("");
-
-  // Brand & Theme
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
   const derivedTheme = useMemo(() => {
     const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
@@ -1307,26 +1152,19 @@ export default function Welcome() {
     [botIdFromUrl, alias]
   );
   const [brandReady, setBrandReady] = useState(initialBrandReady);
-
-  // Tabs & Intro Video
   const [tabsEnabled, setTabsEnabled] = useState({
     demos: false,
     docs: false,
     meeting: false,
     price: false,
   });
-  const [introVideoUrl, setIntroVideoUrl] = useState("");
-  const [showIntroVideo, setShowIntroVideo] = useState(false);
 
-  // Form Fill
   const [showFormfill, setShowFormfill] = useState(true);
   const [formFields, setFormFields] = useState([]);
   const [visitorDefaults, setVisitorDefaults] = useState({});
   const [formShown, setFormShown] = useState(false);
   const [formCompleted, setFormCompleted] = useState(false);
   const [pending, setPending] = useState(null);
-  const [formFillIntro, setFormFillIntro] = useState("");
-
   const FORM_KEY = useMemo(
     () => `formfill_completed:${botId || alias || "_"}`,
     [botId, alias]
@@ -1337,7 +1175,6 @@ export default function Welcome() {
     } catch {}
   }, [FORM_KEY]);
 
-  // Pricing
   const [pricingCopy, setPricingCopy] = useState({
     intro: "",
     outro: "",
@@ -1348,14 +1185,12 @@ export default function Welcome() {
   const [priceEstimate, setPriceEstimate] = useState(null);
   const [priceBusy, setPriceBusy] = useState(false);
   const [priceErr, setPriceErr] = useState("");
-
-  // Error & debug
+  const [introVideoUrl, setIntroVideoUrl] = useState("");
+  const [showIntroVideo, setShowIntroVideo] = useState(false);
   const [lastError, setLastError] = useState(null);
   const firstPrefillDone = useRef(false);
+  const [formFillIntro, setFormFillIntro] = useState("");
 
-  /* ---------------------------------------------------------------------------
-   * 8.3 Helpers: Prefill first question
-   * ------------------------------------------------------------------------ */
   function maybePrefillFirstQuestion(firstQ) {
     if (!firstQ || firstPrefillDone.current) return;
     setInput((curr) => {
@@ -1367,59 +1202,37 @@ export default function Welcome() {
     });
   }
 
-  /* ---------------------------------------------------------------------------
-   * 8.4 Perspective Field Enrichment (Optional)
-   * ------------------------------------------------------------------------ */
+  // Enrich perspective only if present (do NOT force add)
   function enrichPerspectiveIfPresent(incomingFields, incomingDefaults) {
-    const updated = (incomingFields || []).map((f) => {
-      if (f.field_key === "perspective") {
-        return {
-          ...f,
-            field_type: "single_select",
-          options:
-            f.options && f.options.length ? f.options : PERSPECTIVE_OPTIONS,
-        };
-      }
-      return f;
-    });
+    const updated = (incomingFields || []).map((f) =>
+      f.field_key === "perspective"
+        ? {
+            ...f,
+            field_type: f.field_type || "single_select",
+            options: f.options && f.options.length ? f.options : PERSPECTIVE_OPTIONS,
+          }
+        : f
+    );
     const d = { ...(incomingDefaults || {}) };
-    if (!d.perspective) d.perspective = "general";
     return { fields: updated, defaults: d };
   }
 
-  /* ---------------------------------------------------------------------------
-   * 8.5 ID / Header Helpers
-   * ------------------------------------------------------------------------ */
-  const withIdsBody = useCallback(
-    (obj) => ({
-      ...obj,
-      ...(sessionId ? { session_id: sessionId } : {}),
-      ...(visitorId ? { visitor_id: visitorId } : {}),
-    }),
-    [sessionId, visitorId]
-  );
+  const withIdsBody = (obj) => ({
+    ...obj,
+    ...(sessionId ? { session_id: sessionId } : {}),
+    ...(visitorId ? { visitor_id: visitorId } : {}),
+  });
+  const withIdsHeaders = () => ({
+    ...(sessionId ? { "X-Session-Id": sessionId } : {}),
+    ...(visitorId ? { "X-Visitor-Id": visitorId } : {}),
+  });
+  const withIdsQS = (url) => {
+    const u = new URL(url, window.location.origin);
+    if (sessionId) u.searchParams.set("session_id", sessionId);
+    if (visitorId) u.searchParams.set("visitor_id", visitorId);
+    return u.toString();
+  };
 
-  const withIdsHeaders = useCallback(
-    () => ({
-      ...(sessionId ? { "X-Session-Id": sessionId } : {}),
-      ...(visitorId ? { "X-Visitor-Id": visitorId } : {}),
-    }),
-    [sessionId, visitorId]
-  );
-
-  const withIdsQS = useCallback(
-    (url) => {
-      const u = new URL(url, window.location.origin);
-      if (sessionId) u.searchParams.set("session_id", sessionId);
-      if (visitorId) u.searchParams.set("visitor_id", visitorId);
-      return u.toString();
-    },
-    [sessionId, visitorId]
-  );
-
-  /* ---------------------------------------------------------------------------
-   * 8.6 Visitor Value Utilities
-   * ------------------------------------------------------------------------ */
   function updateLocalVisitorValues(newVals) {
     if (!newVals || typeof newVals !== "object") return;
     setVisitorDefaults((prev) => {
@@ -1447,11 +1260,6 @@ export default function Welcome() {
     } catch {}
   }
 
-  /* =======================================================================================
-   * 9. Bot / Alias Resolution & Brand Load
-   * =====================================================================================*/
-
-  // Resolve alias -> bot settings (including formfill_intro)
   useEffect(() => {
     if (botId || !alias) return;
     let cancel = false;
@@ -1498,7 +1306,6 @@ export default function Welcome() {
     };
   }, [alias, apiBase, botId]);
 
-  // If neither bot nor alias, attempt defaultAlias
   useEffect(() => {
     if (botId || alias || !defaultAlias) return;
     let cancel = false;
@@ -1533,16 +1340,17 @@ export default function Welcome() {
           });
         }
         if (data?.ok && data?.bot?.id) setBotId(data.bot.id);
-      } catch {
-        // silent
-      }
+      } catch {}
     })();
     return () => {
       cancel = true;
     };
   }, [botId, alias, defaultAlias, apiBase]);
 
-  // Brand tokens & logos
+  useEffect(() => {
+    if (!botId && !alias && !brandReady) setBrandReady(true);
+  }, [botId, alias, brandReady]);
+
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
@@ -1564,7 +1372,6 @@ export default function Welcome() {
           });
         }
       } catch {
-        // ignore
       } finally {
         if (!cancel) setBrandReady(true);
       }
@@ -1574,16 +1381,7 @@ export default function Welcome() {
     };
   }, [botId, apiBase]);
 
-  // Mark brand ready if no resolution is needed
-  useEffect(() => {
-    if (!botId && !alias && !brandReady) setBrandReady(true);
-  }, [botId, alias, brandReady]);
-
-  /* =======================================================================================
-   * 10. Form Fill Config
-   * =====================================================================================*/
-
-  async function fetchFormfillConfig(botIdArg, aliasArg) {
+  async function fetchFormfillConfigBy(botIdArg, aliasArg) {
     try {
       const params = new URLSearchParams();
       if (botIdArg) params.set("bot_id", botIdArg);
@@ -1606,18 +1404,16 @@ export default function Welcome() {
         setFormFields(patched);
         setVisitorDefaults(patchedDefaults);
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
   useEffect(() => {
-    if (botId) fetchFormfillConfig(botId, null);
+    if (botId) fetchFormfillConfigBy(botId, null);
   }, [botId]);
   useEffect(() => {
-    if (!botId && alias) fetchFormfillConfig(null, alias);
+    if (!botId && alias) fetchFormfillConfigBy(null, alias);
   }, [alias, botId]);
   useEffect(() => {
-    if (botId && visitorId) fetchFormfillConfig(botId, null);
+    if (botId && visitorId) fetchFormfillConfigBy(botId, null);
   }, [visitorId, botId]);
   useEffect(() => {
     if (
@@ -1629,25 +1425,21 @@ export default function Welcome() {
     }
   }, [mode, visitorId, botId]);
 
-  /**
-   * Active form fields are direct list (no forced additions). (Perspective optional.)
-   * FormFillCard filters to is_collected=true.
-   */
-  const activeFormFields = useMemo(() => {
-    return (formFields || []).map((f) =>
-      f.field_key === "perspective"
-        ? {
-            ...f,
-            field_type: "single_select",
-            options: f.options && f.options.length ? f.options : PERSPECTIVE_OPTIONS,
-          }
-        : f
-    );
-  }, [formFields]);
+  // Active form fields (perspective optional)
+  const activeFormFields = useMemo(
+    () =>
+      (formFields || []).map((f) =>
+        f.field_key === "perspective"
+          ? {
+              ...f,
+              field_type: "single_select",
+              options: f.options && f.options.length ? f.options : PERSPECTIVE_OPTIONS,
+            }
+          : f
+      ),
+    [formFields]
+  );
 
-  /**
-   * Compute defaults (URL override > visitor stored > fallback).
-   */
   const formDefaults = useMemo(() => {
     const o = { ...(visitorDefaults || {}) };
     activeFormFields.forEach((f) => {
@@ -1660,10 +1452,6 @@ export default function Welcome() {
     return o;
   }, [activeFormFields, visitorDefaults, urlParams]);
 
-  /* =======================================================================================
-   * 11. Ask / Chat Flow
-   * =====================================================================================*/
-
   async function doSend(outgoing) {
     if (!outgoing || !botId) return;
     setMode("ask");
@@ -1675,15 +1463,12 @@ export default function Welcome() {
     setLoading(true);
     setLastError(null);
 
-    // ALWAYS ensure perspective is set (fallback 'general').
-    const perspective = (visitorDefaults.perspective || "general").toLowerCase();
-
     const payload = withIdsBody({
       bot_id: botId,
       user_question: outgoing,
       scope: "standard",
       debug: true,
-      perspective,
+      perspective: (visitorDefaults.perspective || "general").toLowerCase(),
     });
 
     const axiosConfig = {
@@ -1781,20 +1566,12 @@ export default function Welcome() {
     await doSend(outgoing);
   }
 
-  /* =======================================================================================
-   * 12. Personalize / Form Fill
-   * =====================================================================================*/
-
   function openPersonalize() {
     refetchVisitorValues();
     setPending(null);
     setMode("formfill");
     setFormShown(true);
   }
-
-  /* =======================================================================================
-   * 13. Demo & Document Browsing
-   * =====================================================================================*/
 
   async function normalizeAndSelectDemo(item) {
     try {
@@ -1824,7 +1601,6 @@ export default function Welcome() {
     }
   }
 
-  // Browse Demos
   async function _openBrowse() {
     if (!botId) return;
     setMode("browse");
@@ -1856,7 +1632,6 @@ export default function Welcome() {
     await _openBrowse();
   }
 
-  // Browse Docs
   async function _openBrowseDocs() {
     if (!botId) return;
     setMode("docs");
@@ -1887,10 +1662,6 @@ export default function Welcome() {
     if (maybeOpenForm({ type: "docs" })) return;
     await _openBrowseDocs();
   }
-
-  /* =======================================================================================
-   * 14. Meeting Scheduling
-   * =====================================================================================*/
 
   const embedDomain =
     typeof window !== "undefined" ? window.location.hostname : "";
@@ -1935,6 +1706,16 @@ export default function Welcome() {
     await _openMeeting();
   }
 
+  function _openPrice() {
+    if (!botId) return;
+    setMode("price");
+    setSelected(null);
+  }
+  function openPrice() {
+    if (maybeOpenForm({ type: "price" })) return;
+    _openPrice();
+  }
+
   useEffect(() => {
     if (mode !== "meeting" || !botId || !sessionId || !visitorId) return;
     function onCalendlyMessage(e) {
@@ -1977,20 +1758,12 @@ export default function Welcome() {
     return () => window.removeEventListener("message", onCalendlyMessage);
   }, [mode, botId, sessionId, visitorId, apiBase]);
 
-  /* =======================================================================================
-   * 15. Input Auto-Resizing
-   * =====================================================================================*/
-
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
-
-  /* =======================================================================================
-   * 16. Pricing Flow: Load Questions & Compute Estimate
-   * =====================================================================================*/
 
   useEffect(() => {
     if (mode !== "price" || !botId) return;
@@ -2006,12 +1779,17 @@ export default function Welcome() {
         const data = await res.json();
         if (cancel) return;
         if (!data?.ok)
-          throw new Error(data?.error || "Failed to load pricing questions");
-        setPriceQuestions(Array.isArray(data.questions) ? data.questions : []);
+          throw new Error(
+            data?.error || "Failed to load pricing questions"
+          );
+        setPriceQuestions(
+          Array.isArray(data.questions) ? data.questions : []
+        );
         requestAnimationFrame(() =>
           contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
         );
         setPricingCopy((prev) => ({
+          ...prev,
           intro: data.pricing_intro || prev.intro,
           outro: data.pricing_outro || prev.outro,
           custom_notice: data.pricing_custom_notice || prev.custom_notice,
@@ -2065,7 +1843,7 @@ export default function Welcome() {
               "",
           },
           session_id: sessionId || undefined,
-          visitor_id: visitorId || undefined,
+            visitor_id: visitorId || undefined,
         };
         const res = await fetch(`${apiBase}/pricing/estimate`, {
           method: "POST",
@@ -2074,7 +1852,7 @@ export default function Welcome() {
         });
         const data = await res.json();
         if (cancel) return;
-        if (!data?.ok) throw new Error("estimate_failed");
+        if (!data?.ok) throw new Error();
         setPriceEstimate(data);
       } catch {
         if (!cancel) setPriceErr("Unable to compute estimate.");
@@ -2190,10 +1968,6 @@ export default function Welcome() {
     return lines;
   }, [priceEstimate, priceQuestions, priceAnswers]);
 
-  /* =======================================================================================
-   * 17. Tabs Configuration
-   * =====================================================================================*/
-
   const tabs = useMemo(() => {
     const out = [];
     out.push({
@@ -2224,10 +1998,6 @@ export default function Welcome() {
     return out;
   }, [tabsEnabled]);
 
-  /* =======================================================================================
-   * 18. Live Wording Updates
-   * =====================================================================================*/
-
   function handleLiveMessages(updated) {
     if (!updated || typeof updated !== "object") return;
     if ("welcome_message" in updated) {
@@ -2244,10 +2014,6 @@ export default function Welcome() {
           : prev.custom_notice,
     }));
   }
-
-  /* =======================================================================================
-   * 19. Edge Cases
-   * =====================================================================================*/
 
   if (fatal) {
     return (
@@ -2286,10 +2052,6 @@ export default function Welcome() {
     );
   }
 
-  /* =======================================================================================
-   * 20. Derived Render Vars
-   * =====================================================================================*/
-
   const logoSrc =
     brandAssets.logo_url ||
     brandAssets.logo_light_url ||
@@ -2304,10 +2066,6 @@ export default function Welcome() {
     : listSource;
 
   const showAskBottom = mode !== "formfill";
-
-  /* =======================================================================================
-   * 21. ThemeLab Formfill Change Handler (admin toggles)
-   * =====================================================================================*/
 
   function handleThemeLabFormfillChange({ show_formfill, standard_fields }) {
     setShowFormfill(!!show_formfill);
@@ -2332,9 +2090,7 @@ export default function Welcome() {
                   ? "single_select"
                   : "text",
               options:
-                sf.field_key === "perspective"
-                  ? PERSPECTIVE_OPTIONS
-                  : undefined,
+                sf.field_key === "perspective" ? PERSPECTIVE_OPTIONS : undefined,
             };
           }
           byKey[sf.field_key].is_collected = !!sf.is_collected;
@@ -2345,10 +2101,6 @@ export default function Welcome() {
     }
   }
 
-  /* =======================================================================================
-   * 22. Render
-   * =====================================================================================*/
-
   return (
     <div
       className={classNames(
@@ -2358,7 +2110,7 @@ export default function Welcome() {
       style={liveTheme}
     >
       <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all">
-        {/* =================== Banner / Header =================== */}
+        {/* Header */}
         <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)]">
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
@@ -2366,7 +2118,6 @@ export default function Welcome() {
                 src={logoSrc}
                 alt="Brand logo"
                 className="h-10 object-contain"
-                draggable={false}
               />
             </div>
             <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
@@ -2391,13 +2142,12 @@ export default function Welcome() {
           />
         </div>
 
-        {/* =================== Body Scroll Container =================== */}
+        {/* Body */}
         <div
           ref={contentRef}
           className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto"
         >
-          {/* ---------- Personalize / Form Fill Mode ---------- */}
-          {mode === "formfill" || mode === "personalize" ? (
+          {(mode === "formfill" || mode === "personalize") ? (
             <div className="space-y-4">
               {formFillIntro ? (
                 <div className="text-base font-semibold whitespace-pre-line">
@@ -2453,7 +2203,6 @@ export default function Welcome() {
               />
             </div>
           ) : mode === "price" ? (
-            // ---------- Pricing Mode ----------
             <div className="flex-1 flex flex-col">
               <div className="pt-0 pb-0">
                 <PriceMirror lines={mirrorLines.length ? mirrorLines : [""]} />
@@ -2497,7 +2246,6 @@ export default function Welcome() {
               </div>
             </div>
           ) : mode === "meeting" ? (
-            // ---------- Meeting Mode ----------
             <div className="w-full flex-1 flex flex-col">
               {agent?.schedule_header ? (
                 <div className="text-sm italic text-[var(--helper-fg)] mb-3 whitespace-pre-line">
@@ -2552,7 +2300,6 @@ export default function Welcome() {
               )}
             </div>
           ) : selected ? (
-            // ---------- Selected Demo / Doc ----------
             <div className="w-full flex-1 flex flex-col">
               {mode === "docs" ? (
                 <DocIframe doc={selected} />
@@ -2588,7 +2335,6 @@ export default function Welcome() {
               )}
             </div>
           ) : mode === "browse" ? (
-            // ---------- Browsing Demos ----------
             <div className="w-full flex-1 flex flex-col">
               {(browseItems || []).length > 0 && (
                 <>
@@ -2610,7 +2356,6 @@ export default function Welcome() {
               )}
             </div>
           ) : mode === "docs" ? (
-            // ---------- Browsing Docs ----------
             <div className="w-full flex-1 flex flex-col">
               {(browseDocs || []).length > 0 && (
                 <>
@@ -2664,7 +2409,6 @@ export default function Welcome() {
               )}
             </div>
           ) : (
-            // ---------- Ask Mode (default) ----------
             <div className="w-full flex-1 flex flex-col">
               {!lastQuestion && !loading && (
                 <div className="space-y-3">
@@ -2740,7 +2484,6 @@ export default function Welcome() {
           )}
         </div>
 
-        {/* =================== Ask Input (Bottom Bar) =================== */}
         {showAskBottom && (
           <AskInputBar
             value={input}
@@ -2752,7 +2495,6 @@ export default function Welcome() {
         )}
       </div>
 
-      {/* =================== ThemeLab Panels (Admin) =================== */}
       {themeLabOn && botId ? (
         <ThemeLabPanels
           apiBase={apiBase}
@@ -2775,31 +2517,3 @@ export default function Welcome() {
     </div>
   );
 }
-
-/* =========================================================================================
- * 23. Extended Development Notes (Retained for Large File Parity)
- * =======================================================================================
- * This trailing section intentionally preserves detailed commentary and potential future
- * extension reminders to maintain parity with a historically large file footprint.
- *
- * - If additional admin editing (e.g., formfill_intro) is required through ThemeLab,
- *   add corresponding endpoints and panel controls.
- * - To add analytics: hook into doSend() success branch and dispatch custom events.
- * - To implement streaming model responses: replace axios.post with a fetch + ReadableStream,
- *   progressively update responseText state.
- * - If multi-locale support: abstract messages & pricing copy into i18n layer keyed by locale.
- * - Pricing mirror lines can be advanced with templating (e.g., Mustache) if complexity grows.
- * - Security: ThemeLab panels access is controlled via themelab/status + cookie token; ensure
- *   secure cookie settings in production (SameSite=None; Secure; HttpOnly).
- * - Performance: Debounce color changes if bridging to heavier operations; currently direct.
- * - Accessibility: If adding more interactive items, ensure keyboard focus management (e.g.
- *   return focus to triggering element after closing personalize form).
- * - Persistence Race Conditions: Minimal here. If concurrency emerges (multiple admins editing),
- *   employ ETag or revision locking on wording/options endpoints.
- * - Perspective Field: Currently optional. If business rules later mandate presence for certain
- *   bots, enforce at /formfill-config server level.
- * - Cleanup: Event listeners (Calendly) are removed via useEffect cleanup.
- *
- * End of File.
- * =========================================================================================
- */
