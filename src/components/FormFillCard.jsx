@@ -1,22 +1,16 @@
-// FormFillCard.jsx — FULL REPLACEMENT (spec update)
-// CHANGES (Spec Rev):
-//  - Every field (including perspective + first_name/last_name/email) now comes from formfill_fields.
-//  - Only render fields whose is_collected === true (dynamic hide/show).
-//  - Removed tooltip icon; if a field has a tooltip and value is empty, we show it as the placeholder.
-//  - Supports single_select via <select>. Perspective (if provided with options) displays as pick list.
-//  - Validation ignores non-collected fields (they are not rendered).
-//  - Required validation still enforced for visible (collected) fields.
-//  - No reference to is_standard.
-//
+// FormFillCard.jsx — FULL REPLACEMENT (spec update v2)
+// CHANGES (this revision):
+//  - Perspective may be absent (optional). We simply render what we receive.
+//  - Only render fields whose is_collected === true.
+//  - Duplicate handling is done upstream; this component assumes unique field_key.
+//  - Tooltip (if any) used as placeholder when value empty (no icon).
+//  - Validation only for rendered (collected) & required fields.
+//  - If perspective is present in submitted values but empty, caller may coerce to 'general'.
 // Props:
-//   fields: Array<{
-//      field_key, label, field_type, is_required, is_collected, options?, tooltip?, placeholder?
-//   }>
+//   fields: Array<{ field_key, label, field_type, is_required, is_collected, options?, tooltip?, placeholder? }>
 //   defaults?: Record<string,string>
 //   onSubmit(values: Record<string,string>): void
 //   onCancel?: () => void
-//
-// NOTE: 'fields' should already contain perspective & core identity fields from upstream.
 //
 import React from "react";
 
@@ -30,7 +24,6 @@ function FieldRow({ f, value, onChange, error }) {
   const opts = Array.isArray(f.options) ? f.options.filter(Boolean) : [];
   const isSelect = t === "single_select" || (opts.length > 0 && t !== "multi_select");
 
-  // Placeholder preference: field.placeholder > field.tooltip > generic
   const effectivePlaceholder =
     (value ? undefined : (f.placeholder || f.tooltip || (isSelect ? `Select ${f.label || f.field_key}` : "")));
 
@@ -53,7 +46,9 @@ function FieldRow({ f, value, onChange, error }) {
             value={value || ""}
             onChange={(e) => onChange(e.target.value)}
           >
-            <option value="">{effectivePlaceholder || `Select ${f.label || f.field_key}`}</option>
+            <option value="">
+              {effectivePlaceholder || `Select ${f.label || f.field_key}`}
+            </option>
             {opts.map((o) => {
               const k = o.key ?? o.value ?? o.id;
               const lbl = o.label ?? o.title ?? k;
@@ -98,7 +93,6 @@ function FieldRow({ f, value, onChange, error }) {
 }
 
 export default function FormFillCard({ fields, defaults, onSubmit, onCancel }) {
-  // Only collected fields are displayed / validated.
   const collectedFields = React.useMemo(
     () => (fields || []).filter((f) => f && f.is_collected),
     [fields]
@@ -168,8 +162,9 @@ export default function FormFillCard({ fields, defaults, onSubmit, onCancel }) {
   function submit() {
     if (!validateAll()) return;
     const out = { ...values };
-    if (typeof out.perspective === "string")
-      out.perspective = out.perspective.toLowerCase();
+    if (typeof out.perspective === "string" && !out.perspective.trim()) {
+      delete out.perspective; // let caller force 'general'
+    }
     onSubmit(out);
   }
 
