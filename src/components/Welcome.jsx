@@ -200,7 +200,7 @@ function ThemeLabWordingBox({ apiBase, botId, frameRef, sharedAuth, onFormfillCh
     show_schedule_meeting:false,show_intro_video:false,show_formfill:false,intro_video_url:""
   });
   const [messages,setMessages]=useState({
-    welcome_message:"",pricing_intro:"",pricing_outro:"",pricing_custom_notice:""
+    welcome_message:"",pricing_intro:"",pricing_outro:"",pricing_custom_notice:"",formfill_intro:""
   });
   const [standardFields,setStandardFields]=useState([]);
   const [editingKey,setEditingKey]=useState("");
@@ -210,6 +210,7 @@ function ThemeLabWordingBox({ apiBase, botId, frameRef, sharedAuth, onFormfillCh
   const [authError,setAuthError]=useState("");
   const messageLabels={
     welcome_message:"Welcome",
+    formfill_intro:"Form Fill Intro",
     pricing_intro:"Pricing Intro",
     pricing_outro:"Pricing Outro",
     pricing_custom_notice:"Custom Pricing",
@@ -434,7 +435,7 @@ function ThemeLabWordingBox({ apiBase, botId, frameRef, sharedAuth, onFormfillCh
                   onClick={()=>beginEdit(k)}>
                   <span className="flex-1">{label}</span>
                   <span className="opacity-70 mr-2 truncate max-w-[140px]">
-                    {messages[k]?messages[k].slice(0,24)+(messages[k].length>24?"…":""):"—"}
+                    {messages[k]?messages[k].slice(0,24)+(messages[k].length > 24 ? "…" : ""):"—"}
                   </span>
                   <button type="button"
                     onClick={(e)=>{e.stopPropagation();beginEdit(k);}}
@@ -1160,6 +1161,7 @@ export default function Welcome() {
   function handleLiveMessages(updated){
     if(!updated||typeof updated!=="object") return;
     if("welcome_message" in updated) setResponseText(updated.welcome_message||"");
+    if("formfill_intro" in updated) setFormFillIntro(updated.formfill_intro||"");
     setPricingCopy(prev=>({
       intro:"pricing_intro" in updated ? updated.pricing_intro||"" : prev.intro,
       outro:"pricing_outro" in updated ? updated.pricing_outro||"" : prev.outro,
@@ -1198,14 +1200,14 @@ export default function Welcome() {
         standard_fields.forEach(sf=>{
           if(!sf.field_key) return;
           const canonical=FIELD_SYNONYMS[sf.field_key]||sf.field_key;
-            if(!byKey[canonical]){
-              byKey[canonical]={
-                field_key:canonical,
-                label: CANON_LABELS[canonical] || canonical.replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase()),
-                field_type: canonical==="email"?"email":(canonical==="perspective"?"single_select":"text"),
-                options: canonical==="perspective"?PERSPECTIVE_OPTIONS:undefined,
-              };
-            }
+          if(!byKey[canonical]){
+            byKey[canonical]={
+              field_key:canonical,
+              label: CANON_LABELS[canonical] || canonical.replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase()),
+              field_type: canonical==="email"?"email":(canonical==="perspective"?"single_select":"text"),
+              options: canonical==="perspective"?PERSPECTIVE_OPTIONS:undefined,
+            };
+          }
           byKey[canonical].is_collected=!!sf.is_collected;
           byKey[canonical].is_required=!!sf.is_required;
         });
@@ -1213,6 +1215,15 @@ export default function Welcome() {
       });
     }
   }
+
+  // Provide tooltip value as placeholder for the form card.
+  const formFieldsForCard = useMemo(
+    () => activeFormFields.map(f => ({
+      ...f,
+      placeholder: f.tooltip || f.placeholder || ""
+    })),
+    [activeFormFields]
+  );
 
   return (
     <div className={classNames("w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center transition-opacity duration-200",brandReady?"opacity-100":"opacity-0")} style={liveTheme}>
@@ -1241,7 +1252,7 @@ export default function Welcome() {
                 ? <div className="text-base font-semibold whitespace-pre-line">{formFillIntro}</div>
                 : <div className="text-base font-semibold">Update your information below.</div>}
               <FormFillCard
-                fields={activeFormFields}
+                fields={formFieldsForCard}
                 defaults={formDefaults}
                 onSubmit={async vals=>{
                   if(!visitorId) return;
@@ -1429,7 +1440,6 @@ export default function Welcome() {
             if(typeof varsUpdate==="function"){
               setPickerVars(prev=>({...prev,...(varsUpdate(prev)||{})}));
             } else {
-              // FIX: added spread for varsUpdate object
               setPickerVars(prev=>({...prev,...(varsUpdate||{})}));
             }
           }}
