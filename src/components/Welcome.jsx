@@ -1,16 +1,3 @@
-/* Welcome.jsx — FULL REPLACEMENT (Updated for: custom grab handle alignment, persistent send button style, smarter demo pruning)
- *
- * Adjustments in this revision:
- * 1. Send button appearance no longer dulls after sending (AskInputBar handles styling; we keep logic same here).
- * 2. Added heuristic pruning of recommended demos so a tightly matching question returns fewer buttons
- *    instead of default 6 every time.
- *    - Heuristic: token overlap scoring; if top score >> others, keep only top (or top 2).
- *    - Config constants: DEMO_PRUNE_MAX, DEMO_STRONG_THRESHOLD, DEMO_STRONG_RATIO.
- * 3. Minor: ensure doSend calls prune before setItems().
- *
- * This file expects the updated AskInputBar component (with custom grab handle).
- */
-
 import React, {
   useEffect,
   useMemo,
@@ -60,11 +47,16 @@ const PERSPECTIVE_OPTIONS = [
   { key: "compliance", label: "Governance / Compliance" },
 ];
 
-// Demo pruning configuration
-const DEMO_PRUNE_MAX = 6;              // never exceed server-provided limit
-const DEMO_STRONG_THRESHOLD = 2;       // require at least this many overlapping tokens to consider a "strong" match
-const DEMO_STRONG_RATIO = 2.2;         // topScore >= secondScore * ratio => keep only top
-const DEMO_SECONDARY_KEEP = 2;         // if top is strong but second is moderately close, still allow up to this many
+const DEMO_PRUNE_MAX = 6;
+const DEMO_STRONG_THRESHOLD = 2;
+const DEMO_STRONG_RATIO = 2.2;
+const DEMO_SECONDARY_KEEP = 2;
+
+const ALWAYS_FORM_FIELDS = [
+  { field_key: "first_name", label: "First Name" },
+  { field_key: "last_name", label: "Last Name" },
+  { field_key: "email", label: "Email" },
+];
 
 const classNames = (...xs) => xs.filter(Boolean).join(" ");
 function inverseBW(hex) {
@@ -79,7 +71,6 @@ function inverseBW(hex) {
   return L > 0.5 ? "#000000" : "#ffffff";
 }
 
-// ---------- Demo Recommendation Pruning Heuristic ----------
 function scoreDemo(question, demo) {
   const qTokens = new Set(
     (question || "")
@@ -103,25 +94,16 @@ function scoreDemo(question, demo) {
 
 function pruneDemoButtons(question, buttons) {
   if (!Array.isArray(buttons) || buttons.length <= 2) return buttons;
-  const scored = buttons.map((b) => ({
-    b,
-    s: scoreDemo(question, b),
-  }));
+  const scored = buttons.map((b) => ({ b, s: scoreDemo(question, b) }));
   scored.sort((a, b) => b.s - a.s);
   const topScore = scored[0].s;
   const secondScore = scored[1]?.s ?? 0;
-
-  // If no meaningful overlap, just return baseline (let user choose)
   if (topScore < DEMO_STRONG_THRESHOLD) {
     return scored.slice(0, Math.min(DEMO_PRUNE_MAX, buttons.length)).map((x) => x.b);
   }
-
-  // Strong dominance: only top (or top few) when top significantly higher than second
   if (secondScore === 0 || topScore >= secondScore * DEMO_STRONG_RATIO) {
     return scored.slice(0, 1).map((x) => x.b);
   }
-
-  // Moderate case: keep only top N (smaller set than original)
   const cap = Math.min(
     Math.max(DEMO_SECONDARY_KEEP, 2),
     DEMO_PRUNE_MAX,
@@ -130,7 +112,7 @@ function pruneDemoButtons(question, buttons) {
   return scored.slice(0, cap).map((x) => x.b);
 }
 
-/* ===================== Floating Panel Position Hook ===================== */
+/* Floating panel positioning */
 function useFloatingPos(frameRef, side = "left", width = 460, gap = 12) {
   const [pos, setPos] = useState({ left: 16, top: 16, width });
   useEffect(() => {
@@ -163,7 +145,7 @@ function useFloatingPos(frameRef, side = "left", width = 460, gap = 12) {
   return pos;
 }
 
-/* ===================== ThemeLab Color Panel ===================== */
+/* ThemeLab Color Panel */
 function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
   const TOKEN_TO_CSS = {
     "banner.background": "--banner-bg",
@@ -214,22 +196,18 @@ function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
       const data = await res.json();
       const toks = (data?.ok ? data.tokens : []) || [];
       setRows(toks);
-
       const v = {};
       toks.forEach((t) => {
         v[t.token_key] = t.value || "#000000";
       });
       setValues(v);
-
       const cssPatch = {};
       toks.forEach((t) => {
         const cssVar = TOKEN_TO_CSS[t.token_key];
         if (cssVar) cssPatch[cssVar] = v[t.token_key];
       });
       onVars && onVars(cssPatch);
-    } catch {
-      /* ignore */
-    }
+    } catch {}
   }
 
   useEffect(() => {
@@ -283,12 +261,11 @@ function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
       by.get(k).push(r);
     }
     SCREEN_ORDER.forEach(({ key }) => {
-      if (by.has(key))
-        by
-          .get(key)
-          .sort((a, b) =>
-            String(a.label || "").localeCompare(String(b.label || ""))
-          );
+      if (by.has(key)) {
+        by.get(key).sort((a, b) =>
+          String(a.label || "").localeCompare(String(b.label || ""))
+        );
+      }
     });
     return by;
   }, [rows]);
@@ -309,7 +286,6 @@ function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
       }}
     >
       <div className="text-base font-bold mb-2">ThemeLab Colors</div>
-
       {sharedAuth.state === "ok" ? (
         <>
           {SCREEN_ORDER.map(({ key, label }) => (
@@ -381,14 +357,14 @@ function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
   );
 }
 
-/* ===================== ThemeLab Wording Panel (UPDATED) ===================== */
+/* ThemeLab Wording Panel */
 function ThemeLabWordingBox({
   apiBase,
   botId,
   frameRef,
   sharedAuth,
   onFormfillChange,
-  onLiveMessages,            // ADDED: callback to propagate live message changes
+  onLiveMessages,
 }) {
   const pos = useFloatingPos(frameRef, "right", 460);
 
@@ -427,6 +403,10 @@ function ThemeLabWordingBox({
     pricing_outro: "Pricing Outro",
     pricing_custom_notice: "Custom Pricing",
   };
+
+  const ALWAYS_FIELD_KEYS = new Set(
+    ALWAYS_FORM_FIELDS.map((f) => f.field_key.toLowerCase())
+  );
 
   function fetchWithToken(url, init = {}) {
     const headers = { ...(init.headers || {}) };
@@ -494,19 +474,6 @@ function ThemeLabWordingBox({
     }
   }
 
-  function applyDraft() {
-    if (!editingKey) return;
-    setMessages((prev) => {
-      const updated = { ...prev, [editingKey]: draft };
-      // ADDED: Immediately inform parent so visible UI updates after Apply
-      if (typeof onLiveMessages === "function") {
-        onLiveMessages(updated);
-      }
-      return updated;
-    });
-    markDirty();
-  }
-  
   useEffect(() => {
     if (sharedAuth.state === "ok") load();
   }, [sharedAuth.state]);
@@ -548,6 +515,7 @@ function ThemeLabWordingBox({
     });
   }
   function toggleCollected(fk) {
+    if (ALWAYS_FIELD_KEYS.has(String(fk).toLowerCase())) return;
     setStandardFields((prev) => {
       const next = prev.map((f) =>
         f.field_key === fk ? { ...f, is_collected: !f.is_collected } : f
@@ -558,6 +526,7 @@ function ThemeLabWordingBox({
     });
   }
   function toggleRequired(fk) {
+    if (ALWAYS_FIELD_KEYS.has(String(fk).toLowerCase())) return;
     setStandardFields((prev) => {
       const next = prev.map((f) =>
         f.field_key === fk ? { ...f, is_required: !f.is_required } : f
@@ -574,7 +543,11 @@ function ThemeLabWordingBox({
   }
   function applyDraft() {
     if (!editingKey) return;
-    setMessages((prev) => ({ ...prev, [editingKey]: draft }));
+    setMessages((prev) => {
+      const updated = { ...prev, [editingKey]: draft };
+      if (typeof onLiveMessages === "function") onLiveMessages(updated);
+      return updated;
+    });
     markDirty();
   }
   function cancelEdit() {
@@ -630,6 +603,9 @@ function ThemeLabWordingBox({
     propagateFormfill(snap.options.show_formfill, snap.standard_fields);
     setMsg("Restored.");
     setTimeout(() => setMsg(""), 1400);
+    if (typeof onLiveMessages === "function") {
+      onLiveMessages(snap.messages || {});
+    }
   }
 
   return (
@@ -670,7 +646,7 @@ function ThemeLabWordingBox({
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-          <button
+            <button
             type="submit"
             className="px-3 py-2 rounded-[12px] bg-black text-white text-sm"
           >
@@ -721,31 +697,40 @@ function ThemeLabWordingBox({
                 Form Fill Fields
               </div>
               <div className="space-y-1">
-                {standardFields.map((f) => (
-                  <div
-                    key={f.field_key}
-                    className="flex items-center justify-between text-xs gap-2"
-                  >
-                    <span className="flex-1">{f.label}</span>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        title="Collect"
-                        checked={!!f.is_collected}
-                        onChange={() => toggleCollected(f.field_key)}
-                      />
-                      <span className="text-[10px] uppercase tracking-wide opacity-70">
-                        reqd
-                      </span>
-                      <input
-                        type="checkbox"
-                        title="Required"
-                        checked={!!f.is_required}
-                        onChange={() => toggleRequired(f.field_key)}
-                      />
+                {standardFields
+                  .filter(
+                    (f) =>
+                      f?.field_key &&
+                      !ALWAYS_FIELD_KEYS.has(f.field_key.toLowerCase())
+                  )
+                  .map((f) => (
+                    <div
+                      key={f.field_key}
+                      className="flex items-center justify-between text-xs gap-2"
+                    >
+                      <span className="flex-1">{f.label}</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          title="Collect"
+                          checked={!!f.is_collected}
+                          onChange={() => toggleCollected(f.field_key)}
+                        />
+                        <span className="text-[10px] uppercase tracking-wide opacity-70">
+                          reqd
+                        </span>
+                        <input
+                          type="checkbox"
+                          title="Required"
+                          checked={!!f.is_required}
+                          onChange={() => toggleRequired(f.field_key)}
+                        />
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                <div className="text-[10px] italic text-gray-500 pt-1">
+                  First Name, Last Name, and Email are always collected & required.
+                </div>
               </div>
             </div>
           </div>
@@ -887,7 +872,6 @@ function ThemeLabWordingBox({
   );
 }
 
-/* ===================== ThemeLab Panels Wrapper ===================== */
 function ThemeLabPanels({
   apiBase,
   botId,
@@ -945,12 +929,13 @@ function ThemeLabPanels({
         frameRef={frameRef}
         sharedAuth={sharedAuth}
         onFormfillChange={onFormfillChange}
+        onLiveMessages={onLiveMessages}
       />
     </>
   );
 }
 
-/* ================== Pricing Subcomponents (unchanged) ================== */
+/* Pricing helpers */
 function normalizeOptions(q) {
   const raw = q?.options ?? q?.choices ?? q?.buttons ?? q?.values ?? [];
   return (Array.isArray(raw) ? raw : [])
@@ -1087,7 +1072,7 @@ function EstimateCard({ estimate, outroText }) {
   );
 }
 
-/* ================== MAIN COMPONENT ================== */
+/* MAIN COMPONENT */
 export default function Welcome() {
   const apiBase =
     import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
@@ -1142,6 +1127,7 @@ export default function Welcome() {
     () => ({ ...derivedTheme, ...pickerVars }),
     [derivedTheme, pickerVars]
   );
+
   const [brandAssets, setBrandAssets] = useState({
     logo_url: null,
     logo_light_url: null,
@@ -1159,7 +1145,7 @@ export default function Welcome() {
     meeting: false,
     price: false,
   });
-  
+
   function handleLiveMessages(updated) {
     if (!updated || typeof updated !== "object") return;
     if (Object.prototype.hasOwnProperty.call(updated, "welcome_message")) {
@@ -1177,7 +1163,7 @@ export default function Welcome() {
         : prev.custom_notice,
     }));
   }
-  
+
   const [showFormfill, setShowFormfill] = useState(true);
   const [formFields, setFormFields] = useState([]);
   const [visitorDefaults, setVisitorDefaults] = useState({});
@@ -1230,7 +1216,7 @@ export default function Welcome() {
         hasPerspective = true;
         return {
           ...f,
-          field_type: f.field_type || "single_select",
+            field_type: f.field_type || "single_select",
           is_standard: true,
           is_collected: true,
           is_required: true,
@@ -1292,18 +1278,12 @@ export default function Welcome() {
           visitorId
         )}`
       );
-      if (!res.ok) {
-        console.warn("[visitor-formfill] GET status", res.status);
-        return;
-      }
+      if (!res.ok) return;
       const data = await res.json();
       if (data?.ok && data.values) updateLocalVisitorValues(data.values);
-    } catch (e) {
-      console.warn("[visitor-formfill] GET error", e);
-    }
+    } catch {}
   }
 
-  // --- Bot / alias resolution (unchanged logic) ---
   useEffect(() => {
     if (botId || !alias) return;
     let cancel = false;
@@ -1381,9 +1361,7 @@ export default function Welcome() {
           });
         }
         if (data?.ok && data?.bot?.id) setBotId(data.bot.id);
-      } catch {
-        /* ignore */
-      }
+      } catch {}
     })();
     return () => {
       cancel = true;
@@ -1421,7 +1399,6 @@ export default function Welcome() {
           });
         }
       } catch {
-        /* ignore */
       } finally {
         if (!cancel) setBrandReady(true);
       }
@@ -1454,9 +1431,7 @@ export default function Welcome() {
         setFormFields(patched);
         setVisitorDefaults(patchedDefaults);
       }
-    } catch {
-      /* ignore */
-    }
+    } catch {}
   }
   useEffect(() => {
     if (botId) fetchFormfillConfigBy(botId, null);
@@ -1474,11 +1449,28 @@ export default function Welcome() {
   }, [mode, visitorId, botId]);
 
   const activeFormFields = useMemo(() => {
-    const base = (Array.isArray(formFields) ? formFields : []).filter(
-      (f) => f && (f.is_standard || f.is_collected)
-    );
-    if (!base.some((f) => f.field_key === "perspective")) {
-      base.push({
+    // Map existing fields
+    const byKey = new Map();
+    (Array.isArray(formFields) ? formFields : []).forEach((f) => {
+      if (f?.field_key) byKey.set(f.field_key.toLowerCase(), { ...f });
+    });
+    // Inject always fields with required flags
+    ALWAYS_FORM_FIELDS.forEach((core) => {
+      const k = core.field_key.toLowerCase();
+      const existing = byKey.get(k) || {};
+      byKey.set(k, {
+        ...existing,
+        field_key: core.field_key,
+        label: core.label,
+        is_standard: true,
+        is_collected: true,
+        is_required: true,
+        field_type: existing.field_type || (core.field_key === "email" ? "email" : "text"),
+      });
+    });
+    // Perspective
+    if (!byKey.has("perspective")) {
+      byKey.set("perspective", {
         field_key: "perspective",
         label: "Perspective",
         field_type: "single_select",
@@ -1487,8 +1479,17 @@ export default function Welcome() {
         is_required: true,
         options: PERSPECTIVE_OPTIONS,
       });
+    } else {
+      const pv = byKey.get("perspective");
+      byKey.set("perspective", {
+        ...pv,
+        field_type: "single_select",
+        is_collected: true,
+        is_required: true,
+        options: pv.options || PERSPECTIVE_OPTIONS,
+      });
     }
-    return base;
+    return Array.from(byKey.values());
   }, [formFields]);
 
   const formDefaults = useMemo(() => {
@@ -1536,7 +1537,6 @@ export default function Welcome() {
         status >= 200 &&
         status < 300 &&
         typeof data.response_text === "string";
-
       if (!ok) {
         const msg =
           data.response_text ||
@@ -1544,14 +1544,11 @@ export default function Welcome() {
           (status === 500
             ? "Internal server error"
             : `Request failed (${status})`);
-        setResponseText(
-          msg || "Sorry—something went wrong."
-        );
+        setResponseText(msg || "Sorry—something went wrong.");
         setLoading(false);
         setLastError({ status, data, payloadSent: payload });
         return;
       }
-
       const text = data.response_text || "";
       const src = Array.isArray(data.demo_buttons) ? data.demo_buttons : [];
       let mapped = src.map((it, idx) => ({
@@ -1560,14 +1557,10 @@ export default function Welcome() {
         url: it.url ?? it.value ?? it.button_value ?? "",
         description: it.description ?? it.summary ?? it.functions_text ?? "",
       }));
-
-      // Apply pruning heuristic
       mapped = pruneDemoButtons(outgoing, mapped);
-
       if (typeof data.perspective === "string" && data.perspective.trim()) {
         updateLocalVisitorValues({ perspective: data.perspective.toLowerCase() });
       }
-
       setItems(mapped.filter(Boolean));
       setResponseText(text);
       setLoading(false);
@@ -1671,8 +1664,7 @@ export default function Welcome() {
           id: it.id ?? it.value ?? it.url ?? it.title,
           title: it.title ?? it.button_title ?? it.label ?? "",
           url: it.url ?? it.value ?? it.button_value ?? "",
-          description:
-            it.description ?? it.summary ?? it.functions_text ?? "",
+          description: it.description ?? it.summary ?? it.functions_text ?? "",
         }))
       );
       requestAnimationFrame(() =>
@@ -1703,8 +1695,7 @@ export default function Welcome() {
           id: it.id ?? it.value ?? it.url ?? it.title,
           title: it.title ?? it.button_title ?? it.label ?? "",
           url: it.url ?? it.value ?? it.button_value ?? "",
-          description:
-            it.description ?? it.summary ?? it.functions_text ?? "",
+          description: it.description ?? it.summary ?? it.functions_text ?? "",
         }))
       );
       requestAnimationFrame(() =>
@@ -1897,7 +1888,7 @@ export default function Welcome() {
               "",
           },
           session_id: sessionId || undefined,
-            visitor_id: visitorId || undefined,
+          visitor_id: visitorId || undefined,
         };
         const res = await fetch(`${apiBase}/pricing/estimate`, {
           method: "POST",
@@ -2096,11 +2087,7 @@ export default function Welcome() {
     fallbackLogo;
 
   const listSource = mode === "browse" ? browseItems : items;
-  const visibleUnderVideo = selected
-    ? mode === "ask"
-      ? items
-      : []
-    : listSource;
+  const visibleUnderVideo = selected ? (mode === "ask" ? items : []) : listSource;
 
   const showAskBottom = mode !== "formfill";
 
@@ -2135,7 +2122,6 @@ export default function Welcome() {
       style={liveTheme}
     >
       <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all">
-        {/* Header */}
         <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)]">
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
@@ -2164,7 +2150,6 @@ export default function Welcome() {
           <TabsNav mode={mode === "formfill" ? "personalize" : mode} tabs={tabs} />
         </div>
 
-        {/* BODY */}
         <div
           ref={contentRef}
           className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto"
@@ -2195,16 +2180,7 @@ export default function Welcome() {
                       }),
                     });
                     postOk = resp.ok;
-                    if (!resp.ok) {
-                      console.warn(
-                        "[visitor-formfill] POST failed",
-                        resp.status,
-                        await resp.text()
-                      );
-                    }
-                  } catch (e) {
-                    console.warn("[visitor-formfill] POST error", e);
-                  }
+                  } catch {}
                   try {
                     sessionStorage.setItem(FORM_KEY, "1");
                   } catch {}
@@ -2404,9 +2380,7 @@ export default function Welcome() {
                               `${apiBase}/render-doc-iframe`,
                               {
                                 method: "POST",
-                                headers: {
-                                  "Content-Type": "application/json",
-                                },
+                                headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify(
                                   withIdsBody({
                                     bot_id: botId,
@@ -2544,7 +2518,7 @@ export default function Welcome() {
             }
           }}
           onFormfillChange={handleThemeLabFormfillChange}
-          onLiveMessages={handleLiveMessages} 
+          onLiveMessages={handleLiveMessages}
         />
       ) : null}
     </div>
