@@ -381,14 +381,14 @@ function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
   );
 }
 
-/* ===================== ThemeLab Wording Panel ===================== */
-/* (Unchanged from previous full replacement except formatting) */
+/* ===================== ThemeLab Wording Panel (UPDATED) ===================== */
 function ThemeLabWordingBox({
   apiBase,
   botId,
   frameRef,
   sharedAuth,
   onFormfillChange,
+  onLiveMessages,            // ADDED: callback to propagate live message changes
 }) {
   const pos = useFloatingPos(frameRef, "right", 460);
 
@@ -483,6 +483,9 @@ function ThemeLabWordingBox({
       setDraft(fk ? data.messages[fk] || "" : "");
       setDirty(false);
       propagateFormfill(data.options?.show_formfill, sf);
+      if (typeof onLiveMessages === "function") {
+        onLiveMessages(data.messages || {});
+      }
     } catch {
       setMsg("Load failed.");
       setTimeout(() => setMsg(""), 2200);
@@ -491,6 +494,19 @@ function ThemeLabWordingBox({
     }
   }
 
+  function applyDraft() {
+    if (!editingKey) return;
+    setMessages((prev) => {
+      const updated = { ...prev, [editingKey]: draft };
+      // ADDED: Immediately inform parent so visible UI updates after Apply
+      if (typeof onLiveMessages === "function") {
+        onLiveMessages(updated);
+      }
+      return updated;
+    });
+    markDirty();
+  }
+  
   useEffect(() => {
     if (sharedAuth.state === "ok") load();
   }, [sharedAuth.state]);
@@ -878,6 +894,7 @@ function ThemeLabPanels({
   frameRef,
   onVars,
   onFormfillChange,
+  onLiveMessages,
 }) {
   const [authState, setAuthState] = useState("checking");
   const [token, setToken] = useState("");
@@ -1142,7 +1159,25 @@ export default function Welcome() {
     meeting: false,
     price: false,
   });
-
+  
+  function handleLiveMessages(updated) {
+    if (!updated || typeof updated !== "object") return;
+    if (Object.prototype.hasOwnProperty.call(updated, "welcome_message")) {
+      setResponseText(updated.welcome_message || "");
+    }
+    setPricingCopy((prev) => ({
+      intro: Object.prototype.hasOwnProperty.call(updated, "pricing_intro")
+        ? (updated.pricing_intro || "")
+        : prev.intro,
+      outro: Object.prototype.hasOwnProperty.call(updated, "pricing_outro")
+        ? (updated.pricing_outro || "")
+        : prev.outro,
+      custom_notice: Object.prototype.hasOwnProperty.call(updated, "pricing_custom_notice")
+        ? (updated.pricing_custom_notice || "")
+        : prev.custom_notice,
+    }));
+  }
+  
   const [showFormfill, setShowFormfill] = useState(true);
   const [formFields, setFormFields] = useState([]);
   const [visitorDefaults, setVisitorDefaults] = useState({});
@@ -2509,6 +2544,7 @@ export default function Welcome() {
             }
           }}
           onFormfillChange={handleThemeLabFormfillChange}
+          onLiveMessages={handleLiveMessages} 
         />
       ) : null}
     </div>
