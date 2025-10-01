@@ -1,17 +1,30 @@
 import React, { useEffect, useRef } from "react";
+import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 
 /**
- * AskInputBar — FULL REPLACEMENT (Spec tweaks)
+ * AskInputBar — FULL REPLACEMENT
  *
- * User requests implemented:
- * 1. Larger white arrow inside green button (icon size increased from 11px → 14px).
- * 2. Increase starting width of the question box by exactly 3px (input bar widened by 3px using a wrapper width calc and negative horizontal offset).
- * 3. Send button vertically centered in the (now wider) question box and positioned 3px from the right inner boundary of the question box.
+ * Matches the Ask Bar implementation used directly inside AskAssistant.jsx.
+ * Structure, class names, spacing, sizing, and behavior are aligned to the
+ * "gold standard" snippet:
  *
- * Notes:
- * - Native vertical resize remains enabled.
- * - Button remains visually active (no dulling); blank submission still prevented logically.
- * - Right padding inside the textarea updated so typed text does not overlap the button.
+ *  <div class="px-4 py-3 border-t ...">
+ *    <div class="relative w-full">
+ *      <textarea ... />
+ *      <button ...><ArrowUpCircleIcon ... /></button>
+ *    </div>
+ *  </div>
+ *
+ * Props:
+ *  - value (string)
+ *  - onChange(nextValue)
+ *  - onSend()  (triggered on Enter (no Shift) or button click)
+ *  - inputRef (optional external ref for the textarea)
+ *  - placeholder (optional)
+ *  - disabled (optional)
+ *  - show (optional boolean) if false, renders null (convenience)
+ *
+ * Auto-resize logic matches original: adjusts height on each input.
  */
 
 export default function AskInputBar({
@@ -21,131 +34,85 @@ export default function AskInputBar({
   inputRef,
   placeholder = "Ask your question here",
   disabled = false,
+  show = true,
 }) {
   const localRef = useRef(null);
   const ref = inputRef || localRef;
 
-  // Layout constants
-  const MAX_AUTO_LINES = 3;
-  const LINE_HEIGHT = 25; // px
-  const BUTTON_SIZE = 30;
-  const ICON_SIZE = 14; // enlarged arrow
-  const BUTTON_RIGHT_GAP = 8; // px from question box right edge
-  const EXTRA_WIDTH = 3; // total width increase
-  const HALF_EXTRA = EXTRA_WIDTH / 2; // symmetrical offset
-
-  // Auto-grow (up to MAX_AUTO_LINES). After that user scrolls / can resize manually.
+  // Auto-resize (same behavior as gold standard)
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     el.style.height = "auto";
-    const maxAuto = LINE_HEIGHT * MAX_AUTO_LINES;
-    const natural = el.scrollHeight;
-    const finalH = Math.min(natural, maxAuto);
-    el.style.height = finalH + "px";
-    el.style.overflowY = natural > maxAuto ? "auto" : "hidden";
+    el.style.height = `${el.scrollHeight}px`;
   }, [value, ref]);
 
-  const canSend = !disabled && !!(value || "").trim();
-
-  function triggerSend() {
-    if (!canSend) return;
-    onSend && onSend();
-  }
-
-  function onKeyDown(e) {
+  function handleKeyDown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      triggerSend();
+      if (!disabled && value.trim()) {
+        onSend && onSend();
+      }
     }
   }
 
+  function handleInput(e) {
+    const el = e.currentTarget;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }
+
+  if (!show) return null;
+
   return (
     <div
-      className="w-full px-4 pt-4 pb-4 bg-[var(--card-bg,#ffffff)] border-t"
-      style={{
-        borderTopColor: "var(--border-default,#d1d5db)",
-        transition: "background .2s",
-      }}
+      className="px-4 py-3 border-t border-[var(--border-default)]"
+      data-patch="ask-bottom-bar"
     >
-      {/* Wrapper widened by +3px and centered by negative half-margins */}
-      <div
-        className="relative"
-        style={{
-            width: `calc(100% + ${EXTRA_WIDTH}px)`,
-          marginLeft: `-${HALF_EXTRA}px`,
-          marginRight: `-${HALF_EXTRA}px`,
-        }}
-      >
+      <div className="relative w-full">
         <textarea
           ref={ref}
-          rows={1}
-          value={value}
-          disabled={disabled}
-          placeholder={placeholder}
-          onChange={(e) => onChange && onChange(e.target.value)}
-          onKeyDown={onKeyDown}
-          spellCheck="true"
+            rows={1}
           className="
             w-full
-            text-sm
-            bg-white
-            border border-gray-300
-            rounded-[14px]
+            rounded-[0.75rem]
             px-4
-            pr-[72px]             /* space for button + gap + text clearance */
             py-2
-            leading-5
-            placeholder:text-gray-500
-            focus:outline-none focus:border-gray-400
+            pr-14
+            text-base
+            placeholder-gray-400
             resize-y
-            min-h-[40px]
-            max-h-[260px]
+            min-h-[3rem]
+            max-h-[160px]
+            bg-[var(--card-bg)]
+            border
+            border-[var(--border-default)]
+            focus:border-[var(--border-default)]
+            focus:ring-1
+            focus:ring-[var(--border-default)]
+            outline-none
           "
-          style={{ lineHeight: LINE_HEIGHT + "px" }}
+          placeholder={placeholder}
+          value={value}
+          disabled={disabled}
+          onChange={(e) => !disabled && onChange && onChange(e.target.value)}
+          onInput={handleInput}
+          onKeyDown={handleKeyDown}
+          spellCheck="true"
         />
-
-        {/* Send button (centered vertically, fixed gap from right edge) */}
         <button
-          type="button"
           aria-label="Send"
-          title="Send"
-          onClick={triggerSend}
-          disabled={!canSend}
-          className="
-            absolute
-            top-1/2
-            -translate-y-1/2
-            flex items-center justify-center
-            rounded-full
-            shadow
-            active:scale-95
-            transition
-          "
+          onClick={() => {
+            if (!disabled && value.trim()) onSend && onSend();
+          }}
+          className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95 transition"
+          disabled={disabled || !value.trim()}
           style={{
-            width: BUTTON_SIZE,
-            height: BUTTON_SIZE,
-            right: BUTTON_RIGHT_GAP,
-            background: "var(--send-color,#059669)",
-            color: "#ffffff",
-            cursor: canSend ? "pointer" : "not-allowed",
-            pointerEvents: canSend ? "auto" : "none",
+            opacity: disabled ? 0.6 : 1,
+            cursor: disabled || !value.trim() ? "not-allowed" : "pointer",
           }}
         >
-          <svg
-            viewBox="0 0 20 20"
-            width={ICON_SIZE}
-            height={ICON_SIZE}
-            stroke="currentColor"
-            strokeWidth="2"
-            fill="none"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M5 9.5 10 4.5l5 5" />
-            <path d="M10 5v10" />
-          </svg>
+          <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:brightness-110" />
         </button>
       </div>
     </div>
