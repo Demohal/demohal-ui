@@ -2,7 +2,6 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
-// Vite config with React de-duplication so only one copy is bundled.
 export default defineConfig({
   plugins: [react()],
   resolve: {
