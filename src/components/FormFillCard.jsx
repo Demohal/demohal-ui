@@ -1,26 +1,24 @@
-// FormFillCard.jsx — FULL REPLACEMENT (now supports single_select pick lists)
+// FormFillCard.jsx — FULL REPLACEMENT (spec update)
+// CHANGES (Spec Rev):
+//  - Every field (including perspective + first_name/last_name/email) now comes from formfill_fields.
+//  - Only render fields whose is_collected === true (dynamic hide/show).
+//  - Removed tooltip icon; if a field has a tooltip and value is empty, we show it as the placeholder.
+//  - Supports single_select via <select>. Perspective (if provided with options) displays as pick list.
+//  - Validation ignores non-collected fields (they are not rendered).
+//  - Required validation still enforced for visible (collected) fields.
+//  - No reference to is_standard.
+//
 // Props:
 //   fields: Array<{
-//      field_key, label, tooltip, placeholder, field_type,
-//      is_pii, is_required, is_collected, is_standard, options?
+//      field_key, label, field_type, is_required, is_collected, options?, tooltip?, placeholder?
 //   }>
 //   defaults?: Record<string,string>
 //   onSubmit(values: Record<string,string>): void
 //   onCancel?: () => void
 //
-// Improvements:
-//  - Added native <select> rendering for field_type === 'single_select' (or if options array provided).
-//  - Perspective field (single_select) now shows canonical pick list passed via f.options.
-//  - Validation enforces required selection + membership in provided options.
-//  - Keyboard and a11y friendly (labels + description tooltip).
-//  - Normalizes perspective value to lowercase before submit (safety).
+// NOTE: 'fields' should already contain perspective & core identity fields from upstream.
 //
-// NOTE: Upstream code (Welcome.jsx) must ensure `options` for perspective are provided
-//       as [{key,label}, ...]. This component simply renders what it receives.
-//
-
 import React from "react";
-import { QuestionMarkCircleIcon } from "@heroicons/react/24/outline";
 
 function classNames(...xs) {
   return xs.filter(Boolean).join(" ");
@@ -30,29 +28,18 @@ function FieldRow({ f, value, onChange, error }) {
   const id = `ff_${f.field_key}`;
   const t = (f.field_type || "text").toLowerCase();
   const opts = Array.isArray(f.options) ? f.options.filter(Boolean) : [];
-
-  // Decide rendering strategy
   const isSelect = t === "single_select" || (opts.length > 0 && t !== "multi_select");
+
+  // Placeholder preference: field.placeholder > field.tooltip > generic
+  const effectivePlaceholder =
+    (value ? undefined : (f.placeholder || f.tooltip || (isSelect ? `Select ${f.label || f.field_key}` : "")));
 
   return (
     <div className="space-y-1">
-      <div className="flex items-center gap-2">
-        <label htmlFor={id} className="text-sm font-medium">
-          {f.label || f.field_key}
-          {f.is_required ? <span className="text-red-500 ml-0.5">*</span> : null}
-        </label>
-        {f.tooltip ? (
-          <div
-            className="relative group inline-flex items-center"
-            aria-label={`Why we ask for ${f.label || f.field_key}`}
-          >
-            <QuestionMarkCircleIcon className="h-5 w-5 text-[var(--helper-fg)] shrink-0" />
-            <div className="absolute z-10 hidden group-hover:block bg-black text-white text-xs rounded px-2 py-1 left-6 -top-2 whitespace-pre [box-shadow:var(--shadow-elevation)]">
-              {f.tooltip}
-            </div>
-          </div>
-        ) : null}
-      </div>
+      <label htmlFor={id} className="text-sm font-medium flex items-center gap-1">
+        <span>{f.label || f.field_key}</span>
+        {f.is_required ? <span className="text-red-500 ml-0.5">*</span> : null}
+      </label>
 
       {isSelect ? (
         <div>
@@ -66,10 +53,7 @@ function FieldRow({ f, value, onChange, error }) {
             value={value || ""}
             onChange={(e) => onChange(e.target.value)}
           >
-            {/* Placeholder / empty option */}
-            <option value="">
-              {f.placeholder || `Select ${f.label || f.field_key}`}
-            </option>
+            <option value="">{effectivePlaceholder || `Select ${f.label || f.field_key}`}</option>
             {opts.map((o) => {
               const k = o.key ?? o.value ?? o.id;
               const lbl = o.label ?? o.title ?? k;
@@ -81,9 +65,7 @@ function FieldRow({ f, value, onChange, error }) {
               );
             })}
           </select>
-          {error ? (
-            <div className="text-xs text-red-600 mt-1">{error}</div>
-          ) : null}
+          {error ? <div className="text-xs text-red-600 mt-1">{error}</div> : null}
         </div>
       ) : (
         <>
@@ -100,12 +82,13 @@ function FieldRow({ f, value, onChange, error }) {
             }
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            placeholder={f.placeholder || ""}
+            placeholder={effectivePlaceholder || ""}
             className={classNames(
               "w-full rounded-[0.75rem] px-3 py-2 text-sm border",
               "border-[var(--border-default)] bg-[var(--card-bg)]",
               "focus:outline-none focus:ring-1 focus:ring-[var(--border-default)]"
             )}
+            autoComplete="off"
           />
           {error ? <div className="text-xs text-red-600">{error}</div> : null}
         </>
@@ -115,6 +98,12 @@ function FieldRow({ f, value, onChange, error }) {
 }
 
 export default function FormFillCard({ fields, defaults, onSubmit, onCancel }) {
+  // Only collected fields are displayed / validated.
+  const collectedFields = React.useMemo(
+    () => (fields || []).filter((f) => f && f.is_collected),
+    [fields]
+  );
+
   const initial = React.useMemo(() => {
     const o = {};
     (fields || []).forEach((f) => {
@@ -143,27 +132,22 @@ export default function FormFillCard({ fields, defaults, onSubmit, onCancel }) {
     const optionKeys = opts.map(
       (o) => String(o.key ?? o.value ?? o.id ?? "").toLowerCase()
     );
-
     if (f.is_required && s.length === 0) {
-      return `${f.label || f.field_key} is required`;
+      return "Required";
     }
-    if (s.length === 0) return null; // optional empty is fine
-
+    if (s.length === 0) return null;
     switch (t) {
       case "email":
-        return /[^@\s]+@[^@\s]+\.[^@\s]+/.test(s)
-          ? null
-          : "Enter a valid email";
+        return /[^@\s]+@[^@\s]+\.[^@\s]+/.test(s) ? null : "Invalid email";
       case "number":
-        return /^-?\d+(?:[.,]\d+)?$/.test(s) ? null : "Enter a valid number";
+        return /^-?\d+(?:[.,]\d+)?$/.test(s) ? null : "Invalid number";
       case "phone":
-        return /^[0-9+()\-\s]{7,}$/.test(s) ? null : "Enter a valid phone";
-      case "single_select": {
+        return /^[0-9+()\-\s]{7,}$/.test(s) ? null : "Invalid phone";
+      case "single_select":
         if (optionKeys.length && !optionKeys.includes(s.toLowerCase())) {
-          return "Choose a valid option";
+          return "Invalid choice";
         }
         return null;
-      }
       default:
         return null;
     }
@@ -171,7 +155,7 @@ export default function FormFillCard({ fields, defaults, onSubmit, onCancel }) {
 
   function validateAll() {
     const e = {};
-    (fields || []).forEach((f) => {
+    collectedFields.forEach((f) => {
       if (!f?.field_key) return;
       const k = String(f.field_key);
       const err = validateField(f, values[k]);
@@ -183,29 +167,31 @@ export default function FormFillCard({ fields, defaults, onSubmit, onCancel }) {
 
   function submit() {
     if (!validateAll()) return;
-
-    // Normalize perspective to lowercase if present (safety)
     const out = { ...values };
-    if (typeof out.perspective === "string") {
+    if (typeof out.perspective === "string")
       out.perspective = out.perspective.toLowerCase();
-    }
     onSubmit(out);
   }
 
   return (
     <div className="w-full bg-[var(--card-bg)] rounded-2xl p-4 md:p-5 border-2 border-[var(--border-default)] [box-shadow:var(--shadow-elevation)]">
       <div className="space-y-4">
-        {(fields || []).map((f) => (
-            <FieldRow
-              key={f.field_key}
-              f={f}
-              value={values[f.field_key] ?? ""}
-              onChange={(val) =>
-                setValues((s) => ({ ...s, [f.field_key]: val }))
-              }
-              error={errors[f.field_key]}
-            />
+        {collectedFields.map((f) => (
+          <FieldRow
+            key={f.field_key}
+            f={f}
+            value={values[f.field_key] ?? ""}
+            onChange={(val) =>
+              setValues((s) => ({ ...s, [f.field_key]: val }))
+            }
+            error={errors[f.field_key]}
+          />
         ))}
+        {collectedFields.length === 0 && (
+          <div className="text-xs italic text-[var(--helper-fg)]">
+            No fields selected to collect.
+          </div>
+        )}
       </div>
       <div className="mt-5 flex items-center justify-end gap-3">
         {onCancel ? (
@@ -219,7 +205,7 @@ export default function FormFillCard({ fields, defaults, onSubmit, onCancel }) {
         ) : null}
         <button
           type="button"
-            aria-label="Continue"
+          aria-label="Continue"
           onClick={submit}
           className="h-10 w-10 rounded-full bg-[var(--send-color)] text-white flex items-center justify-center shadow hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black"
         >
