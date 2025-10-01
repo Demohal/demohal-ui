@@ -1218,10 +1218,13 @@ export default function Welcome() {
 
   // Provide tooltip value as placeholder for the form card.
   const formFieldsForCard = useMemo(
-    () => activeFormFields.map(f => ({
-      ...f,
-      placeholder: f.tooltip || f.placeholder || ""
-    })),
+    () =>
+      activeFormFields.map(f => {
+        const ph = typeof f.tooltip === "string" && f.tooltip.trim()
+          ? f.tooltip.trim()
+          : (f.placeholder || "");
+        return { ...f, placeholder: ph };
+      }),
     [activeFormFields]
   );
 
