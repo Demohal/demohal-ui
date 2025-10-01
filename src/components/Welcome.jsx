@@ -1217,17 +1217,15 @@ export default function Welcome() {
   }
 
   // Provide tooltip value as placeholder for the form card.
-  const formFieldsForCard = useMemo(
-    () =>
-      activeFormFields.map(f => {
-        const ph = typeof f.tooltip === "string" && f.tooltip.trim()
-          ? f.tooltip.trim()
-          : (f.placeholder || "");
-        return { ...f, placeholder: ph };
-      }),
-    [activeFormFields]
-  );
-
+  // IMPORTANT: This was previously a useMemo declared AFTER early returns (if (fatal) / if (!botId)),
+  // which caused an "Invalid hook call" (#310) because the hook was skipped on some renders.
+  // We now compute it as a plain value so there is NO hook below the early returns.
+  const formFieldsForCard = activeFormFields.map(f => {
+    const ph = typeof f.tooltip === "string" && f.tooltip.trim()
+      ? f.tooltip.trim()
+      : (f.placeholder || "");
+    return { ...f, placeholder: ph };
+  });
   return (
     <div className={classNames("w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center transition-opacity duration-200",brandReady?"opacity-100":"opacity-0")} style={liveTheme}>
       <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all">
