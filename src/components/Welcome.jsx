@@ -1176,45 +1176,6 @@ export default function Welcome() {
     return lines;
   }, [priceEstimate, priceQuestions, priceAnswers]);
 
-  // (Existing imports and component code above unchanged)
-
-  /* Add near other useEffect hooks inside the component */
-  useEffect(() => {
-    if (!sessionId) return;
-  
-    function sendEnd(reason = "unload") {
-      try {
-        const url = `${apiBase}/session/end`;
-        const body = JSON.stringify({ session_id: sessionId, reason });
-        if (navigator.sendBeacon) {
-          const blob = new Blob([body], { type: "application/json" });
-          navigator.sendBeacon(url, blob);
-        } else {
-          fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body });
-        }
-      } catch {
-        // swallow errors (beacon best effort)
-      }
-    }
-  
-    function onPageHide() {
-      sendEnd("pagehide");
-    }
-    function onVisibility() {
-      if (document.visibilityState === "hidden") {
-        sendEnd("hidden");
-      }
-    }
-  
-    window.addEventListener("pagehide", onPageHide);
-    document.addEventListener("visibilitychange", onVisibility);
-  
-    return () => {
-      window.removeEventListener("pagehide", onPageHide);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, [sessionId, apiBase]);
-  
   const tabs = useMemo(() => {
     const out = [];
     out.push({ key: "personalize", label: "Personalize", onClick: openPersonalize });
