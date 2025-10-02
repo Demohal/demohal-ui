@@ -61,15 +61,8 @@ function FieldRow({ f, value, onChange, error }) {
             onChange={(e) => onChange(e.target.value)}
           >
             {/* Strategy 1: disabled+hidden placeholder ONLY for perspective */}
-            <option
-              value=""
-              disabled={isPerspective}
-              hidden={isPerspective}
-            >
-              {effectivePlaceholder ||
-                (isPerspective
-                  ? "Select a Perspective"
-                  : `Select ${f.label || f.field_key}`)}
+            <option value="">
+              {effectivePlaceholder || `Select ${f.label || f.field_key}`}
             </option>
             {opts.map((o) => {
               const k = o.key ?? o.value ?? o.id;
