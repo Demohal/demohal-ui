@@ -348,8 +348,8 @@ function ThemeLabWordingBox({ apiBase, botId, frameRef, sharedAuth, onFormfillCh
         messages,
         standard_fields: standardFields.map(f => ({
           field_key: f.field_key,
-            is_collected: !!f.is_collected,
-            is_required: !!f.is_required
+          is_collected: !!f.is_collected,
+          is_required: !!f.is_required
         }))
       };
       const r = await fx(`${apiBase}/themelab/wording-options/save`, {
@@ -425,7 +425,7 @@ function ThemeLabWordingBox({ apiBase, botId, frameRef, sharedAuth, onFormfillCh
             </div>
           </div>
           <div className="mb-2 font-semibold text-sm">Messages</div>
-          <div className="space-y-1 mb-3">
+            <div className="space-y-1 mb-3">
             {Object.entries(messageLabels).map(([k, label]) => {
               const active = editingKey === k;
               return (
@@ -611,7 +611,7 @@ export default function Welcome() {
     const q = new URLSearchParams(window.location.search); const o = {}; q.forEach((v, k) => o[k] = v); return o;
   }, []);
   const [botId, setBotId] = useState(botIdFromUrl || "");
-  const [promptOverride, setPromptOverride] = useState(""); // NEW: store prompt_override from /bot-settings
+  const [promptOverride, setPromptOverride] = useState("");
   const [fatal, setFatal] = useState("");
   const [mode, setMode] = useState("ask");
   const [input, setInput] = useState("");
@@ -684,8 +684,24 @@ export default function Welcome() {
     if (!vals || typeof vals !== "object") return;
     setVisitorDefaults(prev => {
       const m = { ...(prev || {}) };
-      Object.entries(vals).forEach(([k, v]) => { if (typeof v === "string") m[k] = v; });
-      if (m.perspective) m.perspective = m.perspective.toLowerCase();
+      Object.entries(vals).forEach(([k, v]) => {
+        if (k === "perspective") {
+          if (typeof v === "string") {
+            const lower = v.toLowerCase();
+            // Treat server-provided default 'general' as unset if user hasn't chosen anything yet
+            if (lower === "general" && (m.perspective === undefined || m.perspective === null)) {
+              // leave as null to show placeholder
+              if (m.perspective === undefined) m.perspective = null;
+            } else {
+              m.perspective = lower;
+            }
+          } else if (v == null) {
+            m.perspective = null;
+          }
+        } else if (typeof v === "string") {
+          m[k] = v;
+        }
+      });
       return m;
     });
   }
@@ -712,7 +728,7 @@ export default function Welcome() {
         if (j?.ok) { setVisitorId(j.visitor_id || ""); setSessionId(j.session_id || ""); }
         const b = j?.ok ? j?.bot : null;
         if (b) {
-          setPromptOverride(b.prompt_override || ""); // capture prompt_override
+          setPromptOverride(b.prompt_override || "");
           setResponseText(b.welcome_message || "");
           maybePrefillFirstQuestion(b.first_question || "");
           setIntroVideoUrl(b.intro_video_url || "");
@@ -747,7 +763,7 @@ export default function Welcome() {
         if (j?.ok) { setVisitorId(j.visitor_id || ""); setSessionId(j.session_id || ""); }
         const b = j?.ok ? j?.bot : null;
         if (b) {
-          setPromptOverride(b.prompt_override || ""); // capture prompt_override
+          setPromptOverride(b.prompt_override || "");
           setResponseText(b.welcome_message || "");
           maybePrefillFirstQuestion(b.first_question || "");
           setIntroVideoUrl(b.intro_video_url || "");
@@ -806,6 +822,8 @@ export default function Welcome() {
       if (j?.ok) {
         const raw = Array.isArray(j.fields) ? j.fields : [];
         const visitorVals = (j.visitor_values && typeof j.visitor_values === "object" ? j.visitor_values : {}) || {};
+        // Convert default 'general' to null for UI placeholder (only if user hasn't explicitly chosen)
+        if (visitorVals.perspective === "general") visitorVals.perspective = null;
         const { fields: patched, defaults: def } = enrichPerspectiveIfPresent(raw, visitorVals);
         setShowFormfill(!!j.show_formfill);
         setFormFields(patchCanonicalFields(patched));
@@ -854,8 +872,9 @@ export default function Welcome() {
       const k = f.field_key; const urlV = urlParams[k];
       if (typeof urlV === "string" && urlV.length) o[k] = urlV;
     });
-    if (!o.perspective) o.perspective = "general";
-    o.perspective = String(o.perspective).toLowerCase();
+    // If no perspective set, keep it null (not 'general') so placeholder shows
+    if (o.perspective === undefined) o.perspective = null;
+    if (typeof o.perspective === "string" && o.perspective.length) o.perspective = o.perspective.toLowerCase();
     return o;
   }, [activeFormFields, visitorDefaults, urlParams]);
 
@@ -863,13 +882,14 @@ export default function Welcome() {
     if (!outgoing || !botId) return;
     setMode("ask"); setLastQuestion(outgoing); setInput(""); setSelected(null);
     setResponseText(""); setItems([]); setLoading(true); setLastError(null);
+    const perspectiveForCall = visitorDefaults.perspective ? visitorDefaults.perspective.toLowerCase() : "general";
     const payload = withIdsBody({
       bot_id: botId,
       user_question: outgoing,
       scope: "standard",
       debug: true,
-      perspective: (visitorDefaults.perspective || "general").toLowerCase(),
-      prompt_override: promptOverride || "" // NEW: include prompt_override
+      perspective: perspectiveForCall,
+      prompt_override: promptOverride || ""
     });
     const axiosConfig = { timeout: 30000, headers: { "Content-Type": "application/json", ...withIdsHeaders() }, validateStatus: () => true };
     try {
@@ -891,7 +911,10 @@ export default function Welcome() {
       }));
       mapped = pruneDemoButtons(outgoing, mapped);
       if (typeof data.perspective === "string" && data.perspective.trim()) {
-        updateLocalVisitorValues({ perspective: data.perspective.toLowerCase() });
+        // Only set if user actually has chosen one; if still sending general because null, keep null.
+        if (visitorDefaults.perspective !== null && visitorDefaults.perspective !== undefined) {
+          updateLocalVisitorValues({ perspective: data.perspective.toLowerCase() });
+        }
       }
       setItems(mapped.filter(Boolean)); setResponseText(text); setLoading(false);
       requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
@@ -904,6 +927,7 @@ export default function Welcome() {
       setItems([]); setLoading(false);
     }
   }
+
   function maybeOpenForm(next) {
     if (!showFormfill || activeFormFields.length === 0) return false;
     try { if (sessionStorage.getItem(FORM_KEY) === "1") { if (!formCompleted) setFormCompleted(true); return false; } } catch { }
@@ -981,7 +1005,7 @@ export default function Welcome() {
       if (ag && ag.calendar_link_type && String(ag.calendar_link_type).toLowerCase() === "external" && ag.calendar_link) {
         try {
           const base = ag.calendar_link || "";
-            const withQS = `${base}${base.includes("?") ? "&" : "?"}session_id=${encodeURIComponent(sessionId || "")}&visitor_id=${encodeURIComponent(visitorId || "")}&bot_id=${encodeURIComponent(botId || "")}`;
+          const withQS = `${base}${base.includes("?") ? "&" : "?"}session_id=${encodeURIComponent(sessionId || "")}&visitor_id=${encodeURIComponent(visitorId || "")}&bot_id=${encodeURIComponent(botId || "")}`;
           window.open(withQS, "_blank", "noopener,noreferrer");
         } catch { }
       }
@@ -1000,7 +1024,7 @@ export default function Welcome() {
         const p = m.payload || {};
         const payloadOut = {
           event: m.event,
-          scheduled_event: p.event || p.scheduled_event || null,
+            scheduled_event: p.event || p.scheduled_event || null,
           invitee: { uri: p.invitee?.uri ?? null, email: p.invitee?.email ?? null, name: p.invitee?.full_name ?? p.invitee?.name ?? null },
           questions_and_answers: p.questions_and_answers ?? p.invitee?.questions_and_answers ?? [],
           tracking: p.tracking || {}
@@ -1220,13 +1244,13 @@ export default function Welcome() {
     }
   }
 
-  // Provide tooltip value as placeholder for the form card.
   const formFieldsForCard = activeFormFields.map(f => {
     const ph = typeof f.tooltip === "string" && f.tooltip.trim()
       ? f.tooltip.trim()
       : (f.placeholder || "");
     return { ...f, placeholder: ph };
   });
+
   return (
     <div className={classNames("w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center transition-opacity duration-200", brandReady ? "opacity-100" : "opacity-0")} style={liveTheme}>
       <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all">
