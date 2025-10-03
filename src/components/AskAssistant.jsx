@@ -344,15 +344,17 @@ export default function AskAssistant() {
     import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
   // URL → alias / bot_id / themelab
-  const { alias, botIdFromUrl, themeLabOn } = useMemo(() => {
+  const { alias, botIdFromUrl, themeLabOn, agentAlias } = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
-    const a = (qs.get("alias") || qs.get("alais") || "").trim();
-    const b = (qs.get("bot_id") || "").trim();
+    const a  = (qs.get("alias") || qs.get("alais") || "").trim();
+    const b  = (qs.get("bot_id") || "").trim();
     const th = (qs.get("themelab") || "").trim();
+    const ag = (qs.get("agent") || "").trim(); // NEW: agent alias
     return {
       alias: a,
       botIdFromUrl: b,
       themeLabOn: th === "1" || th.toLowerCase() === "true",
+      agentAlias: ag || "",
     };
   }, []);
 
@@ -561,6 +563,47 @@ export default function AskAssistant() {
     };
   }, [botId, alias, defaultAlias, apiBase]);
 
+  const agentPrefetchedRef = useRef(false);
+
+  useEffect(() => {
+    // Prefetch agent immediately after we have botId + session (if available),
+    // but do not block on agentAlias (we still prefetch first active if none).
+    if (!botId) return;
+    // We prefer to wait until session_id arrives so the backend can record agent_id into context.
+    // If you want it even earlier, remove sessionId check.
+    if (!sessionId) return;
+    if (agentPrefetchedRef.current) return;
+
+    const url =
+      `${apiBase}/agent?bot_id=${encodeURIComponent(botId)}` +
+      (agentAlias ? `&agent=${encodeURIComponent(agentAlias)}` : "") +
+      (sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : "") +
+      (visitorId ? `&visitor_id=${encodeURIComponent(visitorId)}` : "");
+
+    (async () => {
+      try {
+        const r = await fetch(url);
+        const j = await r.json();
+        if (j?.ok && j.agent) {
+          setAgent(j.agent);
+          agentPrefetchedRef.current = true;
+          if (agentAlias && j.agent.alias !== agentAlias) {
+            console.warn(
+              `[AskAssistant Prefetch] Requested agent alias "${agentAlias}" not matched; using alias="${j.agent.alias}" id=${j.agent.id}`
+            );
+          }
+        } else if (j?.error === "agent_not_found") {
+            console.warn(
+              `[AskAssistant Prefetch] Agent alias "${agentAlias}" not found (strict or no fallback).`
+            );
+            agentPrefetchedRef.current = true; // Avoid retry loop unless you want retries.
+        }
+      } catch (e) {
+        console.warn("[AskAssistant Prefetch] Agent prefetch failed", e);
+      }
+    })();
+  }, [botId, sessionId, visitorId, agentAlias, apiBase]);
+  
   // If we start with bot_id in URL, load settings that way (and init visitor/session)
   useEffect(() => {
     if (!botIdFromUrl) return;
@@ -793,36 +836,61 @@ useEffect(() => {
   async function openMeeting() {
     if (!botId) return;
     setMode("meeting");
-    try {
-      const res = await fetch(
-        `${apiBase}/agent?bot_id=${encodeURIComponent(botId)}`
+    // If already prefetched, still allow UI to proceed immediately.
+    if (agent) {
+      requestAnimationFrame(() =>
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
       );
+    }
+    try {
+      const url =
+        `${apiBase}/agent?bot_id=${encodeURIComponent(botId)}` +
+        (agentAlias ? `&agent=${encodeURIComponent(agentAlias)}` : "") +
+        (sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : "") +
+        (visitorId ? `&visitor_id=${encodeURIComponent(visitorId)}` : "");
+      const res = await fetch(url);
       const data = await res.json();
       const ag = data?.ok ? data.agent : null;
-      setAgent(ag);
-      if (
-        ag &&
-        ag.calendar_link_type &&
-        String(ag.calendar_link_type).toLowerCase() === "external" &&
-        ag.calendar_link
-      ) {
-        try {
-          {
+      if (ag) {
+        setAgent(ag);
+        if (agentAlias && ag.alias !== agentAlias) {
+          console.warn(
+            `[AskAssistant] Requested agent alias "${agentAlias}" not found; fell back to "${ag.alias}" (id=${ag.id}).`
+          );
+        }
+        // If external calendar link type, open new tab
+        if (
+          ag.calendar_link_type &&
+          String(ag.calendar_link_type).toLowerCase() === "external" &&
+          ag.calendar_link
+        ) {
+          try {
             const base = ag.calendar_link || "";
-            const withQS = `${base}${base.includes('?') ? '&' : '?'}session_id=${encodeURIComponent(sessionId||'')}&visitor_id=${encodeURIComponent(visitorId||'')}&bot_id=${encodeURIComponent(botId||'')}&utm_source=${encodeURIComponent(botId||'')}&utm_medium=${encodeURIComponent(sessionId||'')}&utm_campaign=${encodeURIComponent(visitorId||'')}`;
+            const withQS =
+              `${base}${base.includes("?") ? "&" : "?"}` +
+              `session_id=${encodeURIComponent(sessionId || "")}` +
+              `&visitor_id=${encodeURIComponent(visitorId || "")}` +
+              `&bot_id=${encodeURIComponent(botId || "")}` +
+              `&utm_source=${encodeURIComponent(botId || "")}` +
+              `&utm_medium=${encodeURIComponent(sessionId || "")}` +
+              `&utm_campaign=${encodeURIComponent(visitorId || "")}`;
             window.open(withQS, "_blank", "noopener,noreferrer");
-
-          }
-        } catch {}
+          } catch {}
+        }
+      } else if (data?.error === "agent_not_found") {
+        console.warn("[AskAssistant] No active agent found for this bot (and alias strict?).");
+        setAgent(null);
+      } else {
+        setAgent(null);
       }
       requestAnimationFrame(() =>
         contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
       );
-    } catch {
+    } catch (e) {
+      console.warn("[AskAssistant] openMeeting fetch error", e);
       setAgent(null);
     }
   }
-
   async function openBrowse() {
     if (!botId) return;
     setMode("browse");
