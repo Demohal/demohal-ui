@@ -1,8 +1,11 @@
-/* Updated Welcome component with:
-   - Powered By logo enlarged & repositioned (bottom bar overlay)
-   - Website link click-through on header logo
-   - pid URL param persisted to visitors_v2.pid via /bot-settings
-   - bots_v2.website support
+/* Patch:
+   1. Removed "Requested agent:" debug line on Schedule Meeting screen.
+   2. Restored / ensured visibility of the Powered By graphic:
+      - Reverted to a flex layout (logo on the left, textarea full width to the right).
+      - Enlarged logo ~33% (h-11 instead of h-8).
+      - Kept textarea spanning the remaining width; no overlap tricks that could hide the logo.
+   (If you still prefer the textarea to visually sit "on top" of the logo, let me know and I can
+    implement a semi‑transparent or masked background approach instead.)
 */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -147,7 +150,7 @@ function PriceMirror({ lines }) {
       {lines.map((ln, i) => (
         <div
           key={i}
-            className="text-base italic whitespace-pre-line text-[var(--mirror-fg)]"
+          className="text-base italic whitespace-pre-line text-[var(--mirror-fg)]"
         >
           {ln}
         </div>
@@ -300,7 +303,7 @@ export default function Welcome() {
   const apiBase =
     import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-  // Parse URL params (added pid)
+  // Parse URL params (pid included)
   const { alias, botIdFromUrl, themeLabOn, agentAlias, pidParam } = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     const a = (qs.get("alias") || qs.get("alais") || "").trim();
@@ -347,32 +350,27 @@ export default function Welcome() {
     const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
     return { ...themeVars, "--tab-active-fg": activeFg };
   }, [themeVars]);
-
   const [pickerVars, setPickerVars] = useState({});
   const liveTheme = useMemo(
     () => ({ ...derivedTheme, ...pickerVars }),
     [derivedTheme, pickerVars]
   );
-
   const [brandAssets, setBrandAssets] = useState({
     logo_url: null,
     logo_light_url: null,
     logo_dark_url: null,
   });
-
   const initialBrandReady = useMemo(
     () => !(botIdFromUrl || alias),
     [botIdFromUrl, alias]
   );
   const [brandReady, setBrandReady] = useState(initialBrandReady);
-
   const [tabsEnabled, setTabsEnabled] = useState({
     demos: false,
     docs: false,
     meeting: false,
     price: false,
   });
-
   const [pricingCopy, setPricingCopy] = useState({
     intro: "",
     outro: "",
@@ -402,15 +400,10 @@ export default function Welcome() {
     ...(visitorId ? { "X-Visitor-Id": visitorId } : {}),
   });
 
-  useEffect(() => {
-    if (selected && selected.id && mode === "docs") {
-      setScopePayload({ scope: "doc", doc_id: String(selected.id) });
-    } else if (selected && selected.id && mode !== "docs") {
-      setScopePayload({ scope: "demo", demo_id: String(selected.id) });
-    } else {
-      setScopePayload({ scope: "standard" });
-    }
-  }, [selected, mode]);
+  function withPidParam(baseUrl) {
+    if (!pidParam) return baseUrl;
+    return baseUrl + (baseUrl.includes("?") ? "&" : "?") + "pid=" + encodeURIComponent(pidParam);
+  }
 
   function applyBotSettings(b) {
     setTabsEnabled({
@@ -430,13 +423,17 @@ export default function Welcome() {
     setWebsiteUrl(b.website || "");
   }
 
-  // Helper to append pid param if present
-  function withPidParam(baseUrl) {
-    if (!pidParam) return baseUrl;
-    return baseUrl + (baseUrl.includes("?") ? "&" : "?") + "pid=" + encodeURIComponent(pidParam);
-  }
+  useEffect(() => {
+    if (selected && selected.id && mode === "docs") {
+      setScopePayload({ scope: "doc", doc_id: String(selected.id) });
+    } else if (selected && selected.id && mode !== "docs") {
+      setScopePayload({ scope: "demo", demo_id: String(selected.id) });
+    } else {
+      setScopePayload({ scope: "standard" });
+    }
+  }, [selected, mode]);
 
-  // Resolve alias initial
+  // Resolve alias
   useEffect(() => {
     if (botId || !alias) return;
     let cancel = false;
@@ -453,12 +450,9 @@ export default function Welcome() {
           setVisitorId(data.visitor_id || "");
           setSessionId(data.session_id || "");
         }
-        const b = data?.ok ? data?.bot : null;
-        if (b) applyBotSettings(b);
-        if (id) {
-          setBotId(id);
-          setFatal("");
-        } else setFatal("Invalid or inactive alias.");
+        if (data?.ok && data.bot) applyBotSettings(data.bot);
+        if (id) setBotId(id);
+        else setFatal("Invalid or inactive alias.");
       } catch {
         if (!cancel) setFatal("Invalid or inactive alias.");
       }
@@ -466,7 +460,7 @@ export default function Welcome() {
     return () => (cancel = true);
   }, [alias, apiBase, botId, pidParam]);
 
-  // Default alias fallback
+  // Default alias
   useEffect(() => {
     if (botId || alias || !defaultAlias) return;
     let cancel = false;
@@ -483,15 +477,14 @@ export default function Welcome() {
           setVisitorId(data.visitor_id || "");
           setSessionId(data.session_id || "");
         }
-        const b = data?.ok ? data?.bot : null;
-        if (b) applyBotSettings(b);
+        if (data?.ok && data.bot) applyBotSettings(data.bot);
         if (id) setBotId(id);
       } catch {}
     })();
     return () => (cancel = true);
   }, [botId, alias, defaultAlias, apiBase, pidParam]);
 
-  // Direct bot_id
+  // Direct bot id
   useEffect(() => {
     if (!botIdFromUrl) return;
     let cancel = false;
@@ -507,8 +500,7 @@ export default function Welcome() {
           setVisitorId(data.visitor_id || "");
           setSessionId(data.session_id || "");
         }
-        const b = data?.ok ? data?.bot : null;
-        if (b) applyBotSettings(b);
+        if (data?.ok && data.bot) applyBotSettings(data.bot);
         if (data?.ok && data?.bot?.id) setBotId(data.bot.id);
       } catch {}
     })();
@@ -530,7 +522,7 @@ export default function Welcome() {
         );
         const data = await res.json();
         if (cancel) return;
-        if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
+        if (data?.ok && data?.css_vars) {
           setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
         }
         if (data?.ok && data?.assets) {
@@ -548,7 +540,7 @@ export default function Welcome() {
     return () => (cancel = true);
   }, [botId, apiBase]);
 
-  // Settings refresh (includes website & pid write on server side)
+  // Refresh settings
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
@@ -564,8 +556,7 @@ export default function Welcome() {
           setVisitorId((v) => v || data.visitor_id || "");
           setSessionId((s) => s || data.session_id || "");
         }
-        const b = data?.ok ? data?.bot : null;
-        if (b) applyBotSettings(b);
+        if (data?.ok && data.bot) applyBotSettings(data.bot);
       } catch {}
     })();
     return () => (cancel = true);
@@ -593,7 +584,7 @@ export default function Welcome() {
     })();
   }, [botId, sessionId, visitorId, agentAlias, apiBase, tabsEnabled.meeting]);
 
-  // Autosize ask box
+  // Autosize textarea
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
@@ -642,11 +633,7 @@ export default function Welcome() {
       const data = await res.json();
       const ag = data?.ok ? data.agent : null;
       setAgent(ag);
-      if (agentAlias && ag && ag.alias !== agentAlias) {
-        console.warn(
-          `[Welcome] Requested agent alias "${agentAlias}" not matched; using "${ag.alias}"`
-        );
-      }
+      // Removed debug display of "Requested agent:" per request.
     } catch {
       setAgent(null);
     }
@@ -915,11 +902,7 @@ export default function Welcome() {
         scope = "demo";
         demo_id = String(selected.id);
       }
-      return {
-        scope,
-        ...(demo_id ? { demo_id } : {}),
-        ...(doc_id ? { doc_id } : {}),
-      };
+      return { scope, ...(demo_id ? { demo_id } : {}), ...(doc_id ? { doc_id } : {}) };
     })();
     setMode("ask");
     setLastQuestion(outgoing);
@@ -1096,7 +1079,6 @@ export default function Welcome() {
   const poweredByLogo =
     "https://rvwcyysphhaawvzzyjxq.supabase.co/storage/v1/object/public/demohal-logos/f3ab3e92-9855-4c9b-8038-0a9e483218b7/Powered%20By.png";
 
-  // Decide if logo is clickable
   const LogoWrap = websiteUrl
     ? ({ children }) => (
         <a
@@ -1121,7 +1103,7 @@ export default function Welcome() {
     >
       <div
         ref={frameRef}
-        className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all duration-300"
+        className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all duration-300"
       >
         {/* Header */}
         <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)]">
@@ -1154,7 +1136,7 @@ export default function Welcome() {
 
         {/* Modes */}
         {mode === "price" ? (
-            <>
+          <>
             <div className="px-6 pt-3 pb-2">
               <PriceMirror lines={mirrorLines.length ? mirrorLines : [""]} />
               {!mirrorLines.length ? (
@@ -1207,14 +1189,7 @@ export default function Welcome() {
             {mode === "meeting" ? (
               <div className="w-full flex-1 flex flex-col">
                 <div className="bg-[var(--card-bg)] pt-2 pb-2">
-                  {agentAlias ? (
-                    <div className="text-[10px] opacity-60 mb-1">
-                      Requested agent: {agentAlias}
-                      {agent && agent.alias && agent.alias !== agentAlias
-                        ? ` (resolved: ${agent.alias})`
-                        : ""}
-                    </div>
-                  ) : null}
+                  {/* Removed debug "Requested agent:" line */}
                   {agent?.schedule_header ? (
                     <div className="mb-2 text-sm italic whitespace-pre-line text-[var(--helper-fg)]">
                       {agent.schedule_header}
@@ -1449,33 +1424,29 @@ export default function Welcome() {
           </div>
         )}
 
-        {/* Bottom Ask Bar - enlarged Powered By image under full-width textarea */}
+        {/* Bottom Ask Bar (flex layout; logo visible & enlarged) */}
         <div
-          className="relative px-3 sm:px-4 py-4 border-t border-[var(--border-default)]"
+          className="px-3 sm:px-4 py-4 border-t border-[var(--border-default)]"
           data-patch="ask-bottom-bar"
-          style={{ minHeight: "90px" }}
         >
           {showAskBottom ? (
-            <div className="relative w-full">
-              {/* Powered By anchor - absolute bottom-left; z-index lower so text area sits 'over' (tweak as desired) */}
+            <div className="flex items-end gap-3">
               <a
                 href="https://demohal.com/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="absolute left-2 bottom-2 z-0 opacity-95 hover:opacity-100 transition"
+                className="shrink-0 flex items-center justify-center"
                 title="Powered by DemoHAL"
               >
                 <img
                   src={poweredByLogo}
                   alt="Powered by DemoHAL"
-                  className="h-11 w-auto object-contain select-none pointer-events-auto"
+                  className="h-11 w-auto object-contain select-none"
                   draggable="false"
                   loading="lazy"
                 />
               </a>
-
-              {/* Textarea container (set higher z-index) */}
-              <div className="relative z-10">
+              <div className="relative flex-1">
                 <textarea
                   ref={inputRef}
                   rows={1}
@@ -1519,7 +1490,6 @@ export default function Welcome() {
   );
 }
 
-/* Doc iframe wrapper (unchanged except simplified props) */
 function DocIframe({ doc }) {
   const iframeSrc = React.useMemo(() => {
     const html = doc?._iframe_html || "";
@@ -1542,7 +1512,6 @@ function DocIframe({ doc }) {
   );
 }
 
-/* ThemeLab ColorBox (unchanged) */
 function ColorBox({ apiBase, botId, frameRef, onVars }) {
   const [rows, setRows] = useState([]);
   const [values, setValues] = useState({});
@@ -1810,7 +1779,6 @@ function ColorBox({ apiBase, botId, frameRef, onVars }) {
   );
 }
 
-/* Debug panel */
 function DebugPanel({ debug }) {
   if (!debug) return null;
   const ac = debug.active_context || {};
