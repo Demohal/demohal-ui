@@ -1,11 +1,9 @@
-/* ================================================================================= *
- *  BEGIN SECTION 1                                                                  *
- * ================================================================================= *
- *  NOTE:
- *    This is the updated Welcome component (formerly AskAssistant).
- *    Includes the "Powered By" graphic in the bottom ask bar (bottom-left),
- *    linking to https://demohal.com/
- * ================================================================================= */
+/* Updated Welcome component with:
+   - Powered By logo enlarged & repositioned (bottom bar overlay)
+   - Website link click-through on header logo
+   - pid URL param persisted to visitors_v2.pid via /bot-settings
+   - bots_v2.website support
+*/
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -13,9 +11,8 @@ import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import fallbackLogo from "../assets/logo.png";
 
 /* =============================== *
- *  CLIENT-CONTROLLED CSS TOKENS   *
+ *  THEME CONSTANTS (unchanged)
  * =============================== */
-
 const DEFAULT_THEME_VARS = {
   "--banner-bg": "#000000",
   "--banner-fg": "#ffffff",
@@ -23,30 +20,19 @@ const DEFAULT_THEME_VARS = {
   "--card-bg": "#ffffff",
   "--shadow-elevation":
     "0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.10)",
-
-  // Text roles
   "--message-fg": "#000000",
   "--helper-fg": "#4b5563",
   "--mirror-fg": "#4b5563",
-
-  // Tabs (inactive)
   "--tab-bg": "#303030",
   "--tab-fg": "#ffffff",
-  "--tab-active-fg": "#ffffff", // derived at runtime
-
-  // Buttons (explicit types)
+  "--tab-active-fg": "#ffffff",
   "--demo-button-bg": "#3a4554",
   "--demo-button-fg": "#ffffff",
-  "--doc.button.background": "#000000", // legacy mapping guard (no-op)
   "--doc-button-bg": "#000000",
   "--doc-button-fg": "#ffffff",
   "--price-button-bg": "#1a1a1a",
   "--price-button-fg": "#ffffff",
-
-  // Send icon
   "--send-color": "#000000",
-
-  // Default faint gray border
   "--border-default": "#9ca3af",
 };
 
@@ -94,24 +80,18 @@ function inverseBW(hex) {
 /* ========================== *
  *  UI PRIMITIVES
  * ========================== */
-
 const UI = {
   CARD: "rounded-[0.75rem] p-4 bg-white [box-shadow:var(--shadow-elevation)]",
   BTN_DEMO:
-    "w-full text-center rounded-[0.75rem] px-4 py-3 transition " +
-    "text-[var(--demo-button-fg)] bg-[var(--demo-button-bg)] hover:brightness-110 active:brightness-95",
+    "w-full text-center rounded-[0.75rem] px-4 py-3 transition text-[var(--demo-button-fg)] bg-[var(--demo-button-bg)] hover:brightness-110 active:brightness-95",
   BTN_DOC:
-    "w-full text-center rounded-[0.75rem] px-4 py-3 transition " +
-    "text-[var(--doc-button-fg)] bg-[var(--doc-button-bg)] hover:brightness-110 active:brightness-95",
+    "w-full text-center rounded-[0.75rem] px-4 py-3 transition text-[var(--doc-button-fg)] bg-[var(--doc-button-bg)] hover:brightness-110 active:brightness-95",
   BTN_PRICE:
-    "w-full text-center rounded-[0.75rem] px-4 py-3 transition " +
-    "text-[var(--price-button-fg)] bg-[var(--price-button-bg)] hover:brightness-110 active:brightness-95",
+    "w-full text-center rounded-[0.75rem] px-4 py-3 transition text-[var(--price-button-fg)] bg-[var(--price-button-bg)] hover:brightness-110 active:brightness-95",
   FIELD:
-    "w-full rounded-[0.75rem] px-4 py-3 text-base bg-[var(--card-bg)] " +
-    "border border-[var(--border-default)]",
+    "w-full rounded-[0.75rem] px-4 py-3 text-base bg-[var(--card-bg)] border border-[var(--border-default)]",
   TAB_ACTIVE:
-    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] " +
-    "[box-shadow:var(--shadow-elevation)]",
+    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] [box-shadow:var(--shadow-elevation)]",
   TAB_INACTIVE:
     "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] hover:brightness-110",
 };
@@ -125,7 +105,6 @@ function Row({ item, onPick, kind = "demo" }) {
       : UI.BTN_DEMO;
   return (
     <button
-      data-patch="row-button"
       onClick={() => onPick(item)}
       className={btnClass}
       title={item.description || ""}
@@ -147,7 +126,6 @@ function Row({ item, onPick, kind = "demo" }) {
 function OptionButton({ opt, selected, onClick }) {
   return (
     <button
-      data-patch="option-button"
       onClick={() => onClick(opt)}
       className={classNames(UI.BTN_PRICE, selected && "ring-2 ring-black/20")}
       title={opt.tooltip || ""}
@@ -165,11 +143,11 @@ function OptionButton({ opt, selected, onClick }) {
 function PriceMirror({ lines }) {
   if (!lines?.length) return null;
   return (
-    <div data-patch="price-mirror" className="mb-3">
+    <div className="mb-3">
       {lines.map((ln, i) => (
         <div
           key={i}
-          className="text-base italic whitespace-pre-line text-[var(--mirror-fg)]"
+            className="text-base italic whitespace-pre-line text-[var(--mirror-fg)]"
         >
           {ln}
         </div>
@@ -181,21 +159,18 @@ function PriceMirror({ lines }) {
 function EstimateCard({ estimate, outroText }) {
   if (!estimate) return null;
   const items = Array.isArray(estimate.line_items) ? estimate.line_items : [];
-
   const fmtAmount = (ccy, v) => `${ccy} ${Number(v).toLocaleString()}`;
   const fmtRange = (ccy, min, max) =>
     Number(min) === Number(max)
       ? fmtAmount(ccy, max)
       : `${fmtAmount(ccy, min)} – ${fmtAmount(ccy, max)}`;
-
   const totalText = fmtRange(
     estimate.currency_code,
     estimate.total_min,
     estimate.total_max
   );
-
   return (
-    <div data-patch="estimate-card">
+    <div>
       <div className={UI.CARD}>
         <div className="flex items-center justify-between mb-3">
           <div className="font-bold text-lg">Your Estimate</div>
@@ -231,7 +206,6 @@ function EstimateCard({ estimate, outroText }) {
   );
 }
 
-/* ---------- Options normalizer ---------- */
 function normalizeOptions(q) {
   const raw = q?.options ?? q?.choices ?? q?.buttons ?? q?.values ?? [];
   return (Array.isArray(raw) ? raw : [])
@@ -252,7 +226,7 @@ function QuestionBlock({ q, value, onPick }) {
   const isMulti =
     type === "multi_choice" || type === "multichoice" || type === "multi";
   return (
-    <div data-patch="question-block" className={UI.FIELD}>
+    <div className={UI.FIELD}>
       <div className="font-bold text-base">{q.prompt}</div>
       {q.help_text ? (
         <div className="text-xs italic mt-1 text-[var(--helper-fg)]">
@@ -285,10 +259,7 @@ function QuestionBlock({ q, value, onPick }) {
 
 function TabsNav({ mode, tabs }) {
   return (
-    <div
-      className="w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      data-patch="tabs-nav"
-    >
+    <div className="w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <nav
         className="inline-flex min-w-max items-center gap-0.5 overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         role="tablist"
@@ -323,25 +294,26 @@ function TabsNav({ mode, tabs }) {
 }
 
 /* ================================================================================= *
- *  MAIN COMPONENT                                                                   *
+ *  MAIN COMPONENT
  * ================================================================================= */
-
 export default function Welcome() {
   const apiBase =
     import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-  // Parse URL params
-  const { alias, botIdFromUrl, themeLabOn, agentAlias } = useMemo(() => {
+  // Parse URL params (added pid)
+  const { alias, botIdFromUrl, themeLabOn, agentAlias, pidParam } = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     const a = (qs.get("alias") || qs.get("alais") || "").trim();
     const b = (qs.get("bot_id") || "").trim();
     const th = (qs.get("themelab") || "").trim();
     const ag = (qs.get("agent") || "").trim();
+    const pid = (qs.get("pid") || "").trim();
     return {
       alias: a,
       botIdFromUrl: b,
       themeLabOn: th === "1" || th.toLowerCase() === "true",
       agentAlias: ag,
+      pidParam: pid,
     };
   }, []);
 
@@ -349,7 +321,6 @@ export default function Welcome() {
 
   const [botId, setBotId] = useState(botIdFromUrl || "");
   const [fatal, setFatal] = useState("");
-
   const [mode, setMode] = useState("ask");
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
@@ -357,22 +328,19 @@ export default function Welcome() {
   const [debugInfo, setDebugInfo] = useState(null);
   const [introVideoUrl, setIntroVideoUrl] = useState("");
   const [showIntroVideo, setShowIntroVideo] = useState(false);
-
   const [loading, setLoading] = useState(false);
-
   const [items, setItems] = useState([]);
   const [browseItems, setBrowseItems] = useState([]);
   const [browseDocs, setBrowseDocs] = useState([]);
   const [selected, setSelected] = useState(null);
-
   const [helperPhase, setHelperPhase] = useState("hidden");
+  const [visitorId, setVisitorId] = useState("");
+  const [sessionId, setSessionId] = useState("");
+  const [websiteUrl, setWebsiteUrl] = useState("");
 
   const contentRef = useRef(null);
   const inputRef = useRef(null);
   const frameRef = useRef(null);
-
-  const [visitorId, setVisitorId] = useState("");
-  const [sessionId, setSessionId] = useState("");
 
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
   const derivedTheme = useMemo(() => {
@@ -416,7 +384,6 @@ export default function Welcome() {
   const [priceBusy, setPriceBusy] = useState(false);
   const [priceErr, setPriceErr] = useState("");
   const [agent, setAgent] = useState(null);
-
   const [scopePayload, setScopePayload] = useState({ scope: "standard" });
 
   const withIdsQS = (url) => {
@@ -445,15 +412,40 @@ export default function Welcome() {
     }
   }, [selected, mode]);
 
-  // ---- Bot resolution & settings ----
+  function applyBotSettings(b) {
+    setTabsEnabled({
+      demos: !!b.show_browse_demos,
+      docs: !!b.show_browse_docs,
+      meeting: !!b.show_schedule_meeting,
+      price: !!b.show_price_estimate,
+    });
+    setResponseText(b.welcome_message || "");
+    setIntroVideoUrl(b.intro_video_url || "");
+    setShowIntroVideo(!!b.show_intro_video);
+    setPricingCopy({
+      intro: b.pricing_intro || "",
+      outro: b.pricing_outro || "",
+      custom_notice: b.pricing_custom_notice || "",
+    });
+    setWebsiteUrl(b.website || "");
+  }
+
+  // Helper to append pid param if present
+  function withPidParam(baseUrl) {
+    if (!pidParam) return baseUrl;
+    return baseUrl + (baseUrl.includes("?") ? "&" : "?") + "pid=" + encodeURIComponent(pidParam);
+  }
+
+  // Resolve alias initial
   useEffect(() => {
     if (botId || !alias) return;
     let cancel = false;
     (async () => {
       try {
-        const res = await fetch(
+        const url = withPidParam(
           `${apiBase}/bot-settings?alias=${encodeURIComponent(alias)}`
         );
+        const res = await fetch(url);
         const data = await res.json();
         if (cancel) return;
         const id = data?.ok ? data?.bot?.id : null;
@@ -472,16 +464,18 @@ export default function Welcome() {
       }
     })();
     return () => (cancel = true);
-  }, [alias, apiBase, botId]);
+  }, [alias, apiBase, botId, pidParam]);
 
+  // Default alias fallback
   useEffect(() => {
     if (botId || alias || !defaultAlias) return;
     let cancel = false;
     (async () => {
       try {
-        const res = await fetch(
+        const url = withPidParam(
           `${apiBase}/bot-settings?alias=${encodeURIComponent(defaultAlias)}`
         );
+        const res = await fetch(url);
         const data = await res.json();
         if (cancel) return;
         const id = data?.ok ? data?.bot?.id : null;
@@ -495,16 +489,18 @@ export default function Welcome() {
       } catch {}
     })();
     return () => (cancel = true);
-  }, [botId, alias, defaultAlias, apiBase]);
+  }, [botId, alias, defaultAlias, apiBase, pidParam]);
 
+  // Direct bot_id
   useEffect(() => {
     if (!botIdFromUrl) return;
     let cancel = false;
     (async () => {
       try {
-        const res = await fetch(
+        const url = withPidParam(
           `${apiBase}/bot-settings?bot_id=${encodeURIComponent(botIdFromUrl)}`
         );
+        const res = await fetch(url);
         const data = await res.json();
         if (cancel) return;
         if (data?.ok) {
@@ -517,29 +513,13 @@ export default function Welcome() {
       } catch {}
     })();
     return () => (cancel = true);
-  }, [botIdFromUrl, apiBase]);
-
-  function applyBotSettings(b) {
-    setTabsEnabled({
-      demos: !!b.show_browse_demos,
-      docs: !!b.show_browse_docs,
-      meeting: !!b.show_schedule_meeting,
-      price: !!b.show_price_estimate,
-    });
-    setResponseText(b.welcome_message || "");
-    setIntroVideoUrl(b.intro_video_url || "");
-    setShowIntroVideo(!!b.show_intro_video);
-    setPricingCopy({
-      intro: b.pricing_intro || "",
-      outro: b.pricing_outro || "",
-      custom_notice: b.pricing_custom_notice || "",
-    });
-  }
+  }, [botIdFromUrl, apiBase, pidParam]);
 
   useEffect(() => {
     if (!botId && !alias && !brandReady) setBrandReady(true);
   }, [botId, alias, brandReady]);
 
+  // Brand
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
@@ -568,26 +548,28 @@ export default function Welcome() {
     return () => (cancel = true);
   }, [botId, apiBase]);
 
+  // Settings refresh (includes website & pid write on server side)
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
     (async () => {
       try {
-        const res = await fetch(
+        const url = withPidParam(
           `${apiBase}/bot-settings?bot_id=${encodeURIComponent(botId)}`
         );
+        const res = await fetch(url);
         const data = await res.json();
         if (cancel) return;
         if (data?.ok) {
-            setVisitorId((v) => v || data.visitor_id || "");
-            setSessionId((s) => s || data.session_id || "");
+          setVisitorId((v) => v || data.visitor_id || "");
+          setSessionId((s) => s || data.session_id || "");
         }
         const b = data?.ok ? data?.bot : null;
         if (b) applyBotSettings(b);
       } catch {}
     })();
     return () => (cancel = true);
-  }, [botId, apiBase]);
+  }, [botId, apiBase, pidParam]);
 
   // Prefetch agent
   const agentPrefetchedRef = useRef(false);
@@ -619,7 +601,6 @@ export default function Welcome() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  // ---- Functions ----
   async function normalizeAndSelectDemo(item) {
     try {
       const r = await fetch(`${apiBase}/render-video-iframe`, {
@@ -721,7 +702,6 @@ export default function Welcome() {
     }
   }
 
-  // Pricing questions loader
   const priceScrollRef = useRef(null);
   useEffect(() => {
     if (mode !== "price" || !botId) return;
@@ -749,7 +729,6 @@ export default function Welcome() {
     return () => (cancel = true);
   }, [mode, botId, apiBase]);
 
-  // Pricing estimate effect
   useEffect(() => {
     const haveAll = (() => {
       if (!priceQuestions?.length) return false;
@@ -765,7 +744,6 @@ export default function Welcome() {
           : !(v === undefined || v === null || v === "");
       });
     })();
-
     if (mode !== "price" || !botId || !haveAll) {
       setPriceEstimate(null);
       return;
@@ -855,7 +833,6 @@ export default function Welcome() {
       const o = opts.find((o) => o.key === ans);
       return o?.label || String(ans);
     };
-
     if (typeof priceEstimate?.mirror_text === "string") {
       const t = priceEstimate.mirror_text.trim();
       if (t) return [t];
@@ -916,7 +893,9 @@ export default function Welcome() {
       if (isMulti) {
         const curr = Array.isArray(prev[q.q_key]) ? prev[q.q_key] : [];
         const exists = curr.includes(opt.key);
-        const next = exists ? curr.filter((k) => k !== opt.key) : [...curr, opt.key];
+        const next = exists
+          ? curr.filter((k) => k !== opt.key)
+          : [...curr, opt.key];
         return { ...prev, [q.q_key]: next };
       }
       return { ...prev, [q.q_key]: opt.key };
@@ -955,16 +934,15 @@ export default function Welcome() {
         `${apiBase}/demo-hal`,
         withIdsBody({
           bot_id: botId,
-            user_question: outgoing,
-            ...commitScope,
-            debug: true,
+          user_question: outgoing,
+          ...commitScope,
+          debug: true,
         }),
         { timeout: 30000, headers: withIdsHeaders() }
       );
       const data = res?.data || {};
       setDebugInfo(data?.debug || null);
       const text = data?.response_text || "";
-
       const recSource = Array.isArray(data?.items)
         ? data.items
         : Array.isArray(data?.buttons)
@@ -1095,8 +1073,7 @@ export default function Welcome() {
             </div>
           ) : (
             <div className="text-sm text-gray-600">
-              Provide a <code>?bot_id=…</code> or <code>?alias=…</code> in the
-              URL
+              Provide a <code>?bot_id=…</code> or <code>?alias=…</code>
               {defaultAlias ? (
                 <> (trying default alias “{defaultAlias}”)</>
               ) : null}
@@ -1116,9 +1093,23 @@ export default function Welcome() {
     brandAssets.logo_light_url ||
     brandAssets.logo_dark_url ||
     fallbackLogo;
-
   const poweredByLogo =
     "https://rvwcyysphhaawvzzyjxq.supabase.co/storage/v1/object/public/demohal-logos/f3ab3e92-9855-4c9b-8038-0a9e483218b7/Powered%20By.png";
+
+  // Decide if logo is clickable
+  const LogoWrap = websiteUrl
+    ? ({ children }) => (
+        <a
+          href={websiteUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex"
+          title={websiteUrl}
+        >
+          {children}
+        </a>
+      )
+    : ({ children }) => <>{children}</>;
 
   return (
     <div
@@ -1136,11 +1127,13 @@ export default function Welcome() {
         <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)]">
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
-              <img
-                src={logoSrc}
-                alt="Brand logo"
-                className="h-10 object-contain"
-              />
+              <LogoWrap>
+                <img
+                  src={logoSrc}
+                  alt="Brand logo"
+                  className="h-10 object-contain"
+                />
+              </LogoWrap>
             </div>
             <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
               {selected
@@ -1159,10 +1152,10 @@ export default function Welcome() {
           <TabsNav mode={mode} tabs={tabs} />
         </div>
 
-        {/* PRICE MODE */}
+        {/* Modes */}
         {mode === "price" ? (
-          <>
-            <div className="px-6 pt-3 pb-2" data-patch="price-intro">
+            <>
+            <div className="px-6 pt-3 pb-2">
               <PriceMirror lines={mirrorLines.length ? mirrorLines : [""]} />
               {!mirrorLines.length ? (
                 <div className="text-base font-bold whitespace-pre-line">
@@ -1207,16 +1200,12 @@ export default function Welcome() {
             </div>
           </>
         ) : (
-          /* OTHER MODES */
           <div
             ref={contentRef}
             className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto"
           >
             {mode === "meeting" ? (
-              <div
-                className="w-full flex-1 flex flex-col"
-                data-patch="meeting-pane"
-              >
+              <div className="w-full flex-1 flex flex-col">
                 <div className="bg-[var(--card-bg)] pt-2 pb-2">
                   {agentAlias ? (
                     <div className="text-[10px] opacity-60 mb-1">
@@ -1231,7 +1220,6 @@ export default function Welcome() {
                       {agent.schedule_header}
                     </div>
                   ) : null}
-
                   {!agent ? (
                     <div className="text-sm text-[var(--helper-fg)]">
                       Loading scheduling…
@@ -1290,13 +1278,7 @@ export default function Welcome() {
             ) : selected ? (
               <div className="w-full flex-1 flex flex-col">
                 {mode === "docs" ? (
-                  <DocIframe
-                    apiBase={apiBase}
-                    botId={botId}
-                    doc={selected}
-                    sessionId={sessionId}
-                    visitorId={visitorId}
-                  />
+                  <DocIframe doc={selected} />
                 ) : (
                   <div className="bg-[var(--card-bg)] pt-2 pb-2">
                     <iframe
@@ -1381,11 +1363,8 @@ export default function Welcome() {
                                   ),
                                 }
                               );
-                              const j = await r.json();
-                              setSelected({
-                                ...val,
-                                _iframe_html: j?.iframe_html || null,
-                              });
+                              await r.json();
+                              setSelected(val);
                             } catch {
                               setSelected(val);
                             }
@@ -1470,33 +1449,37 @@ export default function Welcome() {
           </div>
         )}
 
-        {/* Bottom Ask Bar (includes Powered By graphic) */}
+        {/* Bottom Ask Bar - enlarged Powered By image under full-width textarea */}
         <div
-          className="px-3 sm:px-4 py-3 border-t border-[var(--border-default)]"
+          className="relative px-3 sm:px-4 py-4 border-t border-[var(--border-default)]"
           data-patch="ask-bottom-bar"
+          style={{ minHeight: "90px" }}
         >
           {showAskBottom ? (
-            <div className="flex items-end gap-3">
+            <div className="relative w-full">
+              {/* Powered By anchor - absolute bottom-left; z-index lower so text area sits 'over' (tweak as desired) */}
               <a
                 href="https://demohal.com/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="shrink-0 flex items-center justify-center"
+                className="absolute left-2 bottom-2 z-0 opacity-95 hover:opacity-100 transition"
                 title="Powered by DemoHAL"
               >
                 <img
                   src={poweredByLogo}
                   alt="Powered by DemoHAL"
-                  className="h-8 w-auto object-contain select-none"
+                  className="h-11 w-auto object-contain select-none pointer-events-auto"
                   draggable="false"
                   loading="lazy"
                 />
               </a>
-              <div className="relative flex-1">
+
+              {/* Textarea container (set higher z-index) */}
+              <div className="relative z-10">
                 <textarea
                   ref={inputRef}
                   rows={1}
-                  className="w-full rounded-[0.75rem] px-4 py-2 pr-14 text-base placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px] bg-[var(--card-bg)] border border-[var(--border-default)] focus:border-[var(--border-default)] focus:ring-1 focus:ring-[var(--border-default)] outline-none"
+                  className="w-full rounded-[0.75rem] px-4 py-3 pr-14 text-base placeholder-gray-400 resize-y min-h-[3.25rem] max-h-[180px] bg-[var(--card-bg)] border border-[var(--border-default)] focus:border-[var(--border-default)] focus:ring-1 focus:ring-[var(--border-default)] outline-none"
                   placeholder="Ask your question here"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
@@ -1516,7 +1499,7 @@ export default function Welcome() {
                   onClick={sendMessage}
                   className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
                 >
-                  <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:brightness-110" />
+                  <ArrowUpCircleIcon className="w-9 h-9 text-[var(--send-color)] hover:brightness-110" />
                 </button>
               </div>
             </div>
@@ -1524,7 +1507,6 @@ export default function Welcome() {
         </div>
       </div>
 
-      {/* ThemeLab */}
       {themeLabOn && botId ? (
         <ColorBox
           apiBase={apiBase}
@@ -1537,9 +1519,7 @@ export default function Welcome() {
   );
 }
 
-/* =================== *
- *  Doc iframe wrapper *
- * =================== */
+/* Doc iframe wrapper (unchanged except simplified props) */
 function DocIframe({ doc }) {
   const iframeSrc = React.useMemo(() => {
     const html = doc?._iframe_html || "";
@@ -1562,20 +1542,17 @@ function DocIframe({ doc }) {
   );
 }
 
-/* =================== *
- *  ColorBox component *
- * =================== */
+/* ThemeLab ColorBox (unchanged) */
 function ColorBox({ apiBase, botId, frameRef, onVars }) {
   const [rows, setRows] = useState([]);
   const [values, setValues] = useState({});
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
-
   const [authState, setAuthState] = useState("checking");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
-
   const [pos, setPos] = useState({ left: 16, top: 16, width: 460 });
+
   useEffect(() => {
     function updatePos() {
       const rect = frameRef.current?.getBoundingClientRect();
@@ -1709,7 +1686,7 @@ function ColorBox({ apiBase, botId, frameRef, onVars }) {
     }
   }
 
-  const groups = useMemo(() => {
+  const groups = React.useMemo(() => {
     const byScreen = new Map();
     for (const r of rows) {
       const key = r.screen_key || "welcome";
@@ -1743,7 +1720,6 @@ function ColorBox({ apiBase, botId, frameRef, onVars }) {
       }}
     >
       <div className="text-2xl font-extrabold mb-2">Colors</div>
-
       {authState === "checking" && (
         <div className="text-sm text-gray-600">Checking access…</div>
       )}
@@ -1772,7 +1748,6 @@ function ColorBox({ apiBase, botId, frameRef, onVars }) {
           ) : null}
         </form>
       )}
-
       {authState === "ok" && (
         <>
           {SCREEN_ORDER.map(({ key, label }) => (
@@ -1807,7 +1782,6 @@ function ColorBox({ apiBase, botId, frameRef, onVars }) {
               </div>
             </div>
           ))}
-
           <div className="mt-3 flex items-center justify-between">
             <div className="text-xs text-gray-600">{msg}</div>
             <div className="flex items-center gap-2">
@@ -1829,7 +1803,6 @@ function ColorBox({ apiBase, botId, frameRef, onVars }) {
           </div>
         </>
       )}
-
       {authState === "error" && (
         <div className="text-sm text-red-600">Unable to verify access.</div>
       )}
@@ -1837,9 +1810,7 @@ function ColorBox({ apiBase, botId, frameRef, onVars }) {
   );
 }
 
-/* =================== *
- *  Debug Panel
- * =================== */
+/* Debug panel */
 function DebugPanel({ debug }) {
   if (!debug) return null;
   const ac = debug.active_context || {};
