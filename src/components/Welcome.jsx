@@ -1,11 +1,10 @@
 /* Patch:
-   1. Removed "Requested agent:" debug line on Schedule Meeting screen.
-   2. Restored / ensured visibility of the Powered By graphic:
-      - Reverted to a flex layout (logo on the left, textarea full width to the right).
-      - Enlarged logo ~33% (h-11 instead of h-8).
-      - Kept textarea spanning the remaining width; no overlap tricks that could hide the logo.
-   (If you still prefer the textarea to visually sit "on top" of the logo, let me know and I can
-    implement a semi‑transparent or masked background approach instead.)
+   - Footer (bottom ask bar) redesigned so:
+       * Textarea returns to full width.
+       * Powered By logo now sits underneath the question box inside the footer.
+       * Footer height (vertical space) increased to comfortably fit both.
+   - Updated powered-by logo URL to the new one provided.
+   - Previous flex side-by-side layout removed.
 */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -303,7 +302,7 @@ export default function Welcome() {
   const apiBase =
     import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-  // Parse URL params (pid included)
+  // URL params (includes pid)
   const { alias, botIdFromUrl, themeLabOn, agentAlias, pidParam } = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     const a = (qs.get("alias") || qs.get("alais") || "").trim();
@@ -633,7 +632,6 @@ export default function Welcome() {
       const data = await res.json();
       const ag = data?.ok ? data.agent : null;
       setAgent(ag);
-      // Removed debug display of "Requested agent:" per request.
     } catch {
       setAgent(null);
     }
@@ -754,7 +752,7 @@ export default function Welcome() {
               "",
           },
           session_id: sessionId || undefined,
-          visitor_id: visitorId || undefined,
+            visitor_id: visitorId || undefined,
         };
         const res = await fetch(`${apiBase}/pricing/estimate`, {
           method: "POST",
@@ -1076,8 +1074,10 @@ export default function Welcome() {
     brandAssets.logo_light_url ||
     brandAssets.logo_dark_url ||
     fallbackLogo;
+
+  // Updated powered-by logo URL
   const poweredByLogo =
-    "https://rvwcyysphhaawvzzyjxq.supabase.co/storage/v1/object/public/demohal-logos/f3ab3e92-9855-4c9b-8038-0a9e483218b7/Powered%20By.png";
+    "https://rvwcyysphhaawvzzyjxq.supabase.co/storage/v1/object/public/demohal-logos/f3ab3e92-9855-4c9b-8038-0a9e483218b7/Powered%20by%20logo.png";
 
   const LogoWrap = websiteUrl
     ? ({ children }) => (
@@ -1189,7 +1189,6 @@ export default function Welcome() {
             {mode === "meeting" ? (
               <div className="w-full flex-1 flex flex-col">
                 <div className="bg-[var(--card-bg)] pt-2 pb-2">
-                  {/* Removed debug "Requested agent:" line */}
                   {agent?.schedule_header ? (
                     <div className="mb-2 text-sm italic whitespace-pre-line text-[var(--helper-fg)]">
                       {agent.schedule_header}
@@ -1424,33 +1423,18 @@ export default function Welcome() {
           </div>
         )}
 
-        {/* Bottom Ask Bar (flex layout; logo visible & enlarged) */}
+        {/* Bottom Ask Bar (question box full width, logo underneath) */}
         <div
-          className="px-3 sm:px-4 py-4 border-t border-[var(--border-default)]"
+          className="px-4 pt-4 pb-2 border-t border-[var(--border-default)]"
           data-patch="ask-bottom-bar"
         >
           {showAskBottom ? (
-            <div className="flex items-end gap-3">
-              <a
-                href="https://demohal.com/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="shrink-0 flex items-center justify-center"
-                title="Powered by DemoHAL"
-              >
-                <img
-                  src={poweredByLogo}
-                  alt="Powered by DemoHAL"
-                  className="h-11 w-auto object-contain select-none"
-                  draggable="false"
-                  loading="lazy"
-                />
-              </a>
-              <div className="relative flex-1">
+            <div className="w-full">
+              <div className="relative">
                 <textarea
                   ref={inputRef}
                   rows={1}
-                  className="w-full rounded-[0.75rem] px-4 py-3 pr-14 text-base placeholder-gray-400 resize-y min-h-[3.25rem] max-h-[180px] bg-[var(--card-bg)] border border-[var(--border-default)] focus:border-[var(--border-default)] focus:ring-1 focus:ring-[var(--border-default)] outline-none"
+                  className="w-full rounded-[0.75rem] px-4 py-3 pr-14 text-base placeholder-gray-400 resize-y min-h-[3.25rem] max-h-[200px] bg-[var(--card-bg)] border border-[var(--border-default)] focus:border-[var(--border-default)] focus:ring-1 focus:ring-[var(--border-default)] outline-none"
                   placeholder="Ask your question here"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
@@ -1472,6 +1456,23 @@ export default function Welcome() {
                 >
                   <ArrowUpCircleIcon className="w-9 h-9 text-[var(--send-color)] hover:brightness-110" />
                 </button>
+              </div>
+              <div className="mt-3 flex justify-start">
+                <a
+                  href="https://demohal.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Powered by DemoHAL"
+                  className="inline-flex"
+                >
+                  <img
+                    src={poweredByLogo}
+                    alt="Powered by DemoHAL"
+                    className="h-11 w-auto object-contain select-none"
+                    loading="lazy"
+                    draggable="false"
+                  />
+                </a>
               </div>
             </div>
           ) : null}
