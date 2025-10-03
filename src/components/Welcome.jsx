@@ -1,5 +1,10 @@
 /* ================================================================================= *
  *  BEGIN SECTION 1                                                                  *
+ * ================================================================================= *
+ *  NOTE:
+ *    This is the updated Welcome component (formerly AskAssistant).
+ *    Includes the "Powered By" graphic in the bottom ask bar (bottom-left),
+ *    linking to https://demohal.com/
  * ================================================================================= */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -41,37 +46,30 @@ const DEFAULT_THEME_VARS = {
   // Send icon
   "--send-color": "#000000",
 
-  // Default faint gray border (used only where allowed)
+  // Default faint gray border
   "--border-default": "#9ca3af",
 };
 
-// Map DB token_key → CSS var used in this app (mirror of server mapping)
 const TOKEN_TO_CSS = {
   "banner.background": "--banner-bg",
   "banner.foreground": "--banner-fg",
   "page.background": "--page-bg",
   "content.area.background": "--card-bg",
-
   "message.text.foreground": "--message-fg",
   "helper.text.foreground": "--helper-fg",
   "mirror.text.foreground": "--mirror-fg",
-
   "tab.background": "--tab-bg",
   "tab.foreground": "--tab-fg",
-
   "demo.button.background": "--demo-button-bg",
   "demo.button.foreground": "--demo-button-fg",
   "doc.button.background": "--doc-button-bg",
   "doc.button.foreground": "--doc-button-fg",
   "price.button.background": "--price-button-bg",
   "price.button.foreground": "--price-button-fg",
-
   "send.button.background": "--send-color",
-
   "border.default": "--border-default",
 };
 
-// Hardcoded screen order/labels for grouping the 16 client-controlled tokens
 const SCREEN_ORDER = [
   { key: "welcome", label: "Welcome" },
   { key: "bot_response", label: "Bot Response" },
@@ -182,14 +180,19 @@ function PriceMirror({ lines }) {
 
 function EstimateCard({ estimate, outroText }) {
   if (!estimate) return null;
-
   const items = Array.isArray(estimate.line_items) ? estimate.line_items : [];
 
   const fmtAmount = (ccy, v) => `${ccy} ${Number(v).toLocaleString()}`;
   const fmtRange = (ccy, min, max) =>
-    Number(min) === Number(max) ? fmtAmount(ccy, max) : `${fmtAmount(ccy, min)} – ${fmtAmount(ccy, max)}`;
+    Number(min) === Number(max)
+      ? fmtAmount(ccy, max)
+      : `${fmtAmount(ccy, min)} – ${fmtAmount(ccy, max)}`;
 
-  const totalText = fmtRange(estimate.currency_code, estimate.total_min, estimate.total_max);
+  const totalText = fmtRange(
+    estimate.currency_code,
+    estimate.total_min,
+    estimate.total_max
+  );
 
   return (
     <div data-patch="estimate-card">
@@ -200,14 +203,12 @@ function EstimateCard({ estimate, outroText }) {
             {totalText}
           </div>
         </div>
-
         <div className="space-y-3">
           {items.map((li, idx) => {
             const name = li?.product?.name ?? li?.label ?? "Item";
             const key = li?.product?.id ?? `${name}-${idx}`;
             const ccy = li?.currency_code || estimate.currency_code || "";
             const lineText = fmtRange(ccy, li?.price_min, li?.price_max);
-
             return (
               <div key={key} className="rounded-[0.75rem] p-3 bg-white">
                 <div className="grid grid-cols-[1fr_auto] items-center gap-3">
@@ -221,7 +222,6 @@ function EstimateCard({ estimate, outroText }) {
           })}
         </div>
       </div>
-
       {outroText ? (
         <div className="mt-3 text-base font-bold whitespace-pre-line">
           {outroText}
@@ -231,16 +231,13 @@ function EstimateCard({ estimate, outroText }) {
   );
 }
 
-/* ---------- Options normalizer (accepts many backend shapes) ---------- */
+/* ---------- Options normalizer ---------- */
 function normalizeOptions(q) {
   const raw = q?.options ?? q?.choices ?? q?.buttons ?? q?.values ?? [];
-
   return (Array.isArray(raw) ? raw : [])
     .map((o, idx) => {
       if (o == null) return null;
-      if (typeof o === "string") {
-        return { key: o, label: o, id: String(idx) };
-      }
+      if (typeof o === "string") return { key: o, label: o, id: String(idx) };
       const key = o.key ?? o.value ?? o.id ?? String(idx);
       const label = o.label ?? o.title ?? o.name ?? String(key);
       const tooltip = o.tooltip ?? o.description ?? o.help ?? undefined;
@@ -254,7 +251,6 @@ function QuestionBlock({ q, value, onPick }) {
   const type = String(q?.type || "").toLowerCase();
   const isMulti =
     type === "multi_choice" || type === "multichoice" || type === "multi";
-
   return (
     <div data-patch="question-block" className={UI.FIELD}>
       <div className="font-bold text-base">{q.prompt}</div>
@@ -263,7 +259,6 @@ function QuestionBlock({ q, value, onPick }) {
           {q.help_text}
         </div>
       ) : null}
-
       {opts.length > 0 ? (
         <div className="mt-3 flex flex-col gap-3">
           {opts.map((opt) => (
@@ -328,22 +323,14 @@ function TabsNav({ mode, tabs }) {
 }
 
 /* ================================================================================= *
- *  END SECTION 1                                                                    *
+ *  MAIN COMPONENT                                                                   *
  * ================================================================================= */
 
-/* ================================================================================= *
- *  BEGIN SECTION 2                                                                  *
- * ================================================================================= */
-
-/* =================== *
- *  MAIN APP COMPONENT *
- * =================== */
-
-export default function AskAssistant() {
+export default function Welcome() {
   const apiBase =
     import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-  // URL → alias / bot_id / themelab / agent
+  // Parse URL params
   const { alias, botIdFromUrl, themeLabOn, agentAlias } = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     const a = (qs.get("alias") || qs.get("alais") || "").trim();
@@ -379,24 +366,20 @@ export default function AskAssistant() {
   const [selected, setSelected] = useState(null);
 
   const [helperPhase, setHelperPhase] = useState("hidden");
-  const [isAnchored, setIsAnchored] = useState(false);
 
   const contentRef = useRef(null);
   const inputRef = useRef(null);
-  const frameRef = useRef(null); // context card container (for ColorBox placement)
+  const frameRef = useRef(null);
 
-  // NEW: visitor/session identity
   const [visitorId, setVisitorId] = useState("");
   const [sessionId, setSessionId] = useState("");
 
-  // Theme vars (DB → in-memory → derived → live with picker overrides)
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
   const derivedTheme = useMemo(() => {
     const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
     return { ...themeVars, "--tab-active-fg": activeFg };
   }, [themeVars]);
 
-  // picker overrides (live preview)
   const [pickerVars, setPickerVars] = useState({});
   const liveTheme = useMemo(
     () => ({ ...derivedTheme, ...pickerVars }),
@@ -422,7 +405,6 @@ export default function AskAssistant() {
     price: false,
   });
 
-  // Pricing state
   const [pricingCopy, setPricingCopy] = useState({
     intro: "",
     outro: "",
@@ -435,10 +417,8 @@ export default function AskAssistant() {
   const [priceErr, setPriceErr] = useState("");
   const [agent, setAgent] = useState(null);
 
-  // Screen-scoped chat context (reset after each answer)
   const [scopePayload, setScopePayload] = useState({ scope: "standard" });
 
-  // Small helpers to always attach identity in requests
   const withIdsQS = (url) => {
     const u = new URL(url, window.location.origin);
     if (sessionId) u.searchParams.set("session_id", sessionId);
@@ -455,7 +435,6 @@ export default function AskAssistant() {
     ...(visitorId ? { "X-Visitor-Id": visitorId } : {}),
   });
 
-  // Update scope when entering Demo/Doc views
   useEffect(() => {
     if (selected && selected.id && mode === "docs") {
       setScopePayload({ scope: "doc", doc_id: String(selected.id) });
@@ -466,10 +445,9 @@ export default function AskAssistant() {
     }
   }, [selected, mode]);
 
-  // Resolve bot by alias
+  // ---- Bot resolution & settings ----
   useEffect(() => {
-    if (botId) return;
-    if (!alias) return;
+    if (botId || !alias) return;
     let cancel = false;
     (async () => {
       try {
@@ -479,45 +457,23 @@ export default function AskAssistant() {
         const data = await res.json();
         if (cancel) return;
         const id = data?.ok ? data?.bot?.id : null;
-
         if (data?.ok) {
-            setVisitorId(data.visitor_id || "");
-            setSessionId(data.session_id || "");
+          setVisitorId(data.visitor_id || "");
+          setSessionId(data.session_id || "");
         }
-
         const b = data?.ok ? data?.bot : null;
-        if (b) {
-          setTabsEnabled({
-            demos: !!b.show_browse_demos,
-            docs: !!b.show_browse_docs,
-            meeting: !!b.show_schedule_meeting,
-            price: !!b.show_price_estimate,
-          });
-          setResponseText(b.welcome_message || "");
-          setIntroVideoUrl(b.intro_video_url || "");
-          setShowIntroVideo(!!b.show_intro_video);
-          setPricingCopy({
-            intro: b.pricing_intro || "",
-            outro: b.pricing_outro || "",
-            custom_notice: b.pricing_custom_notice || "",
-          });
-        }
+        if (b) applyBotSettings(b);
         if (id) {
           setBotId(id);
           setFatal("");
-        } else if (!res.ok || data?.ok === false) {
-          setFatal("Invalid or inactive alias.");
-        }
+        } else setFatal("Invalid or inactive alias.");
       } catch {
         if (!cancel) setFatal("Invalid or inactive alias.");
       }
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => (cancel = true);
   }, [alias, apiBase, botId]);
 
-  // Try default alias if needed
   useEffect(() => {
     if (botId || alias || !defaultAlias) return;
     let cancel = false;
@@ -529,38 +485,18 @@ export default function AskAssistant() {
         const data = await res.json();
         if (cancel) return;
         const id = data?.ok ? data?.bot?.id : null;
-
         if (data?.ok) {
           setVisitorId(data.visitor_id || "");
           setSessionId(data.session_id || "");
         }
-
         const b = data?.ok ? data?.bot : null;
-        if (b) {
-          setTabsEnabled({
-            demos: !!b.show_browse_demos,
-            docs: !!b.show_browse_docs,
-            meeting: !!b.show_schedule_meeting,
-            price: !!b.show_price_estimate,
-          });
-          setResponseText(b.welcome_message || "");
-          setIntroVideoUrl(b.intro_video_url || "");
-          setShowIntroVideo(!!b.show_intro_video);
-          setPricingCopy({
-            intro: b.pricing_intro || "",
-            outro: b.pricing_outro || "",
-            custom_notice: b.pricing_custom_notice || "",
-          });
-        }
+        if (b) applyBotSettings(b);
         if (id) setBotId(id);
       } catch {}
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => (cancel = true);
   }, [botId, alias, defaultAlias, apiBase]);
 
-  // If we start with bot_id in URL, load settings that way (and init visitor/session)
   useEffect(() => {
     if (!botIdFromUrl) return;
     let cancel = false;
@@ -571,42 +507,39 @@ export default function AskAssistant() {
         );
         const data = await res.json();
         if (cancel) return;
-
         if (data?.ok) {
           setVisitorId(data.visitor_id || "");
           setSessionId(data.session_id || "");
         }
-
         const b = data?.ok ? data?.bot : null;
-        if (b) {
-          setTabsEnabled({
-            demos: !!b.show_browse_demos,
-            docs: !!b.show_browse_docs,
-            meeting: !!b.show_schedule_meeting,
-            price: !!b.show_price_estimate,
-          });
-          setResponseText(b.welcome_message || "");
-            setIntroVideoUrl(b.intro_video_url || "");
-            setShowIntroVideo(!!b.show_intro_video);
-          setPricingCopy({
-            intro: b.pricing_intro || "",
-            outro: b.pricing_outro || "",
-            custom_notice: b.pricing_custom_notice || "",
-          });
-        }
+        if (b) applyBotSettings(b);
         if (data?.ok && data?.bot?.id) setBotId(data.bot.id);
       } catch {}
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => (cancel = true);
   }, [botIdFromUrl, apiBase]);
+
+  function applyBotSettings(b) {
+    setTabsEnabled({
+      demos: !!b.show_browse_demos,
+      docs: !!b.show_browse_docs,
+      meeting: !!b.show_schedule_meeting,
+      price: !!b.show_price_estimate,
+    });
+    setResponseText(b.welcome_message || "");
+    setIntroVideoUrl(b.intro_video_url || "");
+    setShowIntroVideo(!!b.show_intro_video);
+    setPricingCopy({
+      intro: b.pricing_intro || "",
+      outro: b.pricing_outro || "",
+      custom_notice: b.pricing_custom_notice || "",
+    });
+  }
 
   useEffect(() => {
     if (!botId && !alias && !brandReady) setBrandReady(true);
   }, [botId, alias, brandReady]);
 
-  // Brand: css vars + assets
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
@@ -617,7 +550,6 @@ export default function AskAssistant() {
         );
         const data = await res.json();
         if (cancel) return;
-
         if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
           setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
         }
@@ -633,12 +565,9 @@ export default function AskAssistant() {
         if (!cancel) setBrandReady(true);
       }
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => (cancel = true);
   }, [botId, apiBase]);
 
-  // Tab flags (by bot_id)
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
@@ -648,44 +577,23 @@ export default function AskAssistant() {
           `${apiBase}/bot-settings?bot_id=${encodeURIComponent(botId)}`
         );
         const data = await res.json();
-
         if (cancel) return;
-
         if (data?.ok) {
-          setVisitorId((v) => v || data.visitor_id || "");
-          setSessionId((s) => s || data.session_id || "");
+            setVisitorId((v) => v || data.visitor_id || "");
+            setSessionId((s) => s || data.session_id || "");
         }
-
         const b = data?.ok ? data?.bot : null;
-        if (b) {
-          setTabsEnabled({
-            demos: !!b.show_browse_demos,
-            docs: !!b.show_browse_docs,
-            meeting: !!b.show_schedule_meeting,
-            price: !!b.show_price_estimate,
-          });
-          setResponseText(b.welcome_message || "");
-          setIntroVideoUrl(b.intro_video_url || "");
-          setShowIntroVideo(!!b.show_intro_video);
-          setPricingCopy({
-            intro: b.pricing_intro || "",
-            outro: b.pricing_outro || "",
-            custom_notice: b.pricing_custom_notice || "",
-          });
-        }
+        if (b) applyBotSettings(b);
       } catch {}
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => (cancel = true);
   }, [botId, apiBase]);
 
-  // Prefetch agent after we have botId + session (without switching mode)
+  // Prefetch agent
   const agentPrefetchedRef = useRef(false);
   useEffect(() => {
-    if (!botId || !sessionId) return;
-    if (agentPrefetchedRef.current) return;
-    if (!tabsEnabled.meeting) return; // no need if meeting tab not displayed
+    if (!botId || !sessionId || agentPrefetchedRef.current) return;
+    if (!tabsEnabled.meeting) return;
     const url =
       `${apiBase}/agent?bot_id=${encodeURIComponent(botId)}` +
       (agentAlias ? `&agent=${encodeURIComponent(agentAlias)}` : "") +
@@ -695,11 +603,8 @@ export default function AskAssistant() {
       try {
         const r = await fetch(url);
         const j = await r.json();
-        if (j?.ok && j.agent) {
-          setAgent(j.agent);
-        }
+        if (j?.ok && j.agent) setAgent(j.agent);
       } catch {
-        // ignore
       } finally {
         agentPrefetchedRef.current = true;
       }
@@ -714,70 +619,7 @@ export default function AskAssistant() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-/* ================================================================================= *
- *  END SECTION 2                                                                  *
- * ================================================================================= */
-  
-/* ================================================================================= *
- *  BEGIN SECTION 3                                                                  *
- * ================================================================================= */
-  // release sticky when scrolling
-  useEffect(() => {
-    const el = contentRef.current;
-    if (!el || !selected) return;
-    const onScroll = () => {
-      if (el.scrollTop > 8 && isAnchored) setIsAnchored(false);
-    };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-  }, [selected, isAnchored]);
-
-// Calendly booking listener — send rich payload to backend (no Calendly fetch)
-useEffect(() => {
-  if (mode !== "meeting" || !botId || !sessionId || !visitorId) return;
-
-  function onCalendlyMessage(e) {
-    try {
-      const m = e?.data;
-      if (!m || typeof m !== "object") return;
-
-      if (m.event !== "calendly.event_scheduled" && m.event !== "calendly.event_canceled") return;
-
-      const p = m.payload || {};
-
-      const payloadOut = {
-        event: m.event,
-        scheduled_event: p.event || p.scheduled_event || null,
-        invitee: {
-          uri: p.invitee?.uri ?? null,
-          email: p.invitee?.email ?? null,
-          name: p.invitee?.full_name ?? p.invitee?.name ?? null,
-        },
-        questions_and_answers:
-          p.questions_and_answers ??
-          p.invitee?.questions_and_answers ??
-          [],
-        tracking: p.tracking || {},
-      };
-
-      fetch(`${apiBase}/calendly/js-event`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bot_id: botId,
-          session_id: sessionId,
-          visitor_id: visitorId,
-          payload: payloadOut,
-        }),
-      }).catch(() => {});
-    } catch {
-    }
-  }
-
-  window.addEventListener("message", onCalendlyMessage);
-  return () => window.removeEventListener("message", onCalendlyMessage);
-}, [mode, botId, sessionId, visitorId, apiBase]);
-
+  // ---- Functions ----
   async function normalizeAndSelectDemo(item) {
     try {
       const r = await fetch(`${apiBase}/render-video-iframe`, {
@@ -803,9 +645,6 @@ useEffect(() => {
       );
     } catch {
       setSelected(item);
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
     }
   }
 
@@ -824,24 +663,9 @@ useEffect(() => {
       setAgent(ag);
       if (agentAlias && ag && ag.alias !== agentAlias) {
         console.warn(
-          `[AskAssistant] Requested agent alias "${agentAlias}" not matched; using "${ag.alias}"`
+          `[Welcome] Requested agent alias "${agentAlias}" not matched; using "${ag.alias}"`
         );
       }
-      if (
-        ag &&
-        ag.calendar_link_type &&
-        String(ag.calendar_link_type).toLowerCase() === "external" &&
-        ag.calendar_link
-      ) {
-        try {
-          const base = ag.calendar_link || "";
-          const withQS = `${base}${base.includes('?') ? '&' : '?'}session_id=${encodeURIComponent(sessionId||'')}&visitor_id=${encodeURIComponent(visitorId||'')}&bot_id=${encodeURIComponent(botId||'')}&utm_source=${encodeURIComponent(botId||'')}&utm_medium=${encodeURIComponent(sessionId||'')}&utm_campaign=${encodeURIComponent(visitorId||'')}`;
-          window.open(withQS, "_blank", "noopener,noreferrer");
-        } catch {}
-      }
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
     } catch {
       setAgent(null);
     }
@@ -866,9 +690,6 @@ useEffect(() => {
           description: it.description ?? it.summary ?? it.functions_text ?? "",
           functions_text: it.functions_text ?? it.description ?? "",
         }))
-      );
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
       );
     } catch {
       setBrowseItems([]);
@@ -895,17 +716,12 @@ useEffect(() => {
           functions_text: it.functions_text ?? it.description ?? "",
         }))
       );
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
     } catch {
       setBrowseDocs([]);
     }
   }
 
-
-  
-  // Pricing loader
+  // Pricing questions loader
   const priceScrollRef = useRef(null);
   useEffect(() => {
     if (mode !== "price" || !botId) return;
@@ -930,12 +746,10 @@ useEffect(() => {
         if (!cancel) setPriceErr("Unable to load price estimator.");
       }
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => (cancel = true);
   }, [mode, botId, apiBase]);
 
-  // Pricing: compute estimate when inputs ready
+  // Pricing estimate effect
   useEffect(() => {
     const haveAll = (() => {
       if (!priceQuestions?.length) return false;
@@ -993,9 +807,7 @@ useEffect(() => {
         if (!cancel) setPriceBusy(false);
       }
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => (cancel = true);
   }, [
     mode,
     botId,
@@ -1006,12 +818,10 @@ useEffect(() => {
     visitorId,
   ]);
 
-  // Next unanswered (null when all required answered → show estimate)
   const nextPriceQuestion = useMemo(() => {
     if (!priceQuestions?.length) return null;
     for (const q of priceQuestions) {
-      if ((q.group ?? "estimation") !== "estimation" || q.required === false
-      )
+      if ((q.group ?? "estimation") !== "estimation" || q.required === false)
         continue;
       const v = priceAnswers[q.q_key];
       const isMulti = String(q.type).toLowerCase().includes("multi");
@@ -1023,17 +833,24 @@ useEffect(() => {
     return null;
   }, [priceQuestions, priceAnswers]);
 
-  // Mirror lines
   const mirrorLines = useMemo(() => {
     const labelFor = (q_key) => {
       const q = (priceQuestions || []).find((qq) => qq.q_key === q_key);
       if (!q) return "";
       const ans = priceAnswers[q.q_key];
-      if (ans == null || ans === "" || (Array.isArray(ans) && ans.length === 0)) return "";
+      if (
+        ans == null ||
+        ans === "" ||
+        (Array.isArray(ans) && ans.length === 0)
+      )
+        return "";
       const opts = normalizeOptions(q);
       if (String(q.type).toLowerCase().includes("multi")) {
         const picked = Array.isArray(ans) ? ans : [];
-        return opts.filter((o) => picked.includes(o.key)).map((o) => o.label).join(", ");
+        return opts
+          .filter((o) => picked.includes(o.key))
+          .map((o) => o.label)
+          .join(", ");
       }
       const o = opts.find((o) => o.key === ans);
       return o?.label || String(ans);
@@ -1043,7 +860,6 @@ useEffect(() => {
       const t = priceEstimate.mirror_text.trim();
       if (t) return [t];
     }
-
     if (Array.isArray(priceEstimate?.mirror_text)) {
       const out = [];
       for (const m of priceEstimate.mirror_text) {
@@ -1057,7 +873,6 @@ useEffect(() => {
       }
       return out.filter(Boolean);
     }
-
     if (!priceQuestions?.length) return [];
     const lines = [];
     for (const q of priceQuestions) {
@@ -1095,14 +910,6 @@ useEffect(() => {
     return lines;
   }, [priceEstimate, priceQuestions, priceAnswers]);
 
-  /* ================================================================================= *
-   * END SECTION 3                                                                     *
-   * ================================================================================= */
-  
-    /* ================================================================================= *
-   *  BEGIN SECTION 4                                                                  *
-   * ================================================================================= */
-  
   function handlePickOption(q, opt) {
     const isMulti = String(q?.type || "").toLowerCase().includes("multi");
     setPriceAnswers((prev) => {
@@ -1116,11 +923,9 @@ useEffect(() => {
     });
   }
 
-  // Ask flow
   async function sendMessage() {
     if (!input.trim() || !botId) return;
     const outgoing = input.trim();
-    
     const commitScope = (() => {
       let scope = "standard";
       let demo_id, doc_id;
@@ -1131,7 +936,11 @@ useEffect(() => {
         scope = "demo";
         demo_id = String(selected.id);
       }
-      return { scope, ...(demo_id ? { demo_id } : {}), ...(doc_id ? { doc_id } : {}) };
+      return {
+        scope,
+        ...(demo_id ? { demo_id } : {}),
+        ...(doc_id ? { doc_id } : {}),
+      };
     })();
     setMode("ask");
     setLastQuestion(outgoing);
@@ -1144,19 +953,23 @@ useEffect(() => {
     try {
       const res = await axios.post(
         `${apiBase}/demo-hal`,
-        withIdsBody({ bot_id: botId, user_question: outgoing, ...commitScope, debug: true }),
+        withIdsBody({
+          bot_id: botId,
+            user_question: outgoing,
+            ...commitScope,
+            debug: true,
+        }),
         { timeout: 30000, headers: withIdsHeaders() }
       );
       const data = res?.data || {};
       setDebugInfo(data?.debug || null);
-
       const text = data?.response_text || "";
+
       const recSource = Array.isArray(data?.items)
         ? data.items
         : Array.isArray(data?.buttons)
         ? data.buttons
         : [];
-
       const recs = (Array.isArray(recSource) ? recSource : [])
         .map((it) => {
           const id = it.id ?? it.button_id ?? it.value ?? it.url ?? it.title;
@@ -1194,7 +1007,6 @@ useEffect(() => {
       setResponseText(text);
       setLoading(false);
       setScopePayload({ scope: "standard" });
-
       if (recs.length > 0) {
         setHelperPhase("header");
         setTimeout(() => {
@@ -1205,7 +1017,6 @@ useEffect(() => {
         setHelperPhase("hidden");
         setItems([]);
       }
-
       requestAnimationFrame(() =>
         contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
       );
@@ -1226,7 +1037,11 @@ useEffect(() => {
       (it) => (it.id ?? it.url ?? it.title) !== selKey
     );
   }, [selected, items]);
-  const visibleUnderVideo = selected ? (mode === "ask" ? askUnderVideo : []) : listSource;
+  const visibleUnderVideo = selected
+    ? mode === "ask"
+      ? askUnderVideo
+      : []
+    : listSource;
 
   const tabs = useMemo(() => {
     const out = [];
@@ -1248,7 +1063,11 @@ useEffect(() => {
         },
       });
     if (tabsEnabled.meeting)
-      out.push({ key: "meeting", label: "Schedule Meeting", onClick: openMeeting });
+      out.push({
+        key: "meeting",
+        label: "Schedule Meeting",
+        onClick: openMeeting,
+      });
     return out;
   }, [tabsEnabled]);
 
@@ -1292,12 +1111,14 @@ useEffect(() => {
   const showAskBottom = mode !== "price" || !!priceEstimate;
   const embedDomain =
     typeof window !== "undefined" ? window.location.hostname : "";
-
   const logoSrc =
     brandAssets.logo_url ||
     brandAssets.logo_light_url ||
     brandAssets.logo_dark_url ||
     fallbackLogo;
+
+  const poweredByLogo =
+    "https://rvwcyysphhaawvzzyjxq.supabase.co/storage/v1/object/public/demohal-logos/f3ab3e92-9855-4c9b-8038-0a9e483218b7/Powered%20By.png";
 
   return (
     <div
@@ -1312,10 +1133,14 @@ useEffect(() => {
         className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all duration-300"
       >
         {/* Header */}
-        <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)]"> 
+        <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)]">
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
-              <img src={logoSrc} alt="Brand logo" className="h-10 object-contain" />
+              <img
+                src={logoSrc}
+                alt="Brand logo"
+                className="h-10 object-contain"
+              />
             </div>
             <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
               {selected
@@ -1382,22 +1207,16 @@ useEffect(() => {
             </div>
           </>
         ) : (
-  
-/* ================================================================================= *
-* END SECTION 4                                                                     *
-* ================================================================================= */
-
-/* ================================================================================= *
-*  BEGIN SECTION 5                                                                  *
-* ================================================================================= */          
-        
           /* OTHER MODES */
           <div
             ref={contentRef}
             className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto"
           >
             {mode === "meeting" ? (
-              <div className="w-full flex-1 flex flex-col" data-patch="meeting-pane">
+              <div
+                className="w-full flex-1 flex flex-col"
+                data-patch="meeting-pane"
+              >
                 <div className="bg-[var(--card-bg)] pt-2 pb-2">
                   {agentAlias ? (
                     <div className="text-[10px] opacity-60 mb-1">
@@ -1418,11 +1237,24 @@ useEffect(() => {
                       Loading scheduling…
                     </div>
                   ) : agent.calendar_link_type &&
-                    String(agent.calendar_link_type).toLowerCase() === "embed" &&
+                    String(agent.calendar_link_type).toLowerCase() ===
+                      "embed" &&
                     agent.calendar_link ? (
                     <iframe
                       title="Schedule a Meeting"
-                      src={`${agent.calendar_link}${agent.calendar_link.includes('?') ? '&' : '?'}embed_domain=${embedDomain}&embed_type=Inline&session_id=${encodeURIComponent(sessionId||'')}&visitor_id=${encodeURIComponent(visitorId||'')}&bot_id=${encodeURIComponent(botId||'')}&utm_source=${encodeURIComponent(botId||'')}&utm_medium=${encodeURIComponent(sessionId||'')}&utm_campaign=${encodeURIComponent(visitorId||'')}`}
+                      src={`${agent.calendar_link}${
+                        agent.calendar_link.includes("?") ? "&" : "?"
+                      }embed_domain=${embedDomain}&embed_type=Inline&session_id=${encodeURIComponent(
+                        sessionId || ""
+                      )}&visitor_id=${encodeURIComponent(
+                        visitorId || ""
+                      )}&bot_id=${encodeURIComponent(
+                        botId || ""
+                      )}&utm_source=${encodeURIComponent(
+                        botId || ""
+                      )}&utm_medium=${encodeURIComponent(
+                        sessionId || ""
+                      )}&utm_campaign=${encodeURIComponent(visitorId || "")}`}
                       style={{
                         width: "100%",
                         height: "60vh",
@@ -1638,44 +1470,61 @@ useEffect(() => {
           </div>
         )}
 
-        {/* Bottom Ask Bar */}
+        {/* Bottom Ask Bar (includes Powered By graphic) */}
         <div
-          className="px-4 py-3 border-t border-[var(--border-default)]"
+          className="px-3 sm:px-4 py-3 border-t border-[var(--border-default)]"
           data-patch="ask-bottom-bar"
         >
           {showAskBottom ? (
-            <div className="relative w-full">
-              <textarea
-                ref={inputRef}
-                rows={1}
-                className="w-full rounded-[0.75rem] px-4 py-2 pr-14 text-base placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px] bg-[var(--card-bg)] border border-[var(--border-default)] focus:border-[var(--border-default)] focus:ring-1 focus:ring-[var(--border-default)] outline-none"
-                placeholder="Ask your question here"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onInput={(e) => {
-                  e.currentTarget.style.height = "auto";
-                  e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    sendMessage();
-                  }
-                }}
-              />
-              <button
-                aria-label="Send"
-                onClick={sendMessage}
-                className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
+            <div className="flex items-end gap-3">
+              <a
+                href="https://demohal.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 flex items-center justify-center"
+                title="Powered by DemoHAL"
               >
-                <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:brightness-110" />
-              </button>
+                <img
+                  src={poweredByLogo}
+                  alt="Powered by DemoHAL"
+                  className="h-8 w-auto object-contain select-none"
+                  draggable="false"
+                  loading="lazy"
+                />
+              </a>
+              <div className="relative flex-1">
+                <textarea
+                  ref={inputRef}
+                  rows={1}
+                  className="w-full rounded-[0.75rem] px-4 py-2 pr-14 text-base placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px] bg-[var(--card-bg)] border border-[var(--border-default)] focus:border-[var(--border-default)] focus:ring-1 focus:ring-[var(--border-default)] outline-none"
+                  placeholder="Ask your question here"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onInput={(e) => {
+                    e.currentTarget.style.height = "auto";
+                    e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      sendMessage();
+                    }
+                  }}
+                />
+                <button
+                  aria-label="Send"
+                  onClick={sendMessage}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
+                >
+                  <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:brightness-110" />
+                </button>
+              </div>
             </div>
           ) : null}
         </div>
       </div>
 
-      {/* ThemeLab (enable with ?themelab=1) */}
+      {/* ThemeLab */}
       {themeLabOn && botId ? (
         <ColorBox
           apiBase={apiBase}
@@ -1688,27 +1537,17 @@ useEffect(() => {
   );
 }
 
-/* ================================================================================= *
- * END SECTION 5                                                                     *
- * ================================================================================= */
-
-/* ================================================================================= *
- *  BEGIN SECTION 6                                                                  *
- * ================================================================================= */
-
 /* =================== *
  *  Doc iframe wrapper *
  * =================== */
-function DocIframe({ apiBase, botId, doc, sessionId, visitorId }) {
+function DocIframe({ doc }) {
   const iframeSrc = React.useMemo(() => {
     const html = doc?._iframe_html || "";
     if (!html) return null;
     const m = html.match(/src="([^"]+)"/i) || html.match(/src='([^']+)'/i);
     return m ? m[1] : null;
   }, [doc?._iframe_html]);
-
   const src = iframeSrc || doc?.url || "";
-
   return (
     <div className="bg-[var(--card-bg)] pt-2 pb-2">
       <iframe
@@ -1789,9 +1628,7 @@ function ColorBox({ apiBase, botId, frameRef, onVars }) {
   async function load() {
     const res = await fetch(
       `${apiBase}/brand/client-tokens?bot_id=${encodeURIComponent(botId)}`,
-      {
-        credentials: "include",
-      }
+      { credentials: "include" }
     );
     const data = await res.json();
     const toks = (data?.ok ? data.tokens : []) || [];
@@ -1910,13 +1747,11 @@ function ColorBox({ apiBase, botId, frameRef, onVars }) {
       {authState === "checking" && (
         <div className="text-sm text-gray-600">Checking access…</div>
       )}
-
       {authState === "disabled" && (
         <div className="text-sm text-gray-600">
           ThemeLab is disabled for this bot.
         </div>
       )}
-
       {authState === "need_password" && (
         <form onSubmit={doLogin} className="flex items-center gap-2">
           <input
@@ -2002,9 +1837,8 @@ function ColorBox({ apiBase, botId, frameRef, onVars }) {
   );
 }
 
-
 /* =================== *
- *      Debug Panel    *
+ *  Debug Panel
  * =================== */
 function DebugPanel({ debug }) {
   if (!debug) return null;
@@ -2012,10 +1846,19 @@ function DebugPanel({ debug }) {
   return (
     <div className="mt-3 p-3 rounded-lg bg-[var(--card-bg)] border border-[var(--border-default)] text-xs whitespace-pre-wrap">
       <div className="font-bold mb-1">Debug</div>
-      <div><b>Scope:</b> {String(debug.request_scope || "")}</div>
-      <div><b>Non-specific:</b> {String(debug.nonspecific)}</div>
-      <div><b>Demo ID:</b> {debug.demo_id || "—"} <b>Doc ID:</b> {debug.doc_id || "—"}</div>
-      <div className="mt-2"><b>Active Context Enabled:</b> {String(ac.enabled)}</div>
+      <div>
+        <b>Scope:</b> {String(debug.request_scope || "")}
+      </div>
+      <div>
+        <b>Non-specific:</b> {String(debug.nonspecific)}
+      </div>
+      <div>
+        <b>Demo ID:</b> {debug.demo_id || "—"} <b>Doc ID:</b>{" "}
+        {debug.doc_id || "—"}
+      </div>
+      <div className="mt-2">
+        <b>Active Context Enabled:</b> {String(ac.enabled)}
+      </div>
       {ac.text ? (
         <details className="mt-1">
           <summary className="cursor-pointer">Active Context</summary>
@@ -2031,6 +1874,3 @@ function DebugPanel({ debug }) {
     </div>
   );
 }
-/* ================================================================================= *
- * END SECTION 6                                                                     *
- * ================================================================================= */
