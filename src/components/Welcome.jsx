@@ -1,10 +1,13 @@
 /* Patch:
-   - Footer (bottom ask bar) redesigned so:
-       * Textarea returns to full width.
-       * Powered By logo now sits underneath the question box inside the footer.
-       * Footer height (vertical space) increased to comfortably fit both.
-   - Updated powered-by logo URL to the new one provided.
-   - Previous flex side-by-side layout removed.
+   - Powered By logo:
+       * Absolute positioned bottom-left inside the bottom bar (anchored to very bottom).
+       * New URL provided.
+   - Question textarea:
+       * Full width (no horizontal space lost).
+       * Positioned above the logo with exactly 5px vertical gap.
+   - Implementation details:
+       * Bottom bar is now relative; textarea wrapper has bottom padding to make room for logo (logo height + gap).
+       * Logo is absolutely anchored; textarea not overlapped.
 */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -13,7 +16,7 @@ import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import fallbackLogo from "../assets/logo.png";
 
 /* =============================== *
- *  THEME CONSTANTS (unchanged)
+ *  THEME CONSTANTS
  * =============================== */
 const DEFAULT_THEME_VARS = {
   "--banner-bg": "#000000",
@@ -432,7 +435,7 @@ export default function Welcome() {
     }
   }, [selected, mode]);
 
-  // Resolve alias
+  // Fetch /bot-settings variants
   useEffect(() => {
     if (botId || !alias) return;
     let cancel = false;
@@ -448,10 +451,9 @@ export default function Welcome() {
         if (data?.ok) {
           setVisitorId(data.visitor_id || "");
           setSessionId(data.session_id || "");
-        }
-        if (data?.ok && data.bot) applyBotSettings(data.bot);
+          applyBotSettings(data.bot);
+        } else setFatal("Invalid or inactive alias.");
         if (id) setBotId(id);
-        else setFatal("Invalid or inactive alias.");
       } catch {
         if (!cancel) setFatal("Invalid or inactive alias.");
       }
@@ -459,7 +461,6 @@ export default function Welcome() {
     return () => (cancel = true);
   }, [alias, apiBase, botId, pidParam]);
 
-  // Default alias
   useEffect(() => {
     if (botId || alias || !defaultAlias) return;
     let cancel = false;
@@ -471,19 +472,17 @@ export default function Welcome() {
         const res = await fetch(url);
         const data = await res.json();
         if (cancel) return;
-        const id = data?.ok ? data?.bot?.id : null;
         if (data?.ok) {
           setVisitorId(data.visitor_id || "");
           setSessionId(data.session_id || "");
+          applyBotSettings(data.bot);
+          setBotId(data.bot.id);
         }
-        if (data?.ok && data.bot) applyBotSettings(data.bot);
-        if (id) setBotId(id);
       } catch {}
     })();
     return () => (cancel = true);
   }, [botId, alias, defaultAlias, apiBase, pidParam]);
 
-  // Direct bot id
   useEffect(() => {
     if (!botIdFromUrl) return;
     let cancel = false;
@@ -498,9 +497,9 @@ export default function Welcome() {
         if (data?.ok) {
           setVisitorId(data.visitor_id || "");
           setSessionId(data.session_id || "");
+          applyBotSettings(data.bot);
+          setBotId(data.bot.id);
         }
-        if (data?.ok && data.bot) applyBotSettings(data.bot);
-        if (data?.ok && data?.bot?.id) setBotId(data.bot.id);
       } catch {}
     })();
     return () => (cancel = true);
@@ -510,7 +509,7 @@ export default function Welcome() {
     if (!botId && !alias && !brandReady) setBrandReady(true);
   }, [botId, alias, brandReady]);
 
-  // Brand
+  // Brand tokens/assets
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
@@ -539,7 +538,7 @@ export default function Welcome() {
     return () => (cancel = true);
   }, [botId, apiBase]);
 
-  // Refresh settings
+  // Refresh settings again (captures pid update)
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
@@ -554,8 +553,8 @@ export default function Welcome() {
         if (data?.ok) {
           setVisitorId((v) => v || data.visitor_id || "");
           setSessionId((s) => s || data.session_id || "");
+          applyBotSettings(data.bot);
         }
-        if (data?.ok && data.bot) applyBotSettings(data.bot);
       } catch {}
     })();
     return () => (cancel = true);
@@ -752,7 +751,7 @@ export default function Welcome() {
               "",
           },
           session_id: sessionId || undefined,
-            visitor_id: visitorId || undefined,
+          visitor_id: visitorId || undefined,
         };
         const res = await fetch(`${apiBase}/pricing/estimate`, {
           method: "POST",
@@ -1075,7 +1074,7 @@ export default function Welcome() {
     brandAssets.logo_dark_url ||
     fallbackLogo;
 
-  // Updated powered-by logo URL
+  // Powered-by logo (new URL already provided)
   const poweredByLogo =
     "https://rvwcyysphhaawvzzyjxq.supabase.co/storage/v1/object/public/demohal-logos/f3ab3e92-9855-4c9b-8038-0a9e483218b7/Powered%20by%20logo.png";
 
@@ -1423,18 +1422,22 @@ export default function Welcome() {
           </div>
         )}
 
-        {/* Bottom Ask Bar (question box full width, logo underneath) */}
+        {/* Bottom Ask Bar - textarea full width, powered-by logo anchored bottom-left with 5px gap */}
         <div
-          className="px-4 pt-4 pb-2 border-t border-[var(--border-default)]"
+          className="relative px-4 pt-4 border-t border-[var(--border-default)]"
           data-patch="ask-bottom-bar"
+          style={{
+            paddingBottom: "calc(11 * 4px + 5px)", // tailwind h-11 ≈ 44px + 5px gap
+          }}
         >
           {showAskBottom ? (
-            <div className="w-full">
+            <>
+              {/* Full-width textarea wrapper (adds exact 5px space above logo) */}
               <div className="relative">
                 <textarea
                   ref={inputRef}
                   rows={1}
-                  className="w-full rounded-[0.75rem] px-4 py-3 pr-14 text-base placeholder-gray-400 resize-y min-h-[3.25rem] max-h-[200px] bg-[var(--card-bg)] border border-[var(--border-default)] focus:border-[var(--border-default)] focus:ring-1 focus:ring-[var(--border-default)] outline-none"
+                  className="w-full rounded-[0.75rem] px-4 py-3 pr-14 text-base placeholder-gray-400 resize-y min-h-[3.25rem] max-h-[200px] bg-[var(--card-bg)] border border-[var(--border-default)] focus:border-[var(--border-default)] focus:ring-1 focus:ring-[var(--border-default)] outline-none mb-[5px]"
                   placeholder="Ask your question here"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
@@ -1457,24 +1460,24 @@ export default function Welcome() {
                   <ArrowUpCircleIcon className="w-9 h-9 text-[var(--send-color)] hover:brightness-110" />
                 </button>
               </div>
-              <div className="mt-3 flex justify-start">
-                <a
-                  href="https://demohal.com/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="Powered by DemoHAL"
-                  className="inline-flex"
-                >
-                  <img
-                    src={poweredByLogo}
-                    alt="Powered by DemoHAL"
-                    className="h-11 w-auto object-contain select-none"
-                    loading="lazy"
-                    draggable="false"
-                  />
-                </a>
-              </div>
-            </div>
+
+              {/* Powered By logo absolute anchored bottom-left */}
+              <a
+                href="https://demohal.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Powered by DemoHAL"
+                className="absolute left-4 bottom-2 inline-flex"
+              >
+                <img
+                  src={poweredByLogo}
+                  alt="Powered by DemoHAL"
+                  className="h-11 w-auto object-contain select-none"
+                  loading="lazy"
+                  draggable="false"
+                />
+              </a>
+            </>
           ) : null}
         </div>
       </div>
