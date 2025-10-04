@@ -1,6 +1,4 @@
-// Chrome-style tab bar — presentational only
-// Props: { mode: 'ask'|'browse'|'docs'|'meeting', tabs: {key,label,onClick}[] }
-
+// TabsNav.jsx — supports personalize (formfill), browse demos, docs, price, meeting
 import React from "react";
 
 const UI = {
@@ -11,28 +9,40 @@ const UI = {
 };
 
 export default function TabsNav({ mode, tabs }) {
+  const normMode = (mode || "").toLowerCase();
   return (
     <div className="w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <nav
         className="inline-flex min-w-max items-center gap-0.5 overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         role="tablist"
+        aria-label="Primary navigation"
       >
         {tabs.map((t) => {
+          const k = t.key;
           const active =
-            (mode === "browse" && t.key === "demos") ||
-            (mode === "docs" && t.key === "docs") ||
-            (mode === "meeting" && t.key === "meeting");
+            (k === "personalize" &&
+              (normMode === "personalize" ||
+                normMode === "formfill")) ||
+            (k === "demos" && normMode === "browse") ||
+            k === normMode;
           return (
             <button
-              key={t.key}
+              key={k}
               onClick={t.onClick}
               role="tab"
               aria-selected={active}
+              aria-controls={`panel-${k}`}
               className={active ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}
               style={
                 active
-                  ? { background: "var(--card-bg)", color: "var(--tab-active-fg)" }
-                  : { background: "var(--tab-bg)", color: "var(--tab-fg)" }
+                  ? {
+                      background: "var(--card-bg)",
+                      color: "var(--tab-active-fg)",
+                    }
+                  : {
+                      background: "var(--tab-bg)",
+                      color: "var(--tab-fg)",
+                    }
               }
               type="button"
             >
