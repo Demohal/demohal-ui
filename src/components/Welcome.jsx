@@ -1157,6 +1157,18 @@ export default function Welcome() {
     () => ({ ...derivedTheme, ...pickerVars }),
     [derivedTheme, pickerVars]
   );
+
+  // Ensure CSS variables are always available on :root (prod safety)
+  useEffect(() => {
+    const root = document.documentElement;
+    Object.entries(liveTheme || {}).forEach(([k, v]) => {
+      if (k.startsWith('--')) root.style.setProperty(k, v);
+    });
+    return () => {
+      // (Optional) clean-up not needed unless you hot-unmount/remount multiple variants
+    };
+  }, [liveTheme]);
+  
   const [brandAssets, setBrandAssets] = useState({
     logo_url: null,
     logo_light_url: null,
