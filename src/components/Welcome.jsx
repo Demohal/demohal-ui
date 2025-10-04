@@ -886,6 +886,8 @@ export default function Welcome() {
     });
   }
 
+  // ... inside the file, replace ONLY the body of sendMessage (or adjust recSource lines)
+
   async function sendMessage() {
     if (!input.trim() || !botId) return;
     const outgoing = input.trim();
@@ -913,21 +915,30 @@ export default function Welcome() {
       const res = await axios.post(
         `${apiBase}/demo-hal`,
         withIdsBody({
-          bot_id: botId,
-          user_question: outgoing,
-          ...commitScope,
-          debug: true,
+            bot_id: botId,
+            user_question: outgoing,
+            ...commitScope,
+            debug: true,
         }),
         { timeout: 30000, headers: withIdsHeaders() }
       );
       const data = res?.data || {};
       setDebugInfo(data?.debug || null);
       const text = data?.response_text || "";
-      const recSource = Array.isArray(data?.items)
-        ? data.items
-        : Array.isArray(data?.buttons)
-        ? data.buttons
-        : [];
+
+      // NEW: unify possible recommendation keys (items | buttons | demo_buttons + doc_buttons)
+      const demoBtns = Array.isArray(data?.demo_buttons) ? data.demo_buttons : [];
+      const docBtns  = Array.isArray(data?.doc_buttons) ? data.doc_buttons : [];
+      const legacyItems = Array.isArray(data?.items) ? data.items : [];
+      const legacyButtons = Array.isArray(data?.buttons) ? data.buttons : [];
+      const mergedNew = [...demoBtns, ...docBtns];
+
+      const recSource = legacyItems.length
+        ? legacyItems
+        : legacyButtons.length
+        ? legacyButtons
+        : mergedNew;
+
       const recs = (Array.isArray(recSource) ? recSource : [])
         .map((it) => {
           const id = it.id ?? it.button_id ?? it.value ?? it.url ?? it.title;
@@ -965,6 +976,7 @@ export default function Welcome() {
       setResponseText(text);
       setLoading(false);
       setScopePayload({ scope: "standard" });
+
       if (recs.length > 0) {
         setHelperPhase("header");
         setTimeout(() => {
