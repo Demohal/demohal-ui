@@ -1,25 +1,16 @@
-/* Welcome.jsx — FULL FILE
- * Restores ThemeLab (Colors + Wording/Options) to its latest functional state
- * inline (no external ThemeLabPanels.jsx needed). This version includes:
- *  - Ask flow with perspective
- *  - Form fill gating
- *  - Pricing estimator
- *  - Meeting scheduling
- *  - Demo/document browsing
- *  - Recommendation pruning (demo_buttons + doc_buttons + legacy items/buttons)
- *  - ThemeLab Colors & Wording side panels (require ?themelab=1 or themelab=true)
- *  - Session end beacon
- *  - Intro video
+/* Welcome.jsx — Updated
+ * CHANGE SUMMARY (2025-10-04):
+ *  - ThemeLab live option toggles now immediately update:
+ *      • Visible tabs (demos/docs/price/meeting)
+ *      • Intro video visibility + URL
+ *      • Form fill (show/hide) state
+ *  - Form fill field “Collect” / “Required” checkbox toggles in ThemeLab panel now
+ *    immediately propagate to the in‑app form (no page refresh needed).
+ *  - Added onOptionsChange propagation path from ThemeLabWordingBox → ThemeLabPanels → Welcome.
  *
- * Assumptions:
- *  - Endpoints: /bot-settings /brand /demo-hal /browse-demos /browse-docs
- *    /render-video-iframe /render-doc-iframe /visitor-formfill
- *    /formfill-config /pricing/questions /pricing/estimate
- *    /agent /calendly/js-event
- *    /themelab/status /themelab/login /themelab/wording-options
- *    /themelab/wording-options/save /brand/client-tokens /brand/client-tokens/save
+ * Only ThemeLab related code paths changed; ask flow, pricing, recommendations, etc. unchanged.
  *
- * Replace your existing Welcome.jsx with this file.
+ * NOTE: If you previously integrated this file, you can replace the whole file with this version.
  */
 
 import React, {
@@ -154,7 +145,7 @@ function normalizeOptions(q) {
 }
 
 /* ============================================================
- * PRICING SUB-COMPONENTS (local only)
+ * PRICING SUB-COMPONENTS
  * ============================================================ */
 function OptionButton({ opt, selected, onClick }) {
   return (
@@ -288,9 +279,8 @@ function EstimateCard({ estimate, outroText }) {
 }
 
 /* ============================================================
- * THEME LAB INLINE PANELS
+ * THEME LAB INLINE PANELS (UPDATED for live option + field propagation)
  * ============================================================ */
-
 function useFloatingPos(frameRef, side = "left", width = 460, gap = 12) {
   const [pos, setPos] = useState({ left: 16, top: 16, width });
   useEffect(() => {
@@ -373,9 +363,7 @@ function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
         if (MAP[t.token_key]) patch[MAP[t.token_key]] = v[t.token_key];
       });
       onVars && onVars(patch);
-    } catch {
-      /* swallow */
-    }
+    } catch {}
   }
 
   useEffect(() => {
@@ -534,6 +522,7 @@ function ThemeLabWordingBox({
   sharedAuth,
   onFormfillChange,
   onLiveMessages,
+  onOptionsChange, // NEW
 }) {
   const pos = useFloatingPos(frameRef, "right", 460);
   const [loading, setLoading] = useState(false);
@@ -576,6 +565,22 @@ function ThemeLabWordingBox({
     setDirty(true);
   }
 
+  function propagateFields(fields = standardFields, opt = options) {
+    onFormfillChange &&
+      onFormfillChange({
+        show_formfill: opt.show_formfill,
+        standard_fields: fields.map((f) => ({
+          field_key: f.field_key,
+          is_collected: !!f.is_collected,
+          is_required: !!f.is_required,
+        })),
+      });
+  }
+
+  function propagateOptions(next) {
+    onOptionsChange && onOptionsChange(next);
+  }
+
   async function load() {
     setLoading(true);
     try {
@@ -602,15 +607,8 @@ function ThemeLabWordingBox({
       setEditingKey(firstKey);
       setDraft(j.messages?.[firstKey] || "");
       setDirty(false);
-      onFormfillChange &&
-        onFormfillChange({
-          show_formfill: j.options?.show_formfill,
-          standard_fields: raw.map((f) => ({
-            field_key: f.field_key,
-            is_collected: !!f.is_collected,
-            is_required: !!f.is_required,
-          })),
-        });
+      propagateFields(raw, j.options || {});
+      propagateOptions(j.options || {});
       onLiveMessages && onLiveMessages(j.messages || {});
     } catch {
       setMsg("Load failed.");
@@ -655,17 +653,9 @@ function ThemeLabWordingBox({
     setOptions((p) => {
       const n = { ...p, [k]: !p[k] };
       markDirty();
-      if (k === "show_formfill") {
-        onFormfillChange &&
-          onFormfillChange({
-            show_formfill: n.show_formfill,
-            standard_fields: standardFields.map((f) => ({
-              field_key: f.field_key,
-              is_collected: !!f.is_collected,
-              is_required: !!f.is_required,
-            })),
-          });
-      }
+      // propagate both options and (if show_formfill changed) fields
+      if (k === "show_formfill") propagateFields(standardFields, n);
+      propagateOptions(n);
       return n;
     });
   }
@@ -677,6 +667,7 @@ function ThemeLabWordingBox({
           : f
       );
       markDirty();
+      propagateFields(n, options);
       return n;
     });
   }
@@ -688,6 +679,7 @@ function ThemeLabWordingBox({
           : f
       );
       markDirty();
+      propagateFields(n, options);
       return n;
     });
   }
@@ -753,15 +745,8 @@ function ThemeLabWordingBox({
     setEditingKey(firstKey);
     setDraft(snap.messages[firstKey] || "");
     setDirty(false);
-    onFormfillChange &&
-      onFormfillChange({
-        show_formfill: snap.options.show_formfill,
-        standard_fields: snap.standard_fields.map((f) => ({
-          field_key: f.field_key,
-          is_collected: !!f.is_collected,
-          is_required: !!f.is_required,
-        })),
-      });
+    propagateFields(snap.standard_fields, snap.options);
+    propagateOptions(snap.options);
     setMsg("Restored.");
     setTimeout(() => setMsg(""), 1400);
     onLiveMessages && onLiveMessages(snap.messages || {});
@@ -999,11 +984,12 @@ function ThemeLabWordingBox({
               type="text"
               value={options.intro_video_url || ""}
               onChange={(e) => {
-                setOptions((p) => ({
-                  ...p,
-                  intro_video_url: e.target.value,
-                }));
-                markDirty();
+                setOptions((p) => {
+                  const n = { ...p, intro_video_url: e.target.value };
+                  markDirty();
+                  propagateOptions(n);
+                  return n;
+                });
               }}
               className="w-full text-xs border border-black/30 rounded px-2 py-1"
               placeholder="https://..."
@@ -1049,6 +1035,7 @@ function ThemeLabPanels({
   onVars,
   onFormfillChange,
   onLiveMessages,
+  onOptionsChange, // NEW
 }) {
   const [authState, setAuthState] = useState("checking");
   useEffect(() => {
@@ -1095,6 +1082,7 @@ function ThemeLabPanels({
         sharedAuth={sharedAuth}
         onFormfillChange={onFormfillChange}
         onLiveMessages={onLiveMessages}
+        onOptionsChange={onOptionsChange}
       />
     </>
   );
@@ -1282,7 +1270,7 @@ export default function Welcome() {
     });
   }
 
-  /* Bot / alias resolution */
+  /* Bot / alias resolution (unchanged) */
   useEffect(() => {
     if (botId || !alias) return;
     let cancel = false;
@@ -1309,7 +1297,6 @@ export default function Welcome() {
     return () => {
       cancel = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alias, apiBase, botId]);
 
   useEffect(() => {
@@ -1337,7 +1324,6 @@ export default function Welcome() {
     return () => {
       cancel = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [botId, alias, defaultAlias, apiBase]);
 
   function applyBotSettings(bot) {
@@ -1519,7 +1505,7 @@ export default function Welcome() {
     return o;
   }, [activeFormFields, visitorDefaults, urlParams]);
 
-  /* Ask flow */
+  /* Ask flow (unchanged logic) */
   async function doSend(outgoing) {
     if (!outgoing || !botId) return;
     setMode("ask");
@@ -1935,7 +1921,7 @@ export default function Welcome() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  /* Pricing logic */
+  /* Pricing logic (unchanged) */
   useEffect(() => {
     if (mode !== "price" || !botId) return;
     let cancel = false;
@@ -2018,7 +2004,7 @@ export default function Welcome() {
               "",
           },
           session_id: sessionId || undefined,
-            visitor_id: visitorId || undefined,
+          visitor_id: visitorId || undefined,
         };
         const r = await fetch(`${apiBase}/pricing/estimate`, {
           method: "POST",
@@ -2229,7 +2215,7 @@ export default function Welcome() {
         prev.forEach((f) => f?.field_key && (byKey[f.field_key] = { ...f }));
         standard_fields.forEach((sf) => {
           if (!sf.field_key) return;
-          const canonical = sf.field_key;
+            const canonical = sf.field_key;
           if (!byKey[canonical]) {
             byKey[canonical] = {
               field_key: canonical,
@@ -2254,6 +2240,19 @@ export default function Welcome() {
         return Object.values(byKey);
       });
     }
+  }
+
+  function handleThemeLabOptionsChange(nextOptions) {
+    // Live update application state
+    setTabsEnabled({
+      demos: !!nextOptions.show_browse_demos,
+      docs: !!nextOptions.show_browse_docs,
+      meeting: !!nextOptions.show_schedule_meeting,
+      price: !!nextOptions.show_price_estimate,
+    });
+    setShowIntroVideo(!!nextOptions.show_intro_video);
+    setIntroVideoUrl(nextOptions.intro_video_url || "");
+    setShowFormfill(!!nextOptions.show_formfill);
   }
 
   if (fatal) {
@@ -2342,6 +2341,7 @@ export default function Welcome() {
           />
         </div>
 
+        {/* Main Content */}
         <div
           ref={contentRef}
           className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto"
@@ -2736,6 +2736,7 @@ export default function Welcome() {
                   : prev.custom_notice,
             }));
           }}
+          onOptionsChange={handleThemeLabOptionsChange}
         />
       )}
     </div>
