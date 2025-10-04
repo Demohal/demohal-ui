@@ -1,14 +1,13 @@
-// Document iframe viewer — presentational
-// Props: { doc: { title, url, _iframe_html? } }
-
+// DocIframe.jsx — document viewer
 import React from "react";
 
 export default function DocIframe({ doc }) {
-  // Server may return full HTML; extract src if present
   const iframeSrc = React.useMemo(() => {
     const html = doc?._iframe_html || "";
     if (!html) return null;
-    const m = html.match(/src=\"([^\"]+)\"/i) || html.match(/src='([^']+)'/i);
+    const m =
+      html.match(/src\s*=\s*"([^"]+)"/i) ||
+      html.match(/src\s*=\s*'([^']+)'/i);
     return m ? m[1] : null;
   }, [doc?._iframe_html]);
 
