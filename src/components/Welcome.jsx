@@ -1,8 +1,36 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+/* Welcome.jsx — FULL FILE
+ * Restores ThemeLab (Colors + Wording/Options) to its latest functional state
+ * inline (no external ThemeLabPanels.jsx needed). This version includes:
+ *  - Ask flow with perspective
+ *  - Form fill gating
+ *  - Pricing estimator
+ *  - Meeting scheduling
+ *  - Demo/document browsing
+ *  - Recommendation pruning (demo_buttons + doc_buttons + legacy items/buttons)
+ *  - ThemeLab Colors & Wording side panels (require ?themelab=1 or themelab=true)
+ *  - Session end beacon
+ *  - Intro video
+ *
+ * Assumptions:
+ *  - Endpoints: /bot-settings /brand /demo-hal /browse-demos /browse-docs
+ *    /render-video-iframe /render-doc-iframe /visitor-formfill
+ *    /formfill-config /pricing/questions /pricing/estimate
+ *    /agent /calendly/js-event
+ *    /themelab/status /themelab/login /themelab/wording-options
+ *    /themelab/wording-options/save /brand/client-tokens /brand/client-tokens/save
+ *
+ * Replace your existing Welcome.jsx with this file.
+ */
+
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import axios from "axios";
 import fallbackLogo from "../assets/logo.png";
 
-/* Externalized small components (full replacements provided separately) */
 import TabsNav from "./TabsNav";
 import Row from "./Row";
 import DocIframe from "./DocIframe";
@@ -10,7 +38,7 @@ import AskInputBar from "./AskInputBar";
 import FormFillCard from "./FormFillCard";
 
 /* ============================================================
- *  CONSTANTS & HELPERS
+ * CONSTANTS / HELPERS
  * ============================================================ */
 const DEFAULT_THEME_VARS = {
   "--banner-bg": "#000000",
@@ -49,7 +77,6 @@ const PERSPECTIVE_OPTIONS = [
 const FIELD_SYNONYMS = { fname: "first_name", lname: "last_name" };
 const CANON_LABELS = { first_name: "First Name", last_name: "Last Name" };
 
-/* Demo recommendation pruning heuristics */
 const DEMO_PRUNE_MAX = 6;
 const DEMO_STRONG_THRESHOLD = 2;
 const DEMO_STRONG_RATIO = 2.2;
@@ -127,7 +154,7 @@ function normalizeOptions(q) {
 }
 
 /* ============================================================
- *  PRICING SUB-COMPONENTS (local; kept inside to avoid extra files)
+ * PRICING SUB-COMPONENTS (local only)
  * ============================================================ */
 function OptionButton({ opt, selected, onClick }) {
   return (
@@ -261,13 +288,825 @@ function EstimateCard({ estimate, outroText }) {
 }
 
 /* ============================================================
- *  MAIN COMPONENT
+ * THEME LAB INLINE PANELS
+ * ============================================================ */
+
+function useFloatingPos(frameRef, side = "left", width = 460, gap = 12) {
+  const [pos, setPos] = useState({ left: 16, top: 16, width });
+  useEffect(() => {
+    function update() {
+      const r = frameRef?.current?.getBoundingClientRect?.();
+      if (!r) return setPos({ left: 16, top: 16, width });
+      if (side === "left") {
+        setPos({
+          left: Math.max(8, r.left - width - gap),
+          top: Math.max(8, r.top + 8),
+          width,
+        });
+      } else {
+        setPos({
+          left: Math.min(window.innerWidth - width - 8, r.right + gap),
+          top: Math.max(8, r.top + 8),
+          width,
+        });
+      }
+    }
+    update();
+    const h = () => update();
+    window.addEventListener("resize", h);
+    window.addEventListener("scroll", h, { passive: true });
+    return () => {
+      window.removeEventListener("resize", h);
+      window.removeEventListener("scroll", h);
+    };
+  }, [frameRef, side, width, gap]);
+  return pos;
+}
+
+function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
+  const MAP = {
+    "banner.background": "--banner-bg",
+    "banner.foreground": "--banner-fg",
+    "page.background": "--page-bg",
+    "content.area.background": "--card-bg",
+    "message.text.foreground": "--message-fg",
+    "helper.text.foreground": "--helper-fg",
+    "mirror.text.foreground": "--mirror-fg",
+    "tab.background": "--tab-bg",
+    "tab.foreground": "--tab-fg",
+    "demo.button.background": "--demo-button-bg",
+    "demo.button.foreground": "--demo-button-fg",
+    "doc.button.background": "--doc-button-bg",
+    "doc.button.foreground": "--doc-button-fg",
+    "price.button.background": "--price-button-bg",
+    "price.button.foreground": "--price-button-fg",
+    "send.button.background": "--send-color",
+    "border.default": "--border-default",
+  };
+  const ORDER = [
+    { key: "welcome", label: "Welcome" },
+    { key: "bot_response", label: "Bot Response" },
+    { key: "browse_demos", label: "Browse Demos" },
+    { key: "browse_docs", label: "Browse Documents" },
+    { key: "price", label: "Price Estimate" },
+  ];
+  const [rows, setRows] = useState([]);
+  const [values, setValues] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const pos = useFloatingPos(frameRef, "left", 460);
+
+  async function load() {
+    try {
+      const r = await fetch(
+        `${apiBase}/brand/client-tokens?bot_id=${encodeURIComponent(botId)}`,
+        { credentials: "include" }
+      );
+      const j = await r.json();
+      const toks = (j?.ok ? j.tokens : []) || [];
+      setRows(toks);
+      const v = {};
+      toks.forEach((t) => (v[t.token_key] = t.value || "#000000"));
+      setValues(v);
+      const patch = {};
+      toks.forEach((t) => {
+        if (MAP[t.token_key]) patch[MAP[t.token_key]] = v[t.token_key];
+      });
+      onVars && onVars(patch);
+    } catch {
+      /* swallow */
+    }
+  }
+
+  useEffect(() => {
+    if (sharedAuth.state === "ok") load();
+  }, [sharedAuth.state]);
+
+  function updateToken(k, val) {
+    setValues((p) => ({ ...p, [k]: val || "" }));
+    if (MAP[k] && onVars) onVars({ [MAP[k]]: val || "" });
+  }
+
+  async function doSave() {
+    try {
+      setBusy(true);
+      const updates = Object.entries(values).map(([token_key, value]) => ({
+        token_key,
+        value,
+      }));
+      const r = await fetch(`${apiBase}/brand/client-tokens/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ bot_id: botId, updates }),
+      });
+      const j = await r.json();
+      if (!j?.ok) throw new Error();
+      setMsg(`Saved ${j.updated} token(s).`);
+      setTimeout(() => setMsg(""), 1600);
+    } catch {
+      setMsg("Save failed.");
+      setTimeout(() => setMsg(""), 1600);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doReset() {
+    await load();
+    setMsg("Restored.");
+    setTimeout(() => setMsg(""), 1400);
+  }
+
+  const grouped = useMemo(() => {
+    const m = new Map();
+    rows.forEach((r) => {
+      const k = r.screen_key || "welcome";
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push(r);
+    });
+    ORDER.forEach((o) => {
+      if (m.has(o.key)) {
+        m
+          .get(o.key)
+          .sort((a, b) =>
+            String(a.label || "").localeCompare(String(b.label || ""))
+          );
+      }
+    });
+    return m;
+  }, [rows]);
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        left: pos.left,
+        top: pos.top,
+        width: pos.width,
+        background: "#fff",
+        border: "1px solid rgba(0,0,0,0.2)",
+        borderRadius: 12,
+        padding: 12,
+        zIndex: 60,
+        boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+        maxHeight: "92vh",
+        overflowY: "auto",
+      }}
+    >
+      <div className="text-base font-bold mb-2">ThemeLab Colors</div>
+      {sharedAuth.state === "ok" ? (
+        <>
+          {ORDER.map((o) => (
+            <div key={o.key} className="mb-2">
+              <div className="text-sm font-semibold mb-1">
+                {o.label}
+              </div>
+              <div className="space-y-1 pl-1">
+                {(grouped.get(o.key) || []).map((t) => (
+                  <div
+                    key={t.token_key}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <div className="text-xs">{t.label}</div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={values[t.token_key] || "#000000"}
+                        onChange={(e) =>
+                          updateToken(t.token_key, e.target.value)
+                        }
+                        style={{
+                          width: 32,
+                          height: 24,
+                          borderRadius: 6,
+                          border: "1px solid rgba(0,0,0,0.2)",
+                        }}
+                      />
+                      <code className="text-[11px] opacity-70">
+                        {values[t.token_key] || ""}
+                      </code>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          <div className="mt-3 flex items-center justify-between">
+            <div className="text-xs text-gray-600">{msg}</div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={doReset}
+                disabled={busy}
+                className="px-3 py-1 rounded-[12px] border border-black/20 bg-white text-xs"
+              >
+                Reset
+              </button>
+              <button
+                onClick={doSave}
+                disabled={busy}
+                className="px-3 py-1 rounded-[12px] bg-black text-white text-xs"
+              >
+                {busy ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </>
+      ) : sharedAuth.state === "checking" ? (
+        <div className="text-sm text-gray-600">Checking access…</div>
+      ) : sharedAuth.state === "need_password" ? (
+        <div className="text-xs text-gray-600">
+          Enter password (Wording panel).
+        </div>
+      ) : sharedAuth.state === "disabled" ? (
+        <div className="text-xs text-gray-600">ThemeLab disabled.</div>
+      ) : (
+        <div className="text-xs text-red-600">Auth error.</div>
+      )}
+    </div>
+  );
+}
+
+function ThemeLabWordingBox({
+  apiBase,
+  botId,
+  frameRef,
+  sharedAuth,
+  onFormfillChange,
+  onLiveMessages,
+}) {
+  const pos = useFloatingPos(frameRef, "right", 460);
+  const [loading, setLoading] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [password, setPassword] = useState("");
+  const [authError, setAuthError] = useState("");
+
+  const [options, setOptions] = useState({
+    show_browse_demos: false,
+    show_browse_docs: false,
+    show_price_estimate: false,
+    show_schedule_meeting: false,
+    show_intro_video: false,
+    show_formfill: false,
+    intro_video_url: "",
+  });
+  const [messages, setMessages] = useState({
+    welcome_message: "",
+    pricing_intro: "",
+    pricing_outro: "",
+    pricing_custom_notice: "",
+    formfill_intro: "",
+  });
+  const [standardFields, setStandardFields] = useState([]);
+  const [editingKey, setEditingKey] = useState("");
+  const [draft, setDraft] = useState("");
+
+  const messageLabels = {
+    welcome_message: "Welcome",
+    formfill_intro: "Form Fill Intro",
+    pricing_intro: "Pricing Intro",
+    pricing_outro: "Pricing Outro",
+    pricing_custom_notice: "Custom Pricing",
+  };
+  const stashRef = useRef(null);
+
+  function markDirty() {
+    setDirty(true);
+  }
+
+  async function load() {
+    setLoading(true);
+    try {
+      const r = await fetch(
+        `${apiBase}/themelab/wording-options?bot_id=${encodeURIComponent(botId)}`,
+        { credentials: "include" }
+      );
+      const j = await r.json();
+      if (!j?.ok) throw new Error();
+      setOptions(j.options || {});
+      setMessages(j.messages || {});
+      const raw = (j.standard_fields || []).map((f) => ({
+        ...f,
+        is_collected: !!f.is_collected,
+        is_required: !!f.is_required,
+      }));
+      setStandardFields(raw);
+      stashRef.current = {
+        options: j.options || {},
+        messages: j.messages || {},
+        standard_fields: raw,
+      };
+      const firstKey = "welcome_message";
+      setEditingKey(firstKey);
+      setDraft(j.messages?.[firstKey] || "");
+      setDirty(false);
+      onFormfillChange &&
+        onFormfillChange({
+          show_formfill: j.options?.show_formfill,
+          standard_fields: raw.map((f) => ({
+            field_key: f.field_key,
+            is_collected: !!f.is_collected,
+            is_required: !!f.is_required,
+          })),
+        });
+      onLiveMessages && onLiveMessages(j.messages || {});
+    } catch {
+      setMsg("Load failed.");
+      setTimeout(() => setMsg(""), 2200);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (sharedAuth.state === "ok") load();
+  }, [sharedAuth.state]);
+
+  async function doLogin(e) {
+    e?.preventDefault();
+    try {
+      setAuthError("");
+      const r = await fetch(`${apiBase}/themelab/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ bot_id: botId, password }),
+      });
+      const j = await r.json();
+      if (r.status === 200 && j?.ok) {
+        sharedAuth.set({ state: "ok" });
+        setPassword("");
+        await load();
+      } else if (r.status === 403) {
+        sharedAuth.set({ state: "disabled" });
+      } else {
+        setAuthError("Invalid password.");
+        sharedAuth.set({ state: "need_password" });
+      }
+    } catch {
+      setAuthError("Login failed.");
+      sharedAuth.set({ state: "error" });
+    }
+  }
+
+  function toggleOption(k) {
+    setOptions((p) => {
+      const n = { ...p, [k]: !p[k] };
+      markDirty();
+      if (k === "show_formfill") {
+        onFormfillChange &&
+          onFormfillChange({
+            show_formfill: n.show_formfill,
+            standard_fields: standardFields.map((f) => ({
+              field_key: f.field_key,
+              is_collected: !!f.is_collected,
+              is_required: !!f.is_required,
+            })),
+          });
+      }
+      return n;
+    });
+  }
+  function toggleCollected(fk) {
+    setStandardFields((p) => {
+      const n = p.map((f) =>
+        f.field_key === fk
+          ? { ...f, is_collected: !f.is_collected }
+          : f
+      );
+      markDirty();
+      return n;
+    });
+  }
+  function toggleRequired(fk) {
+    setStandardFields((p) => {
+      const n = p.map((f) =>
+        f.field_key === fk
+          ? { ...f, is_required: !f.is_required }
+          : f
+      );
+      markDirty();
+      return n;
+    });
+  }
+  function beginEdit(k) {
+    setEditingKey(k);
+    setDraft(messages[k] || "");
+  }
+  function applyDraft() {
+    if (!editingKey) return;
+    setMessages((p) => {
+      const u = { ...p, [editingKey]: draft };
+      onLiveMessages && onLiveMessages(u);
+      return u;
+    });
+    markDirty();
+  }
+  function cancelDraft() {
+    if (editingKey) setDraft(messages[editingKey] || "");
+  }
+
+  async function doSave() {
+    try {
+      setSaving(true);
+      const payload = {
+        bot_id: botId,
+        options,
+        messages,
+        standard_fields: standardFields.map((f) => ({
+          field_key: f.field_key,
+          is_collected: !!f.is_collected,
+          is_required: !!f.is_required,
+        })),
+      };
+      const r = await fetch(`${apiBase}/themelab/wording-options/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      const j = await r.json();
+      if (!j?.ok) throw new Error();
+      setMsg("Saved.");
+      setDirty(false);
+      stashRef.current = payload;
+      setTimeout(() => setMsg(""), 1500);
+    } catch {
+      setMsg("Save failed.");
+      setTimeout(() => setMsg(""), 2200);
+    } finally {
+      setSaving(false);
+    }
+  }
+  function doReset() {
+    if (!stashRef.current) {
+      load();
+      return;
+    }
+    const snap = stashRef.current;
+    setOptions(snap.options);
+    setMessages(snap.messages);
+    setStandardFields(snap.standard_fields);
+    const firstKey = "welcome_message";
+    setEditingKey(firstKey);
+    setDraft(snap.messages[firstKey] || "");
+    setDirty(false);
+    onFormfillChange &&
+      onFormfillChange({
+        show_formfill: snap.options.show_formfill,
+        standard_fields: snap.standard_fields.map((f) => ({
+          field_key: f.field_key,
+          is_collected: !!f.is_collected,
+          is_required: !!f.is_required,
+        })),
+      });
+    setMsg("Restored.");
+    setTimeout(() => setMsg(""), 1400);
+    onLiveMessages && onLiveMessages(snap.messages || {});
+  }
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        left: pos.left,
+        top: pos.top,
+        width: pos.width,
+        maxHeight: "92vh",
+        overflowY: "auto",
+        background: "#fff",
+        border: "1px solid rgba(0,0,0,0.2)",
+        borderRadius: 12,
+        padding: 14,
+        zIndex: 60,
+        boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+      }}
+    >
+      <div className="text-base font-bold mb-2">
+        ThemeLab Wording &amp; Options
+      </div>
+      {sharedAuth.state === "checking" && (
+        <div className="text-sm text-gray-600">
+          Checking access…
+        </div>
+      )}
+      {sharedAuth.state === "disabled" && (
+        <div className="text-sm text-gray-600">
+          ThemeLab is disabled for this bot.
+        </div>
+      )}
+      {sharedAuth.state === "need_password" && (
+        <form
+          onSubmit={doLogin}
+          className="flex items-center gap-2 mb-3"
+        >
+          <input
+            type="password"
+            placeholder="ThemeLab password"
+            className="flex-1 rounded-[12px] border border-black/30 px-3 py-2 text-sm"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <button
+            type="submit"
+            className="px-3 py-2 rounded-[12px] bg-black text-white text-sm"
+          >
+            Unlock
+          </button>
+          {authError && (
+            <div className="text-xs text-red-600 ml-2">
+              {authError}
+            </div>
+          )}
+        </form>
+      )}
+      {sharedAuth.state === "error" && (
+        <div className="text-sm text-red-600">
+          Unable to verify access.
+        </div>
+      )}
+      {sharedAuth.state === "ok" && (
+        <>
+          {loading && (
+            <div className="text-xs text-gray-500 mb-2">Loading…</div>
+          )}
+          <div className="grid grid-cols-2 gap-6 mb-3">
+            <div>
+              <div className="font-semibold text-sm mb-1">
+                Things to Show
+              </div>
+              <div className="space-y-1">
+                {[
+                  ["show_browse_demos", "Browse Demos Tab"],
+                  ["show_browse_docs", "Browse Docs Tab"],
+                  ["show_price_estimate", "Price Estimate Tab"],
+                  ["show_schedule_meeting", "Schedule Meeting Tab"],
+                  ["show_intro_video", "Introduction Video"],
+                  ["show_formfill", "Show Form Fill"],
+                ].map(([k, label]) => (
+                  <label
+                    key={k}
+                    className="flex items-center justify-between text-xs gap-2 cursor-pointer"
+                  >
+                    <span>{label}</span>
+                    <input
+                      type="checkbox"
+                      checked={!!options[k]}
+                      onChange={() => toggleOption(k)}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="font-semibold text-sm mb-1">
+                Form Fill Fields
+              </div>
+              <div className="space-y-1">
+                {standardFields.map((f) => (
+                  <div
+                    key={f.field_key}
+                    className="flex items-center justify-between text-xs gap-2"
+                  >
+                    <span className="flex-1 truncate">
+                      {f.label || f.field_key}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        title="Collect"
+                        checked={!!f.is_collected}
+                        onChange={() => toggleCollected(f.field_key)}
+                      />
+                      <span className="text-[10px] uppercase tracking-wide opacity-70">
+                        reqd
+                      </span>
+                      <input
+                        type="checkbox"
+                        title="Required"
+                        checked={!!f.is_required}
+                        onChange={() => toggleRequired(f.field_key)}
+                      />
+                    </div>
+                  </div>
+                ))}
+                {standardFields.length === 0 && (
+                  <div className="text-[10px] italic text-gray-500">
+                    No fields defined.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-2 font-semibold text-sm">Messages</div>
+          <div className="space-y-1 mb-3">
+            {Object.entries(messageLabels).map(([k, label]) => {
+              const active = editingKey === k;
+              return (
+                <div
+                  key={k}
+                  className={[
+                    "flex items-center justify-between text-xs px-2 py-1 rounded cursor-pointer group",
+                    active
+                      ? "bg-black text-white"
+                      : "bg-gray-100 hover:bg-gray-200",
+                  ].join(" ")}
+                  onClick={() => beginEdit(k)}
+                >
+                  <span className="flex-1">{label}</span>
+                  <span className="opacity-70 mr-2 truncate max-w-[140px]">
+                    {messages[k]
+                      ? messages[k].slice(0, 24) +
+                        (messages[k].length > 24 ? "…" : "")
+                      : "—"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      beginEdit(k);
+                    }}
+                    className={[
+                      "p-1 rounded transition",
+                      active
+                        ? "bg-white text-black"
+                        : "bg-gray-200 text-gray-700 group-hover:bg-gray-300",
+                    ].join(" ")}
+                    title="Edit"
+                  >
+                    <svg
+                      className="w-3.5 h-3.5"
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M3 14.5V17h2.5l9.1-9.1-2.5-2.5L3 14.5z" />
+                      <path d="M12.3 5.4l2.6 2.6 1.3-1.3a1.8 1.8 0 0 0 0-2.6l-.7-.7a1.8 1.8 0 0 0-2.6 0l-1.3 1.3z" />
+                    </svg>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {editingKey && (
+            <div className="mb-3">
+              <div className="flex items-center justify-between mb-1">
+                <div className="text-xs font-semibold">
+                  Editing: {messageLabels[editingKey]}
+                </div>
+                {dirty && (
+                  <div className="text-[10px] text-orange-600">
+                    Unsaved changes
+                  </div>
+                )}
+              </div>
+              <textarea
+                rows={5}
+                className="w-full border border-black/30 rounded p-2 text-xs"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="Edit message text..."
+              />
+              <div className="flex items-center justify-end gap-2 mt-1">
+                <button
+                  onClick={cancelDraft}
+                  className="px-2 py-1 rounded bg-gray-200 text-xs"
+                >
+                  Revert
+                </button>
+                <button
+                  onClick={applyDraft}
+                  className="px-2 py-1 rounded bg-black text-white text-xs"
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="mb-3">
+            <label className="text-xs font-semibold block mb-1">
+              Intro Video URL
+            </label>
+            <input
+              type="text"
+              value={options.intro_video_url || ""}
+              onChange={(e) => {
+                setOptions((p) => ({
+                  ...p,
+                  intro_video_url: e.target.value,
+                }));
+                markDirty();
+              }}
+              className="w-full text-xs border border-black/30 rounded px-2 py-1"
+              placeholder="https://..."
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="text-xs text-gray-600">
+              {msg || (dirty ? "Unsaved changes" : saving ? "Saving…" : "")}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={doReset}
+                disabled={saving}
+                className="px-3 py-1 rounded-[12px] border border-black/20 bg-white text-xs"
+              >
+                Reset
+              </button>
+              <button
+                onClick={doSave}
+                disabled={saving || !dirty}
+                className={[
+                  "px-3 py-1 rounded-[12px] text-xs",
+                  dirty
+                    ? "bg-black text-white"
+                    : "bg-gray-300 text-gray-600 cursor-not-allowed",
+                ].join(" ")}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ThemeLabPanels({
+  apiBase,
+  botId,
+  frameRef,
+  onVars,
+  onFormfillChange,
+  onLiveMessages,
+}) {
+  const [authState, setAuthState] = useState("checking");
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      try {
+        setAuthState("checking");
+        const r = await fetch(
+          `${apiBase}/themelab/status?bot_id=${encodeURIComponent(botId)}`,
+          { credentials: "include" }
+        );
+        if (cancel) return;
+        if (r.status === 200) setAuthState("ok");
+        else if (r.status === 401) setAuthState("need_password");
+        else if (r.status === 403) setAuthState("disabled");
+        else setAuthState("error");
+      } catch {
+        if (!cancel) setAuthState("error");
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [apiBase, botId]);
+
+  const sharedAuth = {
+    state: authState,
+    set: (s) => setAuthState(s.state),
+  };
+
+  return (
+    <>
+      <ThemeLabColorBox
+        apiBase={apiBase}
+        botId={botId}
+        frameRef={frameRef}
+        onVars={onVars}
+        sharedAuth={sharedAuth}
+      />
+      <ThemeLabWordingBox
+        apiBase={apiBase}
+        botId={botId}
+        frameRef={frameRef}
+        sharedAuth={sharedAuth}
+        onFormfillChange={onFormfillChange}
+        onLiveMessages={onLiveMessages}
+      />
+    </>
+  );
+}
+
+/* ============================================================
+ * MAIN COMPONENT
  * ============================================================ */
 export default function Welcome() {
   const apiBase =
     import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-  // Query params
   const {
     alias,
     botIdFromUrl,
@@ -304,7 +1143,7 @@ export default function Welcome() {
   const [lastQuestion, setLastQuestion] = useState("");
   const [responseText, setResponseText] = useState("");
   const [loading, setLoading] = useState(false);
-  const [items, setItems] = useState([]); // recommendations under ask
+  const [items, setItems] = useState([]);
   const [browseItems, setBrowseItems] = useState([]);
   const [browseDocs, setBrowseDocs] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -316,7 +1155,7 @@ export default function Welcome() {
   const [promptOverride, setPromptOverride] = useState("");
   const [lastError, setLastError] = useState(null);
 
-  /* Theme & branding */
+  /* Theme */
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
   const derivedTheme = useMemo(
     () => ({
@@ -341,7 +1180,6 @@ export default function Welcome() {
   );
   const [brandReady, setBrandReady] = useState(initialBrandReady);
 
-  /* Tabs & gating */
   const [tabsEnabled, setTabsEnabled] = useState({
     demos: false,
     docs: false,
@@ -349,7 +1187,7 @@ export default function Welcome() {
     price: false,
   });
 
-  /* Form fill (personalization) */
+  /* Form Fill */
   const [showFormfill, setShowFormfill] = useState(true);
   const [formFields, setFormFields] = useState([]);
   const [visitorDefaults, setVisitorDefaults] = useState({});
@@ -382,11 +1220,10 @@ export default function Welcome() {
 
   const contentRef = useRef(null);
   const inputRef = useRef(null);
-
   const embedDomain =
     typeof window !== "undefined" ? window.location.hostname : "";
 
-  /* Utility: add session + visitor */
+  /* Session helpers */
   const withIdsHeaders = () => ({
     ...(sessionId ? { "X-Session-Id": sessionId } : {}),
     ...(visitorId ? { "X-Visitor-Id": visitorId } : {}),
@@ -445,9 +1282,7 @@ export default function Welcome() {
     });
   }
 
-  /* =========================
-   * BOT / ALIAS RESOLUTION
-   * ========================= */
+  /* Bot / alias resolution */
   useEffect(() => {
     if (botId || !alias) return;
     let cancel = false;
@@ -492,7 +1327,7 @@ export default function Welcome() {
         const j = await r.json();
         if (cancel) return;
         if (j?.ok) {
-            setVisitorId(j.visitor_id || "");
+          setVisitorId(j.visitor_id || "");
           setSessionId(j.session_id || "");
           applyBotSettings(j.bot);
           setBotId(j.bot.id);
@@ -557,9 +1392,7 @@ export default function Welcome() {
     return () => (cancel = true);
   }, [botId, apiBase]);
 
-  /* =========================
-   * FORM FILL CONFIG
-   * ========================= */
+  /* Form fill config */
   function patchCanonicalFields(rawFields) {
     const map = new Map();
     (rawFields || []).forEach((f) => {
@@ -654,7 +1487,6 @@ export default function Welcome() {
       refetchVisitorValues();
   }, [mode, visitorId, botId]);
 
-  /* Derived form defaults (URL overrides) */
   const activeFormFields = useMemo(
     () =>
       (formFields || []).map((f) =>
@@ -687,9 +1519,7 @@ export default function Welcome() {
     return o;
   }, [activeFormFields, visitorDefaults, urlParams]);
 
-  /* =========================
-   * ASK FLOW
-   * ========================= */
+  /* Ask flow */
   async function doSend(outgoing) {
     if (!outgoing || !botId) return;
     setMode("ask");
@@ -741,16 +1571,13 @@ export default function Welcome() {
           (status === 500
             ? "Internal server error"
             : `Request failed (${status})`);
-        setResponseText(
-          msg || "Sorry—something went wrong."
-        );
+        setResponseText(msg || "Sorry—something went wrong.");
         setLoading(false);
         setLastError({ status, data, payloadSent: payload });
         return;
       }
       const text = data.response_text || "";
 
-      // NEW unified recommendation source:
       const demoBtns = Array.isArray(data.demo_buttons)
         ? data.demo_buttons
         : [];
@@ -805,7 +1632,6 @@ export default function Welcome() {
       mapped = mapped.filter(Boolean);
       mapped = pruneDemoButtons(outgoing, mapped);
 
-      // Perspective echo
       if (typeof data.perspective === "string" && data.perspective) {
         if (
           visitorDefaults.perspective !== null &&
@@ -820,7 +1646,6 @@ export default function Welcome() {
       setItems(mapped);
       setResponseText(text);
       setLoading(false);
-
       requestAnimationFrame(() =>
         contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
       );
@@ -1056,7 +1881,6 @@ export default function Welcome() {
     _openPrice();
   }
 
-  /* Calendly message listener */
   useEffect(() => {
     if (mode !== "meeting" || !botId || !sessionId || !visitorId)
       return;
@@ -1104,7 +1928,6 @@ export default function Welcome() {
       window.removeEventListener("message", onCalendlyMessage);
   }, [mode, botId, sessionId, visitorId, apiBase]);
 
-  /* Autosize input (only for inlined bar if needed—kept for completeness) */
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
@@ -1112,9 +1935,7 @@ export default function Welcome() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  /* =========================
-   * PRICING LOGIC
-   * ========================= */
+  /* Pricing logic */
   useEffect(() => {
     if (mode !== "price" || !botId) return;
     let cancel = false;
@@ -1197,7 +2018,7 @@ export default function Welcome() {
               "",
           },
           session_id: sessionId || undefined,
-          visitor_id: visitorId || undefined,
+            visitor_id: visitorId || undefined,
         };
         const r = await fetch(`${apiBase}/pricing/estimate`, {
           method: "POST",
@@ -1319,9 +2140,7 @@ export default function Welcome() {
     return lines;
   }, [priceEstimate, priceQuestions, priceAnswers]);
 
-  /* =========================
-   * SESSION END BEACON
-   * ========================= */
+  /* Session end beacon */
   useEffect(() => {
     if (!sessionId) return;
     function sendEnd(reason = "unload") {
@@ -1354,9 +2173,6 @@ export default function Welcome() {
     };
   }, [sessionId, apiBase]);
 
-  /* =========================
-   * TAB MODEL
-   * ========================= */
   const tabs = useMemo(() => {
     const out = [];
     out.push({
@@ -1391,30 +2207,6 @@ export default function Welcome() {
     return out;
   }, [tabsEnabled]);
 
-  /* Live wording updates (if ThemeLab editing) – stub for now */
-  function handleLiveMessages(updated) {
-    if (!updated || typeof updated !== "object") return;
-    if ("welcome_message" in updated)
-      setResponseText(updated.welcome_message || "");
-    if ("formfill_intro" in updated)
-      setFormFillIntro(updated.formfill_intro || "");
-    setPricingCopy((prev) => ({
-      intro:
-        "pricing_intro" in updated
-          ? updated.pricing_intro || ""
-          : prev.intro,
-      outro:
-        "pricing_outro" in updated
-          ? updated.pricing_outro || ""
-          : prev.outro,
-      custom_notice:
-        "pricing_custom_notice" in updated
-          ? updated.pricing_custom_notice || ""
-          : prev.custom_notice,
-    }));
-  }
-
-  /* Derived lists */
   const logoSrc =
     brandAssets.logo_url ||
     brandAssets.logo_light_url ||
@@ -1427,12 +2219,42 @@ export default function Welcome() {
       ? items
       : []
     : listSource;
-
   const showAskBottom = mode !== "formfill";
 
-  /* THEMELAB (Color/Wording) PANELS – lightweight inline placeholders
-     (Detailed panels were previously in another step; for MVP we can skip, or
-      you can reintroduce them similarly.) */
+  function handleThemeLabFormfillChange({ show_formfill, standard_fields }) {
+    setShowFormfill(!!show_formfill);
+    if (Array.isArray(standard_fields)) {
+      setFormFields((prev) => {
+        const byKey = {};
+        prev.forEach((f) => f?.field_key && (byKey[f.field_key] = { ...f }));
+        standard_fields.forEach((sf) => {
+          if (!sf.field_key) return;
+          const canonical = sf.field_key;
+          if (!byKey[canonical]) {
+            byKey[canonical] = {
+              field_key: canonical,
+              label: canonical
+                .replace(/_/g, " ")
+                .replace(/\b\w/g, (c) => c.toUpperCase()),
+              field_type:
+                canonical === "email"
+                  ? "email"
+                  : canonical === "perspective"
+                  ? "single_select"
+                  : "text",
+              options:
+                canonical === "perspective"
+                  ? PERSPECTIVE_OPTIONS
+                  : undefined,
+            };
+          }
+          byKey[canonical].is_collected = !!sf.is_collected;
+          byKey[canonical].is_required = !!sf.is_required;
+        });
+        return Object.values(byKey);
+      });
+    }
+  }
 
   if (fatal) {
     return (
@@ -1471,7 +2293,6 @@ export default function Welcome() {
     );
   }
 
-  /* Form fill card transformation (placeholder pass) */
   const formFieldsForCard = activeFormFields.map((f) => {
     const ph =
       typeof f.tooltip === "string" && f.tooltip.trim()
@@ -1521,7 +2342,6 @@ export default function Welcome() {
           />
         </div>
 
-        {/* Main Scrollable Content */}
         <div
           ref={contentRef}
           className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto"
@@ -1548,8 +2368,9 @@ export default function Welcome() {
                   if (typeof vals.perspective === "string")
                     vals.perspective = vals.perspective.toLowerCase();
                   updateLocalVisitorValues(vals);
+                  let postOk = false;
                   try {
-                    await fetch(`${apiBase}/visitor-formfill`, {
+                    const resp = await fetch(`${apiBase}/visitor-formfill`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
@@ -1558,6 +2379,7 @@ export default function Welcome() {
                         bot_id: botId || undefined,
                       }),
                     });
+                    postOk = resp.ok;
                   } catch {}
                   try {
                     sessionStorage.setItem(FORM_KEY, "1");
@@ -1565,14 +2387,14 @@ export default function Welcome() {
                   setFormCompleted(true);
                   const p = pending;
                   setPending(null);
-                  if (p?.type === "ask" && p.payload?.text) {
+                  if (p?.type === "ask" && p.payload?.text)
                     await doSend(p.payload.text);
-                  } else if (p?.type === "demos") await _openBrowse();
+                  else if (p?.type === "demos") await _openBrowse();
                   else if (p?.type === "docs") await _openBrowseDocs();
                   else if (p?.type === "meeting") await _openMeeting();
                   else if (p?.type === "price") _openPrice();
                   else setMode("ask");
-                  if (!vals.perspective) refetchVisitorValues();
+                  if (!postOk) refetchVisitorValues();
                 }}
               />
             </div>
@@ -1617,9 +2439,7 @@ export default function Welcome() {
                   </div>
                 )}
                 {priceErr && (
-                  <div className="text-sm text-red-600">
-                    {priceErr}
-                  </div>
+                  <div className="text-sm text-red-600">{priceErr}</div>
                 )}
               </div>
             </div>
@@ -1799,12 +2619,7 @@ export default function Welcome() {
                     {responseText}
                   </div>
                   {showIntroVideo && introVideoUrl && (
-                    <div
-                      style={{
-                        position: "relative",
-                        paddingTop: "56.25%",
-                      }}
-                    >
+                    <div style={{ position: "relative", paddingTop: "56.25%" }}>
                       <iframe
                         src={introVideoUrl}
                         title="Intro Video"
@@ -1884,11 +2699,44 @@ export default function Welcome() {
         )}
       </div>
 
-      {/* (Optional) ThemeLab Panels could be reintroduced here if needed for MVP later */}
-      {themeLabOn && false && botId && (
-        <div className="hidden">
-          {/* Placeholder: intentionally excluded for MVP minimal patch */}
-        </div>
+      {themeLabOn && botId && (
+        <ThemeLabPanels
+          apiBase={apiBase}
+          botId={botId}
+          frameRef={contentRef}
+          onVars={(varsUpdate) => {
+            if (typeof varsUpdate === "function") {
+              setPickerVars((prev) => ({
+                ...prev,
+                ...(varsUpdate(prev) || {}),
+              }));
+            } else {
+              setPickerVars((prev) => ({ ...prev, ...(varsUpdate || {}) }));
+            }
+          }}
+          onFormfillChange={handleThemeLabFormfillChange}
+          onLiveMessages={(updated) => {
+            if (!updated || typeof updated !== "object") return;
+            if ("welcome_message" in updated)
+              setResponseText(updated.welcome_message || "");
+            if ("formfill_intro" in updated)
+              setFormFillIntro(updated.formfill_intro || "");
+            setPricingCopy((prev) => ({
+              intro:
+                "pricing_intro" in updated
+                  ? updated.pricing_intro || ""
+                  : prev.intro,
+              outro:
+                "pricing_outro" in updated
+                  ? updated.pricing_outro || ""
+                  : prev.outro,
+              custom_notice:
+                "pricing_custom_notice" in updated
+                  ? updated.pricing_custom_notice || ""
+                  : prev.custom_notice,
+            }));
+          }}
+        />
       )}
     </div>
   );
