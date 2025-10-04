@@ -2,31 +2,8 @@ import React, { useEffect, useRef } from "react";
 import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 
 /**
- * AskInputBar — FULL REPLACEMENT
- *
- * Matches the Ask Bar implementation used directly inside AskAssistant.jsx.
- * Structure, class names, spacing, sizing, and behavior are aligned to the
- * "gold standard" snippet:
- *
- *  <div class="px-4 py-3 border-t ...">
- *    <div class="relative w-full">
- *      <textarea ... />
- *      <button ...><ArrowUpCircleIcon ... /></button>
- *    </div>
- *  </div>
- *
- * Props:
- *  - value (string)
- *  - onChange(nextValue)
- *  - onSend()  (triggered on Enter (no Shift) or button click)
- *  - inputRef (optional external ref for the textarea)
- *  - placeholder (optional)
- *  - disabled (optional)
- *  - show (optional boolean) if false, renders null (convenience)
- *
- * Auto-resize logic matches original: adjusts height on each input.
+ * AskInputBar — MVP version with optional "Powered by" logo anchored.
  */
-
 export default function AskInputBar({
   value,
   onChange,
@@ -35,11 +12,13 @@ export default function AskInputBar({
   placeholder = "Ask your question here",
   disabled = false,
   show = true,
+  poweredBy = "https://demohal.com/",
+  poweredByImg = "https://rvwcyysphhaawvzzyjxq.supabase.co/storage/v1/object/public/demohal-logos/f3ab3e92-9855-4c9b-8038-0a9e483218b7/Powered%20by%20logo.png",
+  showLogo = true,
 }) {
   const localRef = useRef(null);
   const ref = inputRef || localRef;
 
-  // Auto-resize (same behavior as gold standard)
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -47,15 +26,12 @@ export default function AskInputBar({
     el.style.height = `${el.scrollHeight}px`;
   }, [value, ref]);
 
-  function handleKeyDown(e) {
+  function handleKey(e) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (!disabled && value.trim()) {
-        onSend && onSend();
-      }
+      if (!disabled && value.trim()) onSend && onSend();
     }
   }
-
   function handleInput(e) {
     const el = e.currentTarget;
     el.style.height = "auto";
@@ -66,38 +42,25 @@ export default function AskInputBar({
 
   return (
     <div
-      className="px-4 py-3 border-t border-[var(--border-default)]"
+      className="relative px-4 pt-4 border-t border-[var(--border-default)]"
+      style={{
+        paddingBottom: showLogo ? "calc(44px + 5px)" : "0.75rem",
+      }}
       data-patch="ask-bottom-bar"
     >
-      <div className="relative w-full">
+      <div className="relative">
         <textarea
           ref={ref}
-            rows={1}
-          className="
-            w-full
-            rounded-[0.75rem]
-            px-4
-            py-2
-            pr-14
-            text-base
-            placeholder-gray-400
-            resize-y
-            min-h-[3rem]
-            max-h-[160px]
-            bg-[var(--card-bg)]
-            border
-            border-[var(--border-default)]
-            focus:border-[var(--border-default)]
-            focus:ring-1
-            focus:ring-[var(--border-default)]
-            outline-none
-          "
+          rows={1}
+          className="w-full rounded-[0.75rem] px-4 py-3 pr-14 text-base placeholder-gray-400 resize-y min-h-[3.25rem] max-h-[200px] bg-[var(--card-bg)] border border-[var(--border-default)] focus:border-[var(--border-default)] focus:ring-1 focus:ring-[var(--border-default)] outline-none mb-[5px]"
           placeholder={placeholder}
           value={value}
           disabled={disabled}
-          onChange={(e) => !disabled && onChange && onChange(e.target.value)}
+          onChange={(e) =>
+            !disabled && onChange && onChange(e.target.value)
+          }
           onInput={handleInput}
-          onKeyDown={handleKeyDown}
+          onKeyDown={handleKey}
           spellCheck="true"
         />
         <button
@@ -109,12 +72,30 @@ export default function AskInputBar({
           disabled={disabled || !value.trim()}
           style={{
             opacity: disabled ? 0.6 : 1,
-            cursor: disabled || !value.trim() ? "not-allowed" : "pointer",
+            cursor:
+              disabled || !value.trim() ? "not-allowed" : "pointer",
           }}
         >
-          <ArrowUpCircleIcon className="w-8 h-8 text-[var(--send-color)] hover:brightness-110" />
+          <ArrowUpCircleIcon className="w-9 h-9 text-[var(--send-color)] hover:brightness-110" />
         </button>
       </div>
+      {showLogo && (
+        <a
+          href={poweredBy}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Powered by DemoHAL"
+          className="absolute left-4 bottom-2 inline-flex"
+        >
+          <img
+            src={poweredByImg}
+            alt="Powered by DemoHAL"
+            className="h-11 w-auto object-contain select-none"
+            loading="lazy"
+            draggable="false"
+          />
+        </a>
+      )}
     </div>
   );
 }
