@@ -1581,19 +1581,32 @@ export default function Welcome() {
       const demoBtns = Array.isArray(data.demo_buttons)
         ? data.demo_buttons
         : [];
-      const docBtns = Array.isArray(data.doc_buttons)
+      // EXCLUDE-DOCS PATCH: Ignore docs for now
+      const _ignoredDocBtns = Array.isArray(data.doc_buttons)
         ? data.doc_buttons
         : [];
+
       const legacyItems = Array.isArray(data.items) ? data.items : [];
       const legacyButtons = Array.isArray(data.buttons)
         ? data.buttons
         : [];
-      const combined =
+
+      // EXCLUDE-DOCS PATCH: Filter out doc-type actions from legacy sets
+      function filterOutDocs(list) {
+        return list.filter((it) => {
+          const act = (it.action || it.button_action || "").toLowerCase();
+          return !act.includes("doc");
+        });
+      }
+
+      const combinedRaw =
         legacyItems.length > 0
-          ? legacyItems
+          ? filterOutDocs(legacyItems)
           : legacyButtons.length > 0
-          ? legacyButtons
-          : [...demoBtns, ...docBtns];
+          ? filterOutDocs(legacyButtons)
+          : demoBtns; // only demos (no doc buttons appended)
+
+      const combined = combinedRaw;
 
       let mapped = combined.map((it, idx) => ({
         id:
