@@ -1,3 +1,64 @@
+/* Tailwind base layers */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* -----------------------------------------------------------
+   Global theme variable defaults (ensures they always exist)
+   ----------------------------------------------------------- */
+:root {
+  --banner-bg: #000000;
+  --banner-fg: #ffffff;
+  --page-bg: #ffffff;
+  --card-bg: #ffffff;
+  --shadow-elevation: 0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.10);
+  --message-fg: #000000;
+  --helper-fg: #4b5563;
+  --mirror-fg: #4b5563;
+  --tab-bg: #303030;
+  --tab-fg: #ffffff;
+  --tab-active-fg: #ffffff;
+  --demo-button-bg: #3a4554;
+  --demo-button-fg: #ffffff;
+  --doc-button-bg: #000000;
+  --doc-button-fg: #ffffff;
+  --price-button-bg: #1a1a1a;
+  --price-button-fg: #ffffff;
+  --send-color: #000000;
+  --border-default: #9ca3af;
+}
+
+/* -----------------------------------------------------------
+   Hard global text fallback. If a variable is ever missing,
+   all normal text stays dark instead of inheriting a pale color.
+   ----------------------------------------------------------- */
+html, body {
+  color: var(--message-fg, #000000);
+  background: var(--page-bg, #ffffff);
+}
+
+/* Generic elements inherit the main text color */
+div, span, p, li, a, button, input, textarea, h1, h2, h3, h4, h5, h6 {
+  color: inherit;
+}
+
+/* Helper / subtle text utility (matches what code expects) */
+.text-helper,
+.helper,
+.small-note {
+  color: var(--helper-fg, #4b5563);
+}
+
+/* Ensure buttons with variable colors still have readable text */
+button {
+  line-height: 1.2;
+}
+
+/* Optional: make sure links are readable (can refine later) */
+a {
+  color: var(--message-fg, #000);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
