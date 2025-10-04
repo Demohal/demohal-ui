@@ -68,7 +68,7 @@ const PERSPECTIVE_OPTIONS = [
 const FIELD_SYNONYMS = { fname: "first_name", lname: "last_name" };
 const CANON_LABELS = { first_name: "First Name", last_name: "Last Name" };
 
-const DEMO_PRUNE_MAX = 6;
+const DEMO_PRUNE_MAX = 4;
 const DEMO_STRONG_THRESHOLD = 2;
 const DEMO_STRONG_RATIO = 2.2;
 const DEMO_SECONDARY_KEEP = 2;
