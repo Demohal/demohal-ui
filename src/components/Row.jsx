@@ -1,23 +1,33 @@
-// Full-width choice row — presentational
-// Props: { item: { id, title, description }, onPick: (item)=>void, kind?: 'demo'|'doc' }
-
+// Row.jsx — generic row for demo/doc/price buttons
 import React from "react";
 
-const UI = {
-  BTN_DEMO:
-    "w-full text-center rounded-[0.75rem] px-4 py-3 transition text-[var(--demo-button-fg)] bg-[var(--demo-button-bg)] hover:brightness-110 active:brightness-95",
-  BTN_DOC:
-    "w-full text-center rounded-[0.75rem] px-4 py-3 transition text-[var(--doc-button-fg)] bg-[var(--doc-button-bg)] hover:brightness-110 active:brightness-95",
+const KIND_CLASS = {
+  demo: "text-[var(--demo-button-fg)] bg-[var(--demo-button-bg)]",
+  doc: "text-[var(--doc-button-fg)] bg-[var(--doc-button-bg)]",
+  price: "text-[var(--price-button-fg)] bg-[var(--price-button-bg)]",
 };
 
 export default function Row({ item, onPick, kind = "demo" }) {
-  const btnClass = kind === "doc" ? UI.BTN_DOC : UI.BTN_DEMO;
+  const cls =
+    KIND_CLASS[kind] ||
+    "text-[var(--demo-button-fg)] bg-[var(--demo-button-bg)]";
   return (
-    <button onClick={() => onPick(item)} className={btnClass} title={item.description || ""}>
-      <div className="font-extrabold text-xs sm:text-sm">{item.title}</div>
-      {item.description ? (
-        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">{item.description}</div>
-      ) : null}
+    <button
+      onClick={() => onPick(item)}
+      className={
+        "w-full text-left rounded-[0.75rem] px-4 py-3 transition hover:brightness-110 active:brightness-95 " +
+        cls
+      }
+      title={item.description || item.functions_text || ""}
+    >
+      <div className="font-extrabold text-xs sm:text-sm">
+        {item.title}
+      </div>
+      {(item.description || item.functions_text) && (
+        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">
+          {item.description || item.functions_text}
+        </div>
+      )}
     </button>
   );
 }
