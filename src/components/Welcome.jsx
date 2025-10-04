@@ -1,25 +1,30 @@
-/* Welcome.jsx — FULL FILE (Option A applied: legacy SCREEN_ORDER + minimal themelab fix) */
+/* Patch:
+   - Powered By logo:
+       * Absolute positioned bottom-left inside the bottom bar (anchored to very bottom).
+       * New URL provided.
+   - Question textarea:
+       * Full width (no horizontal space lost).
+       * Positioned above the logo with exactly 5px vertical gap.
+   - Implementation details:
+       * Bottom bar is now relative; textarea wrapper has bottom padding to make room for logo (logo height + gap).
+       * Logo is absolutely anchored; textarea not overlapped.
+*/
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
+import { ArrowUpCircleIcon } from "@heroicons/react/24/solid";
 import fallbackLogo from "../assets/logo.png";
 
-import TabsNav from "./TabsNav";
-import Row from "./Row";
-import DocIframe from "./DocIframe";
-import AskInputBar from "./AskInputBar";
-import FormFillCard from "./FormFillCard";
-
 /* =============================== *
- *  CLIENT-CONTROLLED CSS TOKENS   *
+ *  THEME CONSTANTS
  * =============================== */
-
 const DEFAULT_THEME_VARS = {
   "--banner-bg": "#000000",
   "--banner-fg": "#ffffff",
   "--page-bg": "#e6e6e6",
   "--card-bg": "#ffffff",
-  "--shadow-elevation": "0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.10)",
+  "--shadow-elevation":
+    "0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.10)",
   "--message-fg": "#000000",
   "--helper-fg": "#4b5563",
   "--mirror-fg": "#4b5563",
@@ -28,16 +33,47 @@ const DEFAULT_THEME_VARS = {
   "--tab-active-fg": "#ffffff",
   "--demo-button-bg": "#3a4554",
   "--demo-button-fg": "#ffffff",
-  "--doc.button.background": "#000000",
   "--doc-button-bg": "#000000",
   "--doc-button-fg": "#ffffff",
+  "--price-button-bg": "#1a1a1a",
+  "--price-button-fg": "#ffffff",
   "--send-color": "#000000",
   "--border-default": "#9ca3af",
 };
 
+const TOKEN_TO_CSS = {
+  "banner.background": "--banner-bg",
+  "banner.foreground": "--banner-fg",
+  "page.background": "--page-bg",
+  "content.area.background": "--card-bg",
+  "message.text.foreground": "--message-fg",
+  "helper.text.foreground": "--helper-fg",
+  "mirror.text.foreground": "--mirror-fg",
+  "tab.background": "--tab-bg",
+  "tab.foreground": "--tab-fg",
+  "demo.button.background": "--demo-button-bg",
+  "demo.button.foreground": "--demo-button-fg",
+  "doc.button.background": "--doc-button-bg",
+  "doc.button.foreground": "--doc-button-fg",
+  "price.button.background": "--price-button-bg",
+  "price.button.foreground": "--price-button-fg",
+  "send.button.background": "--send-color",
+  "border.default": "--border-default",
+};
+
+const SCREEN_ORDER = [
+  { key: "welcome", label: "Welcome" },
+  { key: "bot_response", label: "Bot Response" },
+  { key: "browse_demos", label: "Browse Demos" },
+  { key: "browse_docs", label: "Browse Documents" },
+  { key: "price", label: "Price Estimate" },
+];
+
 const classNames = (...xs) => xs.filter(Boolean).join(" ");
 function inverseBW(hex) {
-  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(String(hex || "").trim());
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(
+    String(hex || "").trim()
+  );
   if (!m) return "#000000";
   const r = parseInt(m[1], 16),
     g = parseInt(m[2], 16),
@@ -46,286 +82,271 @@ function inverseBW(hex) {
   return L > 0.5 ? "#000000" : "#ffffff";
 }
 
-// ================== ThemeLabInline (embedded) ==================
-function ThemeLabInline({ apiBase, botId, frameRef, onVars }) {
-  const TOKEN_TO_CSS = {
-    "banner.background": "--banner-bg",
-    "banner.foreground": "--banner-fg",
-    "page.background": "--page-bg",
-    "content.area.background": "--card-bg",
-    "message.text.foreground": "--message-fg",
-    "helper.text.foreground": "--helper-fg",
-    "mirror.text.foreground": "--mirror-fg",
-    "tab.background": "--tab-bg",
-    "tab.foreground": "--tab-fg",
-    "demo.button.background": "--demo-button-bg",
-    "demo.button.foreground": "--demo-button-fg",
-    "doc.button.background": "--doc-button-bg",
-    "doc.button.foreground": "--doc-button-fg",
-    "price.button.background": "--price-button-bg",
-    "price.button.foreground": "--price-button-fg",
-    "send.button.background": "--send-color",
-    "border.default": "--border-default",
-  };
+/* ========================== *
+ *  UI PRIMITIVES
+ * ========================== */
+const UI = {
+  CARD: "rounded-[0.75rem] p-4 bg-white [box-shadow:var(--shadow-elevation)]",
+  BTN_DEMO:
+    "w-full text-center rounded-[0.75rem] px-4 py-3 transition text-[var(--demo-button-fg)] bg-[var(--demo-button-bg)] hover:brightness-110 active:brightness-95",
+  BTN_DOC:
+    "w-full text-center rounded-[0.75rem] px-4 py-3 transition text-[var(--doc-button-fg)] bg-[var(--doc-button-bg)] hover:brightness-110 active:brightness-95",
+  BTN_PRICE:
+    "w-full text-center rounded-[0.75rem] px-4 py-3 transition text-[var(--price-button-fg)] bg-[var(--price-button-bg)] hover:brightness-110 active:brightness-95",
+  FIELD:
+    "w-full rounded-[0.75rem] px-4 py-3 text-base bg-[var(--card-bg)] border border-[var(--border-default)]",
+  TAB_ACTIVE:
+    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] [box-shadow:var(--shadow-elevation)]",
+  TAB_INACTIVE:
+    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] hover:brightness-110",
+};
 
-  // Option A legacy screen keys (must match DB screen_key values)
-  const SCREEN_ORDER = [
-    { key: "welcome", label: "Welcome" },
-    { key: "bot_response", label: "Bot Response" },
-    { key: "browse_demos", label: "Browse Demos" },
-    { key: "browse_docs", label: "Browse Documents" },
-    { key: "price", label: "Price Estimate" },
-    { key: "meeting", label: "Schedule" },
-  ];
-
-  const [rows, setRows] = useState([]);
-  const [values, setValues] = useState({});
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
-
-  const [authState, setAuthState] = useState("checking");
-  const [password, setPassword] = useState("");
-  const [authError, setAuthError] = useState("");
-
-  const [pos, setPos] = useState({ left: 16, top: 16, width: 460 });
-  useEffect(() => {
-    function updatePos() {
-      const r = frameRef?.current?.getBoundingClientRect?.();
-      const width = 460, gap = 12;
-      if (!r) return setPos({ left: 16, top: 16, width });
-      setPos({
-        left: Math.max(8, r.left - width - gap),
-        top: Math.max(8, r.top + 8),
-        width,
-      });
-    }
-    updatePos();
-    const h = () => updatePos();
-    window.addEventListener("resize", h);
-    window.addEventListener("scroll", h, { passive: true });
-    return () => {
-      window.removeEventListener("resize", h);
-      window.removeEventListener("scroll", h);
-    };
-  }, [frameRef]);
-
-  async function checkStatusAndMaybeLoad() {
-    try {
-      setAuthError(""); setAuthState("checking");
-      const res = await fetch(
-        `${apiBase}/themelab/status?bot_id=${encodeURIComponent(botId)}`,
-        { credentials: "include" }
-      );
-      if (res.status === 200) { setAuthState("ok"); await load(); }
-      else if (res.status === 401) setAuthState("need_password");
-      else if (res.status === 403) setAuthState("disabled");
-      else setAuthState("error");
-    } catch {
-      setAuthState("error");
-    }
-  }
-  useEffect(() => {
-    if (apiBase && botId) checkStatusAndMaybeLoad();
-  }, [apiBase, botId]); // eslint-disable-line
-
-  async function load() {
-    const res = await fetch(
-      `${apiBase}/brand/client-tokens?bot_id=${encodeURIComponent(botId)}`,
-      { credentials: "include" }
-    );
-    const data = await res.json();
-    const toks = (data?.ok ? data.tokens : []) || [];
-    setRows(toks);
-
-    const v = {};
-    toks.forEach(t => { v[t.token_key] = t.value || "#000000"; });
-    setValues(v);
-
-    const cssPatch = {};
-    toks.forEach(t => {
-      const cssVar = TOKEN_TO_CSS[t.token_key];
-      if (cssVar) cssPatch[cssVar] = v[t.token_key];
-    });
-    onVars && onVars(cssPatch);
-  }
-
-  function updateToken(tokenKey, value) {
-    const v = value || "";
-    setValues(prev => ({ ...prev, [tokenKey]: v }));
-    const cssVar = TOKEN_TO_CSS[tokenKey];
-    if (cssVar && onVars) {
-      // Minimal fix: functional updater merges instead of replacing
-      onVars(prev => ({ ...(prev || {}), [cssVar]: v }));
-    }
-  }
-
-  async function doSave() {
-    try {
-      setBusy(true);
-      const updates = Object.entries(values).map(([token_key, value]) => ({ token_key, value }));
-      const res = await fetch(`${apiBase}/brand/client-tokens/save`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ bot_id: botId, updates }),
-      });
-      const data = await res.json();
-      if (!data?.ok) throw new Error();
-      setMsg(`Saved ${data.updated} token(s).`); setTimeout(() => setMsg(""), 1600);
-    } catch {
-      setMsg("Save failed."); setTimeout(() => setMsg(""), 1800);
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function doReset() { await load(); setMsg("Restored from database."); setTimeout(() => setMsg(""), 1400); }
-  async function doLogin(e) {
-    e?.preventDefault();
-    try {
-      setAuthError("");
-      const res = await fetch(`${apiBase}/themelab/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ bot_id: botId, password }),
-      });
-      const data = await res.json();
-      if (res.status === 200 && data?.ok) { setAuthState("ok"); setPassword(""); await load(); }
-      else if (res.status === 403) setAuthState("disabled");
-      else setAuthError("Invalid password.");
-    } catch {
-      setAuthError("Login failed.");
-    }
-  }
-
-  const groups = useMemo(() => {
-    const by = new Map();
-    for (const r of rows) {
-      const k = r.screen_key || "welcome";
-      if (!by.has(k)) by.set(k, []);
-      by.get(k).push(r);
-    }
-    SCREEN_ORDER.forEach(({ key }) => {
-      if (by.has(key)) by.get(key).sort((a,b) => String(a.label||""").localeCompare(String(b.label||"")));
-    });
-    return by;
-  }, [rows]);
-
+function Row({ item, onPick, kind = "demo" }) {
+  const btnClass =
+    kind === "doc"
+      ? UI.BTN_DOC
+      : kind === "price"
+      ? UI.BTN_PRICE
+      : UI.BTN_DEMO;
   return (
-    <div style={{
-      position: "fixed", left: pos.left, top: pos.top, width: pos.width,
-      background: "#fff", border: "1px solid rgba(0,0,0,0.2)",
-      borderRadius: "12px", padding: 12, zIndex: 50, boxShadow: "0 8px 24px rgba(0,0,0,0.08)"
-    }}>
-      <div className="text-base font-bold mb-2">ThemeLab</div>
+    <button
+      onClick={() => onPick(item)}
+      className={btnClass}
+      title={item.description || ""}
+    >
+      <div className="font-extrabold text-xs sm:text-sm">{item.title}</div>
+      {item.description ? (
+        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">
+          {item.description}
+        </div>
+      ) : item.functions_text ? (
+        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">
+          {item.functions_text}
+        </div>
+      ) : null}
+    </button>
+  );
+}
 
-      {authState === "checking" && <div className="text-sm text-gray-600">Checking access…</div>}
-      {authState === "disabled" && <div className="text-sm text-gray-600">ThemeLab is disabled for this bot.</div>}
+function OptionButton({ opt, selected, onClick }) {
+  return (
+    <button
+      onClick={() => onClick(opt)}
+      className={classNames(UI.BTN_PRICE, selected && "ring-2 ring-black/20")}
+      title={opt.tooltip || ""}
+    >
+      <div className="font-extrabold text-xs sm:text-sm">{opt.label}</div>
+      {opt.tooltip ? (
+        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">
+          {opt.tooltip}
+        </div>
+      ) : null}
+    </button>
+  );
+}
 
-      {authState === "need_password" && (
-        <form onSubmit={doLogin} className="flex items-center gap-2">
-          <input
-            type="password"
-            placeholder="Enter ThemeLab password"
-            className="flex-1 rounded-[12px] border border-black/20 px-3 py-2"
-            value={password}
-            onChange={(e)=>setPassword(e.target.value)}
-          />
-          <button type="submit" className="px-3 py-2 rounded-[12px] bg-black text-white">Unlock</button>
-          {authError ? <div className="text-xs text-red-600 ml-2">{authError}</div> : null}
-        </form>
-      )}
-
-      {authState === "ok" && (
-        <>
-          {SCREEN_ORDER.map(({ key, label }) => (
-            <div key={key} className="mb-2">
-              <div className="text-sm font-semibold mb-1">{label}</div>
-              <div className="space-y-1 pl-1">
-                {(groups.get(key) || []).map(t => (
-                  <div key={t.token_key} className="flex items-center justify-between gap-3">
-                    <div className="text-xs">{t.label}</div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="color"
-                        value={values[t.token_key] || "#000000"}
-                        onChange={(e)=>updateToken(t.token_key, e.target.value)}
-                        style={{ width: 32, height: 24, borderRadius: 6, border: "1px solid rgba(0,0,0,0.2)" }}
-                        title={t.token_key}
-                      />
-                      <code className="text-[11px] opacity-70">{values[t.token_key] || ""}</code>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-          <div className="mt-3 flex items-center justify-between">
-            <div className="text-xs text-gray-600">{msg}</div>
-            <div className="flex items-center gap-2">
-              <button onClick={doReset} disabled={busy} className="px-3 py-1 rounded-[12px] border border-black/20 bg-white">Reset</button>
-              <button onClick={doSave} disabled={busy} className="px-3 py-1 rounded-[12px] bg-black text-white">{busy ? "Saving…" : "Save"}</button>
-            </div>
-          </div>
-        </>
-      )}
-
-      {authState === "error" && <div className="text-sm text-red-600">Unable to verify access.</div>}
+function PriceMirror({ lines }) {
+  if (!lines?.length) return null;
+  return (
+    <div className="mb-3">
+      {lines.map((ln, i) => (
+        <div
+          key={i}
+          className="text-base italic whitespace-pre-line text-[var(--mirror-fg)]"
+        >
+          {ln}
+        </div>
+      ))}
     </div>
   );
 }
-// ================== /ThemeLabInline ==================
 
+function EstimateCard({ estimate, outroText }) {
+  if (!estimate) return null;
+  const items = Array.isArray(estimate.line_items) ? estimate.line_items : [];
+  const fmtAmount = (ccy, v) => `${ccy} ${Number(v).toLocaleString()}`;
+  const fmtRange = (ccy, min, max) =>
+    Number(min) === Number(max)
+      ? fmtAmount(ccy, max)
+      : `${fmtAmount(ccy, min)} – ${fmtAmount(ccy, max)}`;
+  const totalText = fmtRange(
+    estimate.currency_code,
+    estimate.total_min,
+    estimate.total_max
+  );
+  return (
+    <div>
+      <div className={UI.CARD}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="font-bold text-lg">Your Estimate</div>
+          <div className="font-bold text-lg text-right [font-variant-numeric:tabular-nums]">
+            {totalText}
+          </div>
+        </div>
+        <div className="space-y-3">
+          {items.map((li, idx) => {
+            const name = li?.product?.name ?? li?.label ?? "Item";
+            const key = li?.product?.id ?? `${name}-${idx}`;
+            const ccy = li?.currency_code || estimate.currency_code || "";
+            const lineText = fmtRange(ccy, li?.price_min, li?.price_max);
+            return (
+              <div key={key} className="rounded-[0.75rem] p-3 bg-white">
+                <div className="grid grid-cols-[1fr_auto] items-center gap-3">
+                  <div className="font-bold">{name}</div>
+                  <div className="font-bold text-lg text-right [font-variant-numeric:tabular-nums]">
+                    {lineText}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      {outroText ? (
+        <div className="mt-3 text-base font-bold whitespace-pre-line">
+          {outroText}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function normalizeOptions(q) {
+  const raw = q?.options ?? q?.choices ?? q?.buttons ?? q?.values ?? [];
+  return (Array.isArray(raw) ? raw : [])
+    .map((o, idx) => {
+      if (o == null) return null;
+      if (typeof o === "string") return { key: o, label: o, id: String(idx) };
+      const key = o.key ?? o.value ?? o.id ?? String(idx);
+      const label = o.label ?? o.title ?? o.name ?? String(key);
+      const tooltip = o.tooltip ?? o.description ?? o.help ?? undefined;
+      return { key, label, tooltip, id: String(o.id ?? key ?? idx) };
+    })
+    .filter(Boolean);
+}
+
+function QuestionBlock({ q, value, onPick }) {
+  const opts = normalizeOptions(q);
+  const type = String(q?.type || "").toLowerCase();
+  const isMulti =
+    type === "multi_choice" || type === "multichoice" || type === "multi";
+  return (
+    <div className={UI.FIELD}>
+      <div className="font-bold text-base">{q.prompt}</div>
+      {q.help_text ? (
+        <div className="text-xs italic mt-1 text-[var(--helper-fg)]">
+          {q.help_text}
+        </div>
+      ) : null}
+      {opts.length > 0 ? (
+        <div className="mt-3 flex flex-col gap-3">
+          {opts.map((opt) => (
+            <OptionButton
+              key={opt.id}
+              opt={opt}
+              selected={
+                isMulti
+                  ? Array.isArray(value) && value.includes(opt.key)
+                  : value === opt.key
+              }
+              onClick={() => onPick(q, opt)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 text-xs text-[var(--helper-fg)]">
+          No options available.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TabsNav({ mode, tabs }) {
+  return (
+    <div className="w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <nav
+        className="inline-flex min-w-max items-center gap-0.5 overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        role="tablist"
+      >
+        {tabs.map((t) => {
+          const active =
+            (mode === "browse" && t.key === "demos") ||
+            (mode === "docs" && t.key === "docs") ||
+            (mode === "price" && t.key === "price") ||
+            (mode === "meeting" && t.key === "meeting");
+          return (
+            <button
+              key={t.key}
+              onClick={t.onClick}
+              role="tab"
+              aria-selected={active}
+              className={active ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}
+              style={
+                active
+                  ? { background: "var(--card-bg)", color: "var(--tab-active-fg)" }
+                  : { background: "var(--tab-bg)", color: "var(--tab-fg)" }
+              }
+              type="button"
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}
+
+/* ================================================================================= *
+ *  MAIN COMPONENT
+ * ================================================================================= */
 export default function Welcome() {
   const apiBase =
     import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-  const { alias, botIdFromUrl } = useMemo(() => {
+  // URL params (includes pid)
+  const { alias, botIdFromUrl, themeLabOn, agentAlias, pidParam } = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     const a = (qs.get("alias") || qs.get("alais") || "").trim();
     const b = (qs.get("bot_id") || "").trim();
-    return { alias: a, botIdFromUrl: b };
+    const th = (qs.get("themelab") || "").trim();
+    const ag = (qs.get("agent") || "").trim();
+    const pid = (qs.get("pid") || "").trim();
+    return {
+      alias: a,
+      botIdFromUrl: b,
+      themeLabOn: th === "1" || th.toLowerCase() === "true",
+      agentAlias: ag,
+      pidParam: pid,
+    };
   }, []);
 
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
 
-  const urlParams = useMemo(() => {
-    const q = new URLSearchParams(window.location.search);
-    const o = {};
-    q.forEach((v, k) => { o[k] = v; });
-    return o;
-  }, []);
-
   const [botId, setBotId] = useState(botIdFromUrl || "");
-  const [fatal, setFatal] = useState("");   // FIXED: removed stray 'the'
-
-  // Modes: 'ask' | 'browse' | 'docs' | 'meeting' | 'formfill'
+  const [fatal, setFatal] = useState("");
   const [mode, setMode] = useState("ask");
-
-  // Q&A state
   const [input, setInput] = useState("");
   const [lastQuestion, setLastQuestion] = useState("");
   const [responseText, setResponseText] = useState("");
+  const [debugInfo, setDebugInfo] = useState(null);
+  const [introVideoUrl, setIntroVideoUrl] = useState("");
+  const [showIntroVideo, setShowIntroVideo] = useState(false);
   const [loading, setLoading] = useState(false);
-
-  // Recommendations / browse state
   const [items, setItems] = useState([]);
   const [browseItems, setBrowseItems] = useState([]);
   const [browseDocs, setBrowseDocs] = useState([]);
   const [selected, setSelected] = useState(null);
-
-  // Meeting
-  const [agent, setAgent] = useState(null);
-
-  // Refs
-  const contentRef = useRef(null);
-  const inputRef = useRef(null);
-
-  // Visitor/session
+  const [helperPhase, setHelperPhase] = useState("hidden");
   const [visitorId, setVisitorId] = useState("");
   const [sessionId, setSessionId] = useState("");
+  const [websiteUrl, setWebsiteUrl] = useState("");
 
-  // Theme
+  const contentRef = useRef(null);
+  const inputRef = useRef(null);
+  const frameRef = useRef(null);
+
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
   const derivedTheme = useMemo(() => {
     const activeFg = inverseBW(themeVars["--tab-fg"] || "#000000");
@@ -336,46 +357,41 @@ export default function Welcome() {
     () => ({ ...derivedTheme, ...pickerVars }),
     [derivedTheme, pickerVars]
   );
-
   const [brandAssets, setBrandAssets] = useState({
     logo_url: null,
     logo_light_url: null,
     logo_dark_url: null,
   });
-
   const initialBrandReady = useMemo(
     () => !(botIdFromUrl || alias),
     [botIdFromUrl, alias]
   );
   const [brandReady, setBrandReady] = useState(initialBrandReady);
-
   const [tabsEnabled, setTabsEnabled] = useState({
     demos: false,
     docs: false,
     meeting: false,
+    price: false,
   });
+  const [pricingCopy, setPricingCopy] = useState({
+    intro: "",
+    outro: "",
+    custom_notice: "",
+  });
+  const [priceQuestions, setPriceQuestions] = useState([]);
+  const [priceAnswers, setPriceAnswers] = useState({});
+  const [priceEstimate, setPriceEstimate] = useState(null);
+  const [priceBusy, setPriceBusy] = useState(false);
+  const [priceErr, setPriceErr] = useState("");
+  const [agent, setAgent] = useState(null);
+  const [scopePayload, setScopePayload] = useState({ scope: "standard" });
 
-  // FormFill
-  const [showFormfill, setShowFormfill] = useState(true);
-  const [formFields, setFormFields] = useState([]);
-  const [visitorDefaults, setVisitorDefaults] = useState({});
-
-  const [formShown, setFormShown] = useState(false);
-  const [formCompleted, setFormCompleted] = useState(false);
-  const [pending, setPending] = useState(null);
-
-  const FORM_KEY = useMemo(
-    () => `formfill_completed:${botId || alias || "_"}`,
-    [botId, alias]
-  );
-
-  useEffect(() => {
-    try {
-      const done = sessionStorage.getItem(FORM_KEY);
-      if (done === "1") setFormCompleted(true);
-    } catch {}
-  }, [FORM_KEY]);
-
+  const withIdsQS = (url) => {
+    const u = new URL(url, window.location.origin);
+    if (sessionId) u.searchParams.set("session_id", sessionId);
+    if (visitorId) u.searchParams.set("visitor_id", visitorId);
+    return u.toString();
+  };
   const withIdsBody = (obj) => ({
     ...obj,
     ...(sessionId ? { session_id: sessionId } : {}),
@@ -385,141 +401,127 @@ export default function Welcome() {
     ...(sessionId ? { "X-Session-Id": sessionId } : {}),
     ...(visitorId ? { "X-Visitor-Id": visitorId } : {}),
   });
-  const withIdsQS = (url) => {
-    const u = new URL(url, window.location.origin);
-    if (sessionId) u.searchParams.set("session_id", sessionId);
-    if (visitorId) u.searchParams.set("visitor_id", visitorId);
-    return u.toString();
-  };
 
-  // Resolve bot by alias
+  function withPidParam(baseUrl) {
+    if (!pidParam) return baseUrl;
+    return baseUrl + (baseUrl.includes("?") ? "&" : "?") + "pid=" + encodeURIComponent(pidParam);
+  }
+
+  function applyBotSettings(b) {
+    setTabsEnabled({
+      demos: !!b.show_browse_demos,
+      docs: !!b.show_browse_docs,
+      meeting: !!b.show_schedule_meeting,
+      price: !!b.show_price_estimate,
+    });
+    setResponseText(b.welcome_message || "");
+    setIntroVideoUrl(b.intro_video_url || "");
+    setShowIntroVideo(!!b.show_intro_video);
+    setPricingCopy({
+      intro: b.pricing_intro || "",
+      outro: b.pricing_outro || "",
+      custom_notice: b.pricing_custom_notice || "",
+    });
+    setWebsiteUrl(b.website || "");
+  }
+
+  useEffect(() => {
+    if (selected && selected.id && mode === "docs") {
+      setScopePayload({ scope: "doc", doc_id: String(selected.id) });
+    } else if (selected && selected.id && mode !== "docs") {
+      setScopePayload({ scope: "demo", demo_id: String(selected.id) });
+    } else {
+      setScopePayload({ scope: "standard" });
+    }
+  }, [selected, mode]);
+
+  // Fetch /bot-settings variants
   useEffect(() => {
     if (botId || !alias) return;
     let cancel = false;
     (async () => {
       try {
-        const res = await fetch(`${apiBase}/bot-settings?alias=${encodeURIComponent(alias)}`);
+        const url = withPidParam(
+          `${apiBase}/bot-settings?alias=${encodeURIComponent(alias)}`
+        );
+        const res = await fetch(url);
         const data = await res.json();
         if (cancel) return;
-
         const id = data?.ok ? data?.bot?.id : null;
-
         if (data?.ok) {
           setVisitorId(data.visitor_id || "");
           setSessionId(data.session_id || "");
-        }
-
-        const b = data?.ok ? data?.bot : null;
-        if (b) {
-          setResponseText(b.welcome_message || "");
-          setIntroVideoUrl(b.intro_video_url || "");
-          setShowIntroVideo(!!b.show_intro_video);
-          setTabsEnabled({
-            demos: !!b.show_browse_demos,
-            docs: !!b.show_browse_docs,
-            meeting: !!b.show_schedule_meeting,
-          });
-        }
-
-        if (id) {
-          setBotId(id);
-          setFatal("");
-        } else if (!res.ok || data?.ok === false) {
-          setFatal("Invalid or inactive alias.");
-        }
+          applyBotSettings(data.bot);
+        } else setFatal("Invalid or inactive alias.");
+        if (id) setBotId(id);
       } catch {
         if (!cancel) setFatal("Invalid or inactive alias.");
       }
     })();
-    return () => { cancel = true; };
-  }, [alias, apiBase, botId]);
+    return () => (cancel = true);
+  }, [alias, apiBase, botId, pidParam]);
 
-  // Try default alias
   useEffect(() => {
     if (botId || alias || !defaultAlias) return;
     let cancel = false;
     (async () => {
       try {
-        const res = await fetch(`${apiBase}/bot-settings?alias=${encodeURIComponent(defaultAlias)}`);
+        const url = withPidParam(
+          `${apiBase}/bot-settings?alias=${encodeURIComponent(defaultAlias)}`
+        );
+        const res = await fetch(url);
         const data = await res.json();
         if (cancel) return;
-
         if (data?.ok) {
           setVisitorId(data.visitor_id || "");
           setSessionId(data.session_id || "");
+          applyBotSettings(data.bot);
+          setBotId(data.bot.id);
         }
-
-        const b = data?.ok ? data?.bot : null;
-        if (b) {
-          setResponseText(b.welcome_message || "");
-          setIntroVideoUrl(b.intro_video_url || "");
-          setShowIntroVideo(!!b.show_intro_video);
-          setTabsEnabled({
-            demos: !!b.show_browse_demos,
-            docs: !!b.show_browse_docs,
-            meeting: !!b.show_schedule_meeting,
-          });
-        }
-        if (data?.ok && data?.bot?.id) setBotId(data.bot.id);
       } catch {}
     })();
-    return () => { cancel = true; };
-  }, [botId, alias, defaultAlias, apiBase]);
+    return () => (cancel = true);
+  }, [botId, alias, defaultAlias, apiBase, pidParam]);
 
-  // Start with bot_id
   useEffect(() => {
     if (!botIdFromUrl) return;
     let cancel = false;
     (async () => {
       try {
-        const res = await fetch(`${apiBase}/bot-settings?bot_id=${encodeURIComponent(botIdFromUrl)}`);
+        const url = withPidParam(
+          `${apiBase}/bot-settings?bot_id=${encodeURIComponent(botIdFromUrl)}`
+        );
+        const res = await fetch(url);
         const data = await res.json();
         if (cancel) return;
-
         if (data?.ok) {
           setVisitorId(data.visitor_id || "");
           setSessionId(data.session_id || "");
+          applyBotSettings(data.bot);
+          setBotId(data.bot.id);
         }
-
-        const b = data?.ok ? data?.bot : null;
-        if (b) {
-          setResponseText(b.welcome_message || "");
-          setIntroVideoUrl(b.intro_video_url || "");
-          setShowIntroVideo(!!b.show_intro_video);
-          setTabsEnabled({
-            demos: !!b.show_browse_demos,
-            docs: !!b.show_browse_docs,
-            meeting: !!b.show_schedule_meeting,
-          });
-        }
-        if (data?.ok && data?.bot?.id) setBotId(data.bot.id);
       } catch {}
     })();
-    return () => { cancel = true; };
-  }, [botIdFromUrl, apiBase]);
+    return () => (cancel = true);
+  }, [botIdFromUrl, apiBase, pidParam]);
 
   useEffect(() => {
     if (!botId && !alias && !brandReady) setBrandReady(true);
   }, [botId, alias, brandReady]);
 
-  const themeLabOn = useMemo(() => {
-    const qs = new URLSearchParams(window.location.search);
-    const th = (qs.get("themelab") || "").trim().toLowerCase();
-    return th === "1" || th === "true";
-  }, []);
-
-  const [introVideoUrl, setIntroVideoUrl] = useState("");
-  const [showIntroVideo, setShowIntroVideo] = useState(false);
+  // Brand tokens/assets
   useEffect(() => {
     if (!botId) return;
     let cancel = false;
     (async () => {
       try {
-        const res = await fetch(`${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`);
+        const res = await fetch(
+          `${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`
+        );
         const data = await res.json();
         if (cancel) return;
-        if (data?.ok && data?.css_vars && typeof data.css_vars === "object") {
-          setThemeVars(prev => ({ ...prev, ...data.css_vars }));
+        if (data?.ok && data?.css_vars) {
+          setThemeVars((prev) => ({ ...prev, ...data.css_vars }));
         }
         if (data?.ok && data?.assets) {
           setBrandAssets({
@@ -533,110 +535,69 @@ export default function Welcome() {
         if (!cancel) setBrandReady(true);
       }
     })();
-    return () => { cancel = true; };
+    return () => (cancel = true);
   }, [botId, apiBase]);
 
-  async function fetchFormfillConfigBy(botIdArg, aliasArg) {
-    try {
-      const params = new URLSearchParams();
-      if (botIdArg) params.set("bot_id", botIdArg);
-      else if (aliasArg) params.set("alias", aliasArg);
-      if (visitorId) params.set("visitor_id", visitorId);
-      if ([...params.keys()].length === 0) return;
-      const res = await fetch(`${apiBase}/formfill-config?${params.toString()}`);
-      const data = await res.json();
-      if (data?.ok) {
-        setShowFormfill(!!data.show_formfill);
-        setFormFields(Array.isArray(data.fields) ? data.fields : []);
-        if (data.visitor_values && typeof data.visitor_values === "object") {
-          setVisitorDefaults(data.visitor_values);
+  // Refresh settings again (captures pid update)
+  useEffect(() => {
+    if (!botId) return;
+    let cancel = false;
+    (async () => {
+      try {
+        const url = withPidParam(
+          `${apiBase}/bot-settings?bot_id=${encodeURIComponent(botId)}`
+        );
+        const res = await fetch(url);
+        const data = await res.json();
+        if (cancel) return;
+        if (data?.ok) {
+          setVisitorId((v) => v || data.visitor_id || "");
+          setSessionId((s) => s || data.session_id || "");
+          applyBotSettings(data.bot);
         }
+      } catch {}
+    })();
+    return () => (cancel = true);
+  }, [botId, apiBase, pidParam]);
+
+  // Prefetch agent
+  const agentPrefetchedRef = useRef(false);
+  useEffect(() => {
+    if (!botId || !sessionId || agentPrefetchedRef.current) return;
+    if (!tabsEnabled.meeting) return;
+    const url =
+      `${apiBase}/agent?bot_id=${encodeURIComponent(botId)}` +
+      (agentAlias ? `&agent=${encodeURIComponent(agentAlias)}` : "") +
+      `&session_id=${encodeURIComponent(sessionId)}` +
+      (visitorId ? `&visitor_id=${encodeURIComponent(visitorId)}` : "");
+    (async () => {
+      try {
+        const r = await fetch(url);
+        const j = await r.json();
+        if (j?.ok && j.agent) setAgent(j.agent);
+      } catch {
+      } finally {
+        agentPrefetchedRef.current = true;
       }
-    } catch {}
-  }
+    })();
+  }, [botId, sessionId, visitorId, agentAlias, apiBase, tabsEnabled.meeting]);
 
-  useEffect(() => { if (botId) fetchFormfillConfigBy(botId, null); }, [botId]);
-  useEffect(() => { if (!botId && alias) fetchFormfillConfigBy(null, alias); }, [alias, botId]);
-  useEffect(() => { if (botId && visitorId) fetchFormfillConfigBy(botId, null); }, [visitorId, botId]);
-
-  const activeFormFields = useMemo(
-    () => (Array.isArray(formFields) ? formFields : []).filter(f => f && (f.is_standard || f.is_collected)),
-    [formFields]
-  );
-
-  const formDefaults = useMemo(() => {
-    const o = { ...(visitorDefaults || {}) };
-    activeFormFields.forEach(f => {
-      const k = f.field_key;
-      const urlV = urlParams[k];
-      if (typeof urlV === "string" && urlV.length) o[k] = urlV;
-    });
-    return o;
-  }, [activeFormFields, visitorDefaults, urlParams]);
-
-  async function doSend(outgoing) {
-    setMode("ask");
-    setLastQuestion(outgoing);
-    setInput("");
-    setSelected(null);
-    setResponseText("");
-    setItems([]);
-    setLoading(true);
-    try {
-      const res = await axios.post(
-        `${apiBase}/demo-hal`,
-        withIdsBody({ bot_id: botId, user_question: outgoing, scope: "standard", debug: true }),
-        { timeout: 30000, headers: withIdsHeaders() }
-      );
-      const data = res?.data || {};
-      const text = data?.response_text || "";
-      const src = Array.isArray(data?.demo_buttons) ? data.demo_buttons : [];
-      const mapped = src.map((it, idx) => ({
-        id: it.id ?? it.value ?? it.url ?? it.title ?? String(idx),
-        title: it.title ?? it.button_title ?? it.label ?? "",
-        url: it.url ?? it.value ?? it.button_value ?? "",
-        description: it.description ?? it.summary ?? it.functions_text ?? "",
-      }));
-      setItems(mapped.filter(Boolean));
-      setResponseText(text);
-      setLoading(false);
-      requestAnimationFrame(() => contentRef.current?.scrollTo({ top: 0, behavior: "auto" }));
-    } catch {
-      setLoading(false);
-      setResponseText("Sorry—something went wrong.");
-      setItems([]);
-    }
-  }
-
-  function maybeOpenForm(next) {
-    if (!showFormfill || activeFormFields.length === 0) return false;
-    try {
-      if (sessionStorage.getItem(FORM_KEY) === "1") {
-        if (!formCompleted) setFormCompleted(true);
-        return false;
-      }
-    } catch {}
-    if (!formCompleted && !formShown) {
-      setFormShown(true);
-      setPending(next);
-      setMode("formfill");
-      return true;
-    }
-    return false;
-  }
-
-  async function onSendClick() {
-    const outgoing = input.trim();
-    if (!outgoing || !botId) return;
-    if (maybeOpenForm({ type: "ask", payload: { text: outgoing } })) return;
-    await doSend(outgoing);
-  }
+  // Autosize textarea
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [input]);
 
   async function normalizeAndSelectDemo(item) {
     try {
       const r = await fetch(`${apiBase}/render-video-iframe`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...withIdsHeaders() },
+        headers: {
+          "Content-Type": "application/json",
+          ...withIdsHeaders(),
+        },
         body: JSON.stringify(
           withIdsBody({
             bot_id: botId,
@@ -654,19 +615,34 @@ export default function Welcome() {
       );
     } catch {
       setSelected(item);
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
     }
   }
 
-  async function _openBrowse() {
+  async function openMeeting() {
+    if (!botId) return;
+    setMode("meeting");
+    try {
+      const url =
+        `${apiBase}/agent?bot_id=${encodeURIComponent(botId)}` +
+        (agentAlias ? `&agent=${encodeURIComponent(agentAlias)}` : "") +
+        (sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : "") +
+        (visitorId ? `&visitor_id=${encodeURIComponent(visitorId)}` : "");
+      const res = await fetch(url);
+      const data = await res.json();
+      const ag = data?.ok ? data.agent : null;
+      setAgent(ag);
+    } catch {
+      setAgent(null);
+    }
+  }
+
+  async function openBrowse() {
     if (!botId) return;
     setMode("browse");
     setSelected(null);
     try {
       const url = withIdsQS(
-        `${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}"
+        `${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`
       );
       const res = await fetch(url, { headers: withIdsHeaders() });
       const data = await res.json();
@@ -677,27 +653,21 @@ export default function Welcome() {
           title: it.title ?? it.button_title ?? it.label ?? "",
           url: it.url ?? it.value ?? it.button_value ?? "",
           description: it.description ?? it.summary ?? it.functions_text ?? "",
+          functions_text: it.functions_text ?? it.description ?? "",
         }))
-      );
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
       );
     } catch {
       setBrowseItems([]);
     }
   }
-  async function openBrowse() {
-    if (maybeOpenForm({ type: "demos" })) return;
-    await _openBrowse();
-  }
 
-  async function _openBrowseDocs() {
+  async function openBrowseDocs() {
     if (!botId) return;
     setMode("docs");
     setSelected(null);
     try {
       const url = withIdsQS(
-        `${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}"
+        `${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`
       );
       const res = await fetch(url, { headers: withIdsHeaders() });
       const data = await res.json();
@@ -708,106 +678,328 @@ export default function Welcome() {
           title: it.title ?? it.button_title ?? it.label ?? "",
           url: it.url ?? it.value ?? it.button_value ?? "",
           description: it.description ?? it.summary ?? it.functions_text ?? "",
+          functions_text: it.functions_text ?? it.description ?? "",
         }))
-      );
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
       );
     } catch {
       setBrowseDocs([]);
     }
   }
-  async function openBrowseDocs() {
-    if (maybeOpenForm({ type: "docs" })) return;
-    await _openBrowseDocs();
+
+  const priceScrollRef = useRef(null);
+  useEffect(() => {
+    if (mode !== "price" || !botId) return;
+    let cancel = false;
+    (async () => {
+      try {
+        setPriceErr("");
+        setPriceEstimate(null);
+        setPriceAnswers({});
+        const res = await fetch(
+          `${apiBase}/pricing/questions?bot_id=${encodeURIComponent(botId)}`
+        );
+        const data = await res.json();
+        if (cancel) return;
+        if (!data?.ok)
+          throw new Error(data?.error || "Failed to load pricing questions");
+        setPriceQuestions(Array.isArray(data.questions) ? data.questions : []);
+        requestAnimationFrame(() =>
+          priceScrollRef.current?.scrollTo({ top: 0, behavior: "auto" })
+        );
+      } catch {
+        if (!cancel) setPriceErr("Unable to load price estimator.");
+      }
+    })();
+    return () => (cancel = true);
+  }, [mode, botId, apiBase]);
+
+  useEffect(() => {
+    const haveAll = (() => {
+      if (!priceQuestions?.length) return false;
+      const req = priceQuestions.filter(
+        (q) => (q.group ?? "estimation") === "estimation" && q.required !== false
+      );
+      if (!req.length) return false;
+      return req.every((q) => {
+        const v = priceAnswers[q.q_key];
+        const isMulti = String(q.type).toLowerCase().includes("multi");
+        return isMulti
+          ? Array.isArray(v) && v.length > 0
+          : !(v === undefined || v === null || v === "");
+      });
+    })();
+    if (mode !== "price" || !botId || !haveAll) {
+      setPriceEstimate(null);
+      return;
+    }
+    let cancel = false;
+    (async () => {
+      try {
+        setPriceBusy(true);
+        const body = {
+          bot_id: botId,
+          answers: {
+            product_id:
+              priceAnswers?.product ||
+              priceAnswers?.edition ||
+              priceAnswers?.product_id ||
+              "",
+            tier_id:
+              priceAnswers?.tier ||
+              priceAnswers?.transactions ||
+              priceAnswers?.tier_id ||
+              "",
+          },
+          session_id: sessionId || undefined,
+          visitor_id: visitorId || undefined,
+        };
+        const res = await fetch(`${apiBase}/pricing/estimate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (cancel) return;
+        if (!data?.ok)
+          throw new Error(data?.error || "Failed to compute estimate");
+        setPriceEstimate(data);
+      } catch {
+        if (!cancel) setPriceErr("Unable to compute estimate.");
+      } finally {
+        if (!cancel) setPriceBusy(false);
+      }
+    })();
+    return () => (cancel = true);
+  }, [
+    mode,
+    botId,
+    apiBase,
+    priceQuestions,
+    priceAnswers,
+    sessionId,
+    visitorId,
+  ]);
+
+  const nextPriceQuestion = useMemo(() => {
+    if (!priceQuestions?.length) return null;
+    for (const q of priceQuestions) {
+      if ((q.group ?? "estimation") !== "estimation" || q.required === false)
+        continue;
+      const v = priceAnswers[q.q_key];
+      const isMulti = String(q.type).toLowerCase().includes("multi");
+      const empty = isMulti
+        ? !(Array.isArray(v) && v.length > 0)
+        : v === undefined || v === null || v === "";
+      if (empty) return q;
+    }
+    return null;
+  }, [priceQuestions, priceAnswers]);
+
+  const mirrorLines = useMemo(() => {
+    const labelFor = (q_key) => {
+      const q = (priceQuestions || []).find((qq) => qq.q_key === q_key);
+      if (!q) return "";
+      const ans = priceAnswers[q.q_key];
+      if (
+        ans == null ||
+        ans === "" ||
+        (Array.isArray(ans) && ans.length === 0)
+      )
+        return "";
+      const opts = normalizeOptions(q);
+      if (String(q.type).toLowerCase().includes("multi")) {
+        const picked = Array.isArray(ans) ? ans : [];
+        return opts
+          .filter((o) => picked.includes(o.key))
+          .map((o) => o.label)
+          .join(", ");
+      }
+      const o = opts.find((o) => o.key === ans);
+      return o?.label || String(ans);
+    };
+    if (typeof priceEstimate?.mirror_text === "string") {
+      const t = priceEstimate.mirror_text.trim();
+      if (t) return [t];
+    }
+    if (Array.isArray(priceEstimate?.mirror_text)) {
+      const out = [];
+      for (const m of priceEstimate.mirror_text) {
+        const raw = String(m?.text || "").trim();
+        if (!raw) continue;
+        const lbl = labelFor(m?.q_key);
+        const replaced = raw
+          .replace(/\{\{\s*answer_label_lower\s*\}\}/gi, lbl.toLowerCase())
+          .replace(/\{\{\s*answer_label\s*\}\}/gi, lbl);
+        out.push(replaced);
+      }
+      return out.filter(Boolean);
+    }
+    if (!priceQuestions?.length) return [];
+    const lines = [];
+    for (const q of priceQuestions) {
+      const ans = priceAnswers[q.q_key];
+      if (
+        ans === undefined ||
+        ans === null ||
+        ans === "" ||
+        (Array.isArray(ans) && ans.length === 0)
+      )
+        continue;
+      const opts = normalizeOptions(q);
+      let label = "";
+      if (String(q.type).toLowerCase().includes("multi")) {
+        const picked = Array.isArray(ans) ? ans : [];
+        label = opts
+          .filter((o) => picked.includes(o.key))
+          .map((o) => o.label)
+          .join(", ");
+      } else {
+        const o = opts.find((o) => o.key === ans);
+        label = o?.label || String(ans);
+      }
+      if (!label) continue;
+      const tmpl = q.mirror_template;
+      if (tmpl && typeof tmpl === "string") {
+        const replaced = tmpl
+          .replace(/\{\{\s*answer_label_lower\s*\}\}/gi, label.toLowerCase())
+          .replace(/\{\{\s*answer_label\s*\}\}/gi, label);
+        lines.push(replaced);
+      } else {
+        lines.push(label);
+      }
+    }
+    return lines;
+  }, [priceEstimate, priceQuestions, priceAnswers]);
+
+  function handlePickOption(q, opt) {
+    const isMulti = String(q?.type || "").toLowerCase().includes("multi");
+    setPriceAnswers((prev) => {
+      if (isMulti) {
+        const curr = Array.isArray(prev[q.q_key]) ? prev[q.q_key] : [];
+        const exists = curr.includes(opt.key);
+        const next = exists
+          ? curr.filter((k) => k !== opt.key)
+          : [...curr, opt.key];
+        return { ...prev, [q.q_key]: next };
+      }
+      return { ...prev, [q.q_key]: opt.key };
+    });
   }
 
-  const embedDomain = typeof window !== "undefined" ? window.location.hostname : "";
-
-  async function _openMeeting() {
-    if (!botId) return;
-    setMode("meeting");
+  async function sendMessage() {
+    if (!input.trim() || !botId) return;
+    const outgoing = input.trim();
+    const commitScope = (() => {
+      let scope = "standard";
+      let demo_id, doc_id;
+      if (selected && selected.id && mode === "docs") {
+        scope = "doc";
+        doc_id = String(selected.id);
+      } else if (selected && selected.id && mode !== "docs") {
+        scope = "demo";
+        demo_id = String(selected.id);
+      }
+      return { scope, ...(demo_id ? { demo_id } : {}), ...(doc_id ? { doc_id } : {}) };
+    })();
+    setMode("ask");
+    setLastQuestion(outgoing);
+    setInput("");
+    setSelected(null);
+    setResponseText("");
+    setHelperPhase("hidden");
+    setItems([]);
+    setLoading(true);
     try {
-      const res = await fetch(
-        `${apiBase}/agent?bot_id=${encodeURIComponent(botId)}"
+      const res = await axios.post(
+        `${apiBase}/demo-hal`,
+        withIdsBody({
+          bot_id: botId,
+          user_question: outgoing,
+          ...commitScope,
+          debug: true,
+        }),
+        { timeout: 30000, headers: withIdsHeaders() }
       );
-      const data = await res.json();
-      const ag = data?.ok ? data.agent : null;
-      setAgent(ag);
-      if (
-        ag &&
-        ag.calendar_link_type &&
-        String(ag.calendar_link_type).toLowerCase() === "external" &&
-        ag.calendar_link
-      ) {
-        try {
-          const base = ag.calendar_link || "";
-          const withQS = `${base}${base.includes("?") ? "&" : "?"}session_id=${encodeURIComponent(
-            sessionId || ""
-          )}&visitor_id=${encodeURIComponent(
-            visitorId || ""
-          )}&bot_id=${encodeURIComponent(botId || "")}`;
-          window.open(withQS, "_blank", "noopener,noreferrer");
-        } catch {}
+      const data = res?.data || {};
+      setDebugInfo(data?.debug || null);
+      const text = data?.response_text || "";
+      const recSource = Array.isArray(data?.items)
+        ? data.items
+        : Array.isArray(data?.buttons)
+        ? data.buttons
+        : [];
+      const recs = (Array.isArray(recSource) ? recSource : [])
+        .map((it) => {
+          const id = it.id ?? it.button_id ?? it.value ?? it.url ?? it.title;
+          const title =
+            it.title ??
+            it.button_title ??
+            (typeof it.label === "string"
+              ? it.label.replace(/^Watch the \"|\" demo$/g, "")
+              : it.label) ??
+            "";
+          const url = it.url ?? it.value ?? it.button_value ?? "";
+          const description =
+            it.description ?? it.summary ?? it.functions_text ?? "";
+          const action = it.action ?? it.button_action ?? "demo";
+          return {
+            id,
+            title,
+            url,
+            description,
+            functions_text: it.functions_text ?? description,
+            action,
+          };
+        })
+        .filter((b) => {
+          const act = (b.action || "").toLowerCase();
+          const lbl = (b.title || "").toLowerCase();
+          return (
+            act !== "continue" &&
+            act !== "options" &&
+            lbl !== "continue" &&
+            lbl !== "show me options"
+          );
+        });
+
+      setResponseText(text);
+      setLoading(false);
+      setScopePayload({ scope: "standard" });
+      if (recs.length > 0) {
+        setHelperPhase("header");
+        setTimeout(() => {
+          setItems(recs);
+          setHelperPhase("buttons");
+        }, 60);
+      } else {
+        setHelperPhase("hidden");
+        setItems([]);
       }
       requestAnimationFrame(() =>
         contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
       );
     } catch {
-      setAgent(null);
+      setLoading(false);
+      setScopePayload({ scope: "standard" });
+      setResponseText("Sorry—something went wrong.");
+      setHelperPhase("hidden");
+      setItems([]);
     }
   }
-  async function openMeeting() {
-    if (maybeOpenForm({ type: "meeting" })) return;
-    await _openMeeting();
-  }
 
-  useEffect(() => {
-    if (mode !== "meeting" || !botId || !sessionId || !visitorId) return;
-    function onCalendlyMessage(e) {
-      try {
-        const m = e?.data;
-        if (!m || typeof m !== "object") return;
-        if (
-          m.event !== "calendly.event_scheduled" &&
-          m.event !== "calendly.event_canceled"
-        )
-          return;
-        const p = m.payload || {};
-        const payloadOut = {
-          event: m.event,
-          scheduled_event: p.event || p.scheduled_event || null,
-          invitee: {
-            uri: p.invitee?.uri ?? null,
-            email: p.invitee?.email ?? null,
-            name: p.invitee?.full_name ?? p.invitee?.name ?? null,
-          },
-          questions_and_answers:
-            p.questions_and_answers ?? p.invitee?.questions_and_answers ?? [],
-          tracking: p.tracking || {},
-        };
-        fetch(`${apiBase}/calendly/js-event`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            bot_id: botId,
-            session_id: sessionId,
-            visitor_id: visitorId,
-            payload: payloadOut,
-          }),
-        }).catch(() => {});
-      } catch {}
-    }
-    window.addEventListener("message", onCalendlyMessage);
-    return () => window.removeEventListener("message", onCalendlyMessage);
-  }, [mode, botId, sessionId, visitorId, apiBase]);
-
-  useEffect(() => {
-    const el = inputRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [input]);
+  const listSource = mode === "browse" ? browseItems : items;
+  const askUnderVideo = useMemo(() => {
+    if (!selected) return items;
+    const selKey = selected.id ?? selected.url ?? selected.title;
+    return (items || []).filter(
+      (it) => (it.id ?? it.url ?? it.title) !== selKey
+    );
+  }, [selected, items]);
+  const visibleUnderVideo = selected
+    ? mode === "ask"
+      ? askUnderVideo
+      : []
+    : listSource;
 
   const tabs = useMemo(() => {
     const out = [];
@@ -818,6 +1010,15 @@ export default function Welcome() {
         key: "docs",
         label: "Browse Documents",
         onClick: openBrowseDocs,
+      });
+    if (tabsEnabled.price)
+      out.push({
+        key: "price",
+        label: "Price Estimate",
+        onClick: () => {
+          setSelected(null);
+          setMode("price");
+        },
       });
     if (tabsEnabled.meeting)
       out.push({
@@ -852,8 +1053,7 @@ export default function Welcome() {
             </div>
           ) : (
             <div className="text-sm text-gray-600">
-              Provide a <code>?bot_id=…</code> or <code>?alias=…</code> in the
-              URL
+              Provide a <code>?bot_id=…</code> or <code>?alias=…</code>
               {defaultAlias ? (
                 <> (trying default alias “{defaultAlias}”)</>
               ) : null}
@@ -865,14 +1065,32 @@ export default function Welcome() {
     );
   }
 
+  const showAskBottom = mode !== "price" || !!priceEstimate;
+  const embedDomain =
+    typeof window !== "undefined" ? window.location.hostname : "";
   const logoSrc =
     brandAssets.logo_url ||
     brandAssets.logo_light_url ||
     brandAssets.logo_dark_url ||
     fallbackLogo;
 
-  const listSource = mode === "browse" ? browseItems : items;
-  const visibleUnderVideo = selected ? (mode === "ask" ? items : []) : listSource;
+  // Powered-by logo (new URL already provided)
+  const poweredByLogo =
+    "https://rvwcyysphhaawvzzyjxq.supabase.co/storage/v1/object/public/demohal-logos/f3ab3e92-9855-4c9b-8038-0a9e483218b7/Powered%20by%20logo.png";
+
+  const LogoWrap = websiteUrl
+    ? ({ children }) => (
+        <a
+          href={websiteUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex"
+          title={websiteUrl}
+        >
+          {children}
+        </a>
+      )
+    : ({ children }) => <>{children}</>;
 
   return (
     <div
@@ -882,12 +1100,21 @@ export default function Welcome() {
       )}
       style={liveTheme}
     >
-      <div className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all">
+      <div
+        ref={frameRef}
+        className="w-full max-w-[720px] h-[100dvh] md:h-[90vh] bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all duration-300"
+      >
         {/* Header */}
         <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)]">
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
-              <img src={logoSrc} alt="Brand logo" className="h-10 object-contain" />
+              <LogoWrap>
+                <img
+                  src={logoSrc}
+                  alt="Brand logo"
+                  className="h-10 object-contain"
+                />
+              </LogoWrap>
             </div>
             <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
               {selected
@@ -896,266 +1123,290 @@ export default function Welcome() {
                 ? "Browse Demos"
                 : mode === "docs"
                 ? "Browse Documents"
+                : mode === "price"
+                ? "Price Estimate"
                 : mode === "meeting"
                 ? "Schedule Meeting"
-                : mode === "formfill"
-                ? "Tell us about yourself"
                 : "Ask the Assistant"}
             </div>
           </div>
-          {/* Tabs */}
-            <TabsNav mode={mode} tabs={tabs} />
+          <TabsNav mode={mode} tabs={tabs} />
         </div>
 
-        {/* BODY */}
-        <div
-          ref={contentRef}
-          className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto"
-        >
-          {mode === "formfill" ? (
-            <div className="space-y-4">
-              <div className="text-base font-semibold">
-                Before we get started, please take a minute to tell us a little
-                about yourself so that we can give you the best experience
-                possible.
-              </div>
-              <FormFillCard
-                fields={activeFormFields}
-                defaults={formDefaults}
-                onSubmit={async (vals) => {
-                  try {
-                    await fetch(`${apiBase}/visitor-formfill`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        visitor_id: visitorId,
-                        values: vals,
-                      }),
-                    });
-                  } catch {}
-                  try {
-                    sessionStorage.setItem(FORM_KEY, "1");
-                  } catch {}
-                  setFormCompleted(true);
-                  const p = pending;
-                  setPending(null);
-                  if (p?.type === "ask" && p.payload?.text)
-                    await doSend(p.payload.text);
-                  else if (p?.type === "demos") await _openBrowse();
-                  else if (p?.type === "docs") await _openBrowseDocs();
-                  else if (p?.type === "meeting") await _openMeeting();
-                  else setMode("ask");
-                }}
-              />
-            </div>
-          ) : mode === "meeting" ? (
-            <div className="w-full flex-1 flex flex-col">
-              {!agent ? (
-                <div className="text-sm text-[var(--helper-fg)]">
-                  Loading scheduling…
+        {/* Modes */}
+        {mode === "price" ? (
+          <>
+            <div className="px-6 pt-3 pb-2">
+              <PriceMirror lines={mirrorLines.length ? mirrorLines : [""]} />
+              {!mirrorLines.length ? (
+                <div className="text-base font-bold whitespace-pre-line">
+                  {pricingCopy?.intro ||
+                    "This tool provides a quick estimate based on your selections. Final pricing may vary by configuration, usage, and implementation."}
                 </div>
-              ) : agent.calendar_link_type &&
-                String(agent.calendar_link_type).toLowerCase() === "embed" &&
-                agent.calendar_link ? (
-                <iframe
-                  title="Schedule a Meeting"
-                  src={`${agent.calendar_link}${
-                    agent.calendar_link.includes("?") ? "&" : "?"
-                  }embed_domain=${embedDomain}&embed_type=Inline&session_id=${encodeURIComponent(
-                    sessionId || ""
-                  )}&visitor_id=${encodeURIComponent(
-                    visitorId || ""
-                  )}&bot_id=${encodeURIComponent(botId || "")}`}
-                  style={{
-                    width: "100%",
-                    height: "60vh",
-                    maxHeight: "640px",
-                    background: "var(--card-bg)",
-                  }}
-                  className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
+              ) : null}
+            </div>
+            <div
+              ref={priceScrollRef}
+              className="px-6 pt-0 pb-6 flex-1 overflow-y-auto"
+            >
+              {!priceQuestions?.length ? (
+                <div className="text-sm text-[var(--helper-fg)]">
+                  Loading questions…
+                </div>
+              ) : nextPriceQuestion ? (
+                <QuestionBlock
+                  q={nextPriceQuestion}
+                  value={priceAnswers[nextPriceQuestion.q_key]}
+                  onPick={handlePickOption}
                 />
-              ) : agent.calendar_link_type &&
-                String(agent.calendar_link_type).toLowerCase() === "external" &&
-                agent.calendar_link ? (
-                <div className="text-sm text-gray-700">
-                  We opened the scheduling page in a new tab. If it didn’t
-                  open,&nbsp;
-                  <a
-                    href={agent.calendar_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 underline"
-                  >
-                    click here to open it
-                  </a>
-                  .
+              ) : priceEstimate && priceEstimate.custom ? (
+                <div className="text-base font-bold whitespace-pre-line">
+                  {pricingCopy?.custom_notice ||
+                    "We’ll follow up with a custom quote tailored to your selection."}
                 </div>
               ) : (
-                <div className="text-sm text-[var(--helper-fg)]">
-                  No scheduling link is configured.
-                </div>
+                <EstimateCard
+                  estimate={priceEstimate}
+                  outroText={pricingCopy?.outro || ""}
+                />
               )}
+              {priceBusy ? (
+                <div className="mt-2 text-sm text-[var(--helper-fg)]">
+                  Calculating…
+                </div>
+              ) : null}
+              {priceErr ? (
+                <div className="mt-2 text-sm text-red-600">{priceErr}</div>
+              ) : null}
             </div>
-          ) : selected ? (
-            <div className="w-full flex-1 flex flex-col">
-              {mode === "docs" ? (
-                <DocIframe doc={selected} />
-              ) : (
+          </>
+        ) : (
+          <div
+            ref={contentRef}
+            className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto"
+          >
+            {mode === "meeting" ? (
+              <div className="w-full flex-1 flex flex-col">
                 <div className="bg-[var(--card-bg)] pt-2 pb-2">
-                  <iframe
-                    style={{ width: "100%", aspectRatio: "471 / 272" }}
-                    src={selected.url}
-                    title={selected.title}
-                    className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
-                </div>
-              )}
-              {mode === "ask" && (visibleUnderVideo || []).length > 0 && (
-                <>
-                  <div className="flex items-center justify-between mt-1 mb-3">
-                    <p className="italic text-[var(--helper-fg)]">
-                      Recommended demos
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    {visibleUnderVideo.map((it) => (
-                      <Row
-                        key={it.id || it.url || it.title}
-                        item={it}
-                        onPick={(val) => normalizeAndSelectDemo(val)}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          ) : mode === "browse" ? (
-            <div className="w-full flex-1 flex flex-col">
-              {(browseItems || []).length > 0 && (
-                <>
-                  <div className="flex items-center justify-between mt-2 mb-3">
-                    <p className="italic text-[var(--helper-fg)]">
-                      Select a demo to view it
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    {browseItems.map((it) => (
-                      <Row
-                        key={it.id || it.url || it.title}
-                        item={it}
-                        onPick={(val) => normalizeAndSelectDemo(val)}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          ) : mode === "docs" ? (
-            <div className="w-full flex-1 flex flex-col">
-              {(browseDocs || []).length > 0 && (
-                <>
-                  <div className="flex items-center justify-between mt-2 mb-3">
-                    <p className="italic text-[var(--helper-fg)]">
-                      Select a document to view it
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    {browseDocs.map((it) => (
-                      <Row
-                        key={it.id || it.url || it.title}
-                        item={it}
-                        kind="doc"
-                        onPick={async (val) => {
-                          try {
-                            const r = await fetch(
-                              `${apiBase}/render-doc-iframe`,
-                              {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify(
-                                  withIdsBody({
-                                    bot_id: botId,
-                                    doc_id: val.id || "",
-                                    title: val.title || "",
-                                    url: val.url || "",
-                                  })
-                                ),
-                              }
-                            );
-                            const j = await r.json();
-                            setSelected({
-                              ...val,
-                              _iframe_html: j?.iframe_html || null,
-                            });
-                          } catch {
-                            setSelected(val);
-                          }
-                          requestAnimationFrame(() =>
-                            contentRef.current?.scrollTo({
-                              top: 0,
-                              behavior: "auto",
-                            })
-                          );
-                        }}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          ) : (
-            <div className="w-full flex-1 flex flex-col">
-              {!lastQuestion && !loading && (
-                <div className="space-y-3">
-                  <div className="text-base font-bold whitespace-pre-line">
-                    {responseText}
-                  </div>
-                  {showIntroVideo && introVideoUrl ? (
-                    <div style={{ position: "relative", paddingTop: "56.25%" }}>
-                      <iframe
-                        src={introVideoUrl}
-                        title="Intro Video"
-                        frameBorder="0"
-                        allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
-                        referrerPolicy="strict-origin-when-cross-origin"
-                        style={{
-                          position: "absolute",
-                          top: 0,
-                          left: 0,
-                          width: "100%",
-                          height: "100%",
-                        }}
-                        className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
-                      />
+                  {agent?.schedule_header ? (
+                    <div className="mb-2 text-sm italic whitespace-pre-line text-[var(--helper-fg)]">
+                      {agent.schedule_header}
                     </div>
                   ) : null}
+                  {!agent ? (
+                    <div className="text-sm text-[var(--helper-fg)]">
+                      Loading scheduling…
+                    </div>
+                  ) : agent.calendar_link_type &&
+                    String(agent.calendar_link_type).toLowerCase() ===
+                      "embed" &&
+                    agent.calendar_link ? (
+                    <iframe
+                      title="Schedule a Meeting"
+                      src={`${agent.calendar_link}${
+                        agent.calendar_link.includes("?") ? "&" : "?"
+                      }embed_domain=${embedDomain}&embed_type=Inline&session_id=${encodeURIComponent(
+                        sessionId || ""
+                      )}&visitor_id=${encodeURIComponent(
+                        visitorId || ""
+                      )}&bot_id=${encodeURIComponent(
+                        botId || ""
+                      )}&utm_source=${encodeURIComponent(
+                        botId || ""
+                      )}&utm_medium=${encodeURIComponent(
+                        sessionId || ""
+                      )}&utm_campaign=${encodeURIComponent(visitorId || "")}`}
+                      style={{
+                        width: "100%",
+                        height: "60vh",
+                        maxHeight: "640px",
+                        background: "var(--card-bg)",
+                      }}
+                      className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
+                    />
+                  ) : agent.calendar_link_type &&
+                    String(agent.calendar_link_type).toLowerCase() ===
+                      "external" &&
+                    agent.calendar_link ? (
+                    <div className="text-sm text-gray-700">
+                      We opened the scheduling page in a new tab. If it didn’t
+                      open,&nbsp;
+                      <a
+                        href={agent.calendar_link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 underline"
+                      >
+                        click here to open it
+                      </a>
+                      .
+                    </div>
+                  ) : (
+                    <div className="text-sm text-[var(--helper-fg)]">
+                      No scheduling link is configured.
+                    </div>
+                  )}
                 </div>
-              )}
-              {lastQuestion ? (
-                <p className="text-base italic text-center mb-2 text-[var(--helper-fg)]">
-                  "{lastQuestion}"
-                </p>
-              ) : null}
-              <div className="text-left mt-2">
-                {loading ? (
-                  <p className="font-semibold animate-pulse text-[var(--helper-fg)]">
-                    Thinking…
-                  </p>
-                ) : lastQuestion ? (
-                  <p className="text-base font-bold whitespace-pre-line">
-                    {responseText}
+              </div>
+            ) : selected ? (
+              <div className="w-full flex-1 flex flex-col">
+                {mode === "docs" ? (
+                  <DocIframe doc={selected} />
+                ) : (
+                  <div className="bg-[var(--card-bg)] pt-2 pb-2">
+                    <iframe
+                      style={{ width: "100%", aspectRatio: "471 / 272" }}
+                      src={selected.url}
+                      title={selected.title}
+                      className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  </div>
+                )}
+                {mode === "ask" && (visibleUnderVideo || []).length > 0 && (
+                  <>
+                    <div className="flex items-center justify-between mt-1 mb-3">
+                      <p className="italic text-[var(--helper-fg)]">
+                        Recommended demos
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      {visibleUnderVideo.map((it) => (
+                        <Row
+                          key={it.id || it.url || it.title}
+                          item={it}
+                          onPick={(val) => normalizeAndSelectDemo(val)}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : mode === "browse" ? (
+              <div className="w-full flex-1 flex flex-col">
+                {(browseItems || []).length > 0 && (
+                  <>
+                    <div className="flex items-center justify-between mt-2 mb-3">
+                      <p className="italic text-[var(--helper-fg)]">
+                        Select a demo to view it
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      {browseItems.map((it) => (
+                        <Row
+                          key={it.id || it.url || it.title}
+                          item={it}
+                          onPick={(val) => normalizeAndSelectDemo(val)}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : mode === "docs" ? (
+              <div className="w-full flex-1 flex flex-col">
+                {(browseDocs || []).length > 0 && (
+                  <>
+                    <div className="flex items-center justify-between mt-2 mb-3">
+                      <p className="italic text-[var(--helper-fg)]">
+                        Select a document to view it
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      {browseDocs.map((it) => (
+                        <Row
+                          key={it.id || it.url || it.title}
+                          item={it}
+                          kind="doc"
+                          onPick={async (val) => {
+                            try {
+                              const r = await fetch(
+                                `${apiBase}/render-doc-iframe`,
+                                {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify(
+                                    withIdsBody({
+                                      bot_id: botId,
+                                      doc_id: val.id || "",
+                                      title: val.title || "",
+                                      url: val.url || "",
+                                    })
+                                  ),
+                                }
+                              );
+                              await r.json();
+                              setSelected(val);
+                            } catch {
+                              setSelected(val);
+                            }
+                            requestAnimationFrame(() =>
+                              contentRef.current?.scrollTo({
+                                top: 0,
+                                behavior: "auto",
+                              })
+                            );
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="w-full flex-1 flex flex-col">
+                {!lastQuestion && !loading && (
+                  <div className="space-y-3">
+                    <div className="text-base font-bold whitespace-pre-line">
+                      {responseText}
+                    </div>
+                    <DebugPanel debug={debugInfo} />
+                    {showIntroVideo && introVideoUrl ? (
+                      <div style={{ position: "relative", paddingTop: "56.25%" }}>
+                        <iframe
+                          src={introVideoUrl}
+                          title="Intro Video"
+                          frameBorder="0"
+                          allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
+                          referrerPolicy="strict-origin-when-cross-origin"
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            width: "100%",
+                            height: "100%",
+                          }}
+                          className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+                {lastQuestion ? (
+                  <p className="text-base italic text-center mb-2 text-[var(--helper-fg)]">
+                    "{lastQuestion}"
                   </p>
                 ) : null}
-              </div>
-              {(items || []).length > 0 && (
-                <> 
+                <div className="text-left mt-2">
+                  {loading ? (
+                    <p className="font-semibold animate-pulse text-[var(--helper-fg)]">
+                      Thinking…
+                    </p>
+                  ) : lastQuestion ? (
+                    <p className="text-base font-bold whitespace-pre-line">
+                      {responseText}
+                    </p>
+                  ) : null}
+                </div>
+                {helperPhase !== "hidden" && (
                   <div className="flex items-center justify-between mt-3 mb-2">
                     <p className="italic text-[var(--helper-fg)]">
                       Recommended demos
                     </p>
                   </div>
+                )}
+                {helperPhase === "buttons" && (items || []).length > 0 && (
                   <div className="flex flex-col gap-3">
                     {items.map((it) => (
                       <Row
@@ -1165,34 +1416,403 @@ export default function Welcome() {
                       />
                     ))}
                   </div>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Bottom Ask Bar */}
-        {mode !== "formfill" && (
-          <AskInputBar
-            value={input}
-            onChange={setInput}
-            onSend={onSendClick}
-            inputRef={inputRef}
-          />
+                )}
+              </div>
+            )}
+          </div>
         )}
+
+        {/* Bottom Ask Bar - textarea full width, powered-by logo anchored bottom-left with 5px gap */}
+        <div
+          className="relative px-4 pt-4 border-t border-[var(--border-default)]"
+          data-patch="ask-bottom-bar"
+          style={{
+            paddingBottom: "calc(11 * 4px + 5px)", // tailwind h-11 ≈ 44px + 5px gap
+          }}
+        >
+          {showAskBottom ? (
+            <>
+              {/* Full-width textarea wrapper (adds exact 5px space above logo) */}
+              <div className="relative">
+                <textarea
+                  ref={inputRef}
+                  rows={1}
+                  className="w-full rounded-[0.75rem] px-4 py-3 pr-14 text-base placeholder-gray-400 resize-y min-h-[3.25rem] max-h-[200px] bg-[var(--card-bg)] border border-[var(--border-default)] focus:border-[var(--border-default)] focus:ring-1 focus:ring-[var(--border-default)] outline-none mb-[5px]"
+                  placeholder="Ask your question here"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onInput={(e) => {
+                    e.currentTarget.style.height = "auto";
+                    e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      sendMessage();
+                    }
+                  }}
+                />
+                <button
+                  aria-label="Send"
+                  onClick={sendMessage}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 active:scale-95"
+                >
+                  <ArrowUpCircleIcon className="w-9 h-9 text-[var(--send-color)] hover:brightness-110" />
+                </button>
+              </div>
+
+              {/* Powered By logo absolute anchored bottom-left */}
+              <a
+                href="https://demohal.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Powered by DemoHAL"
+                className="absolute left-4 bottom-2 inline-flex"
+              >
+                <img
+                  src={poweredByLogo}
+                  alt="Powered by DemoHAL"
+                  className="h-11 w-auto object-contain select-none"
+                  loading="lazy"
+                  draggable="false"
+                />
+              </a>
+            </>
+          ) : null}
+        </div>
       </div>
 
       {themeLabOn && botId ? (
-        <ThemeLabInline
+        <ColorBox
           apiBase={apiBase}
           botId={botId}
-          frameRef={contentRef}
-          onVars={(vars) =>
-            setPickerVars(
-              typeof vars === "function" ? vars : { ...(vars || {}) }
-            )
-          }
+          frameRef={frameRef}
+          onVars={(vars) => setPickerVars(vars)}
         />
+      ) : null}
+    </div>
+  );
+}
+
+function DocIframe({ doc }) {
+  const iframeSrc = React.useMemo(() => {
+    const html = doc?._iframe_html || "";
+    if (!html) return null;
+    const m = html.match(/src="([^"]+)"/i) || html.match(/src='([^']+)'/i);
+    return m ? m[1] : null;
+  }, [doc?._iframe_html]);
+  const src = iframeSrc || doc?.url || "";
+  return (
+    <div className="bg-[var(--card-bg)] pt-2 pb-2">
+      <iframe
+        className="w-full h-[65vh] md:h-[78vh] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
+        src={src}
+        title={doc?.title || "Document"}
+        loading="lazy"
+        referrerPolicy="strict-origin-when-cross-origin"
+        allow="fullscreen"
+      />
+    </div>
+  );
+}
+
+function ColorBox({ apiBase, botId, frameRef, onVars }) {
+  const [rows, setRows] = useState([]);
+  const [values, setValues] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [authState, setAuthState] = useState("checking");
+  const [password, setPassword] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [pos, setPos] = useState({ left: 16, top: 16, width: 460 });
+
+  useEffect(() => {
+    function updatePos() {
+      const rect = frameRef.current?.getBoundingClientRect();
+      const width = 460;
+      const gap = 12;
+      if (!rect) {
+        setPos({ left: 16, top: 16, width });
+        return;
+      }
+      const left = Math.max(8, rect.left - width - gap);
+      const top = Math.max(8, rect.top + 8);
+      setPos({ left, top, width });
+    }
+    updatePos();
+    const h = () => updatePos();
+    window.addEventListener("resize", h);
+    window.addEventListener("scroll", h, { passive: true });
+    return () => {
+      window.removeEventListener("resize", h);
+      window.removeEventListener("scroll", h);
+    };
+  }, [frameRef]);
+
+  async function checkStatusAndMaybeLoad() {
+    try {
+      setAuthError("");
+      setAuthState("checking");
+      const res = await fetch(
+        `${apiBase}/themelab/status?bot_id=${encodeURIComponent(botId)}`
+      );
+      if (res.status === 200) {
+        setAuthState("ok");
+        await load();
+      } else if (res.status === 401) {
+        setAuthState("need_password");
+      } else if (res.status === 403) {
+        setAuthState("disabled");
+      } else {
+        setAuthState("error");
+      }
+    } catch {
+      setAuthState("error");
+    }
+  }
+
+  useEffect(() => {
+    checkStatusAndMaybeLoad();
+  }, [apiBase, botId]);
+
+  async function load() {
+    const res = await fetch(
+      `${apiBase}/brand/client-tokens?bot_id=${encodeURIComponent(botId)}`,
+      { credentials: "include" }
+    );
+    const data = await res.json();
+    const toks = (data?.ok ? data.tokens : []) || [];
+    setRows(toks);
+    const v = {};
+    toks.forEach((t) => {
+      v[t.token_key] = t.value || "#000000";
+    });
+    setValues(v);
+    const css = {};
+    toks.forEach((t) => {
+      const cssVar = TOKEN_TO_CSS[t.token_key];
+      if (cssVar) css[cssVar] = v[t.token_key];
+    });
+    onVars(css);
+  }
+
+  function updateToken(tk, value) {
+    const v = value || "";
+    setValues((prev) => ({ ...prev, [tk]: v }));
+    const cssVar = TOKEN_TO_CSS[tk];
+    if (cssVar) onVars((prev) => ({ ...prev, [cssVar]: v }));
+  }
+
+  async function doSave() {
+    try {
+      setBusy(true);
+      const updates = Object.entries(values).map(([token_key, value]) => ({
+        token_key,
+        value,
+      }));
+      const res = await fetch(`${apiBase}/brand/client-tokens/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ bot_id: botId, updates }),
+      });
+      const data = await res.json();
+      if (!data?.ok) throw new Error(data?.error || "save_failed");
+      setMsg(`Saved ${data.updated} token(s).`);
+      setTimeout(() => setMsg(""), 1800);
+    } catch {
+      setMsg("Save failed.");
+      setTimeout(() => setMsg(""), 2000);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doReset() {
+    await load();
+    setMsg("Colors restored from database.");
+    setTimeout(() => setMsg(""), 1800);
+  }
+
+  async function doLogin(e) {
+    e?.preventDefault();
+    try {
+      setAuthError("");
+      const res = await fetch(`${apiBase}/themelab/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ bot_id: botId, password }),
+      });
+      const data = await res.json();
+      if (res.status === 200 && data?.ok) {
+        setAuthState("ok");
+        setPassword("");
+        await load();
+      } else if (res.status === 403) {
+        setAuthState("disabled");
+      } else {
+        setAuthError("Invalid password.");
+      }
+    } catch {
+      setAuthError("Login failed.");
+    }
+  }
+
+  const groups = React.useMemo(() => {
+    const byScreen = new Map();
+    for (const r of rows) {
+      const key = r.screen_key || "welcome";
+      if (!byScreen.has(key)) byScreen.set(key, []);
+      byScreen.get(key).push(r);
+    }
+    SCREEN_ORDER.forEach(({ key }) => {
+      if (byScreen.has(key)) {
+        byScreen
+          .get(key)
+          .sort((a, b) =>
+            String(a.label || "").localeCompare(String(b.label || ""))
+          );
+      }
+    });
+    return byScreen;
+  }, [rows]);
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        left: pos.left,
+        top: pos.top,
+        width: pos.width,
+        background: "#fff",
+        border: "1px solid rgba(0,0,0,0.2)",
+        borderRadius: "0.75rem",
+        padding: 12,
+        zIndex: 50,
+      }}
+    >
+      <div className="text-2xl font-extrabold mb-2">Colors</div>
+      {authState === "checking" && (
+        <div className="text-sm text-gray-600">Checking access…</div>
+      )}
+      {authState === "disabled" && (
+        <div className="text-sm text-gray-600">
+          ThemeLab is disabled for this bot.
+        </div>
+      )}
+      {authState === "need_password" && (
+        <form onSubmit={doLogin} className="flex items-center gap-2">
+          <input
+            type="password"
+            placeholder="Enter ThemeLab password"
+            className="flex-1 rounded-[0.75rem] border border-black/20 px-3 py-2"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <button
+            type="submit"
+            className="px-3 py-2 rounded-[0.75rem] bg-black text-white hover:brightness-110"
+          >
+            Unlock
+          </button>
+          {authError ? (
+            <div className="text-xs text-red-600 ml-2">{authError}</div>
+          ) : null}
+        </form>
+      )}
+      {authState === "ok" && (
+        <>
+          {SCREEN_ORDER.map(({ key, label }) => (
+            <div key={key} className="mb-2">
+              <div className="text-sm font-bold mb-1">{label}</div>
+              <div className="space-y-1 pl-1">
+                {(groups.get(key) || []).map((t) => (
+                  <div
+                    key={t.token_key}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <div className="text-xs">{t.label}</div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={values[t.token_key] || "#000000"}
+                        onChange={(e) => updateToken(t.token_key, e.target.value)}
+                        style={{
+                          width: 32,
+                          height: 24,
+                          borderRadius: 6,
+                          border: "1px solid rgba(0,0,0,0.2)",
+                        }}
+                        title={t.token_key}
+                      />
+                      <code className="text-[11px] opacity-70">
+                        {values[t.token_key] || ""}
+                      </code>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          <div className="mt-3 flex items-center justify-between">
+            <div className="text-xs text-gray-600">{msg}</div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={doReset}
+                disabled={busy}
+                className="px-3 py-1 rounded-[0.75rem] border border-black/20 bg-white hover:brightness-105"
+              >
+                Reset
+              </button>
+              <button
+                onClick={doSave}
+                disabled={busy}
+                className="px-3 py-1 rounded-[0.75rem] bg-black text-white hover:brightness-110"
+              >
+                {busy ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+      {authState === "error" && (
+        <div className="text-sm text-red-600">Unable to verify access.</div>
+      )}
+    </div>
+  );
+}
+
+function DebugPanel({ debug }) {
+  if (!debug) return null;
+  const ac = debug.active_context || {};
+  return (
+    <div className="mt-3 p-3 rounded-lg bg-[var(--card-bg)] border border-[var(--border-default)] text-xs whitespace-pre-wrap">
+      <div className="font-bold mb-1">Debug</div>
+      <div>
+        <b>Scope:</b> {String(debug.request_scope || "")}
+      </div>
+      <div>
+        <b>Non-specific:</b> {String(debug.nonspecific)}
+      </div>
+      <div>
+        <b>Demo ID:</b> {debug.demo_id || "—"} <b>Doc ID:</b>{" "}
+        {debug.doc_id || "—"}
+      </div>
+      <div className="mt-2">
+        <b>Active Context Enabled:</b> {String(ac.enabled)}
+      </div>
+      {ac.text ? (
+        <details className="mt-1">
+          <summary className="cursor-pointer">Active Context</summary>
+          <pre className="mt-1">{ac.text}</pre>
+        </details>
+      ) : null}
+      {debug.system_preview ? (
+        <details className="mt-2">
+          <summary className="cursor-pointer">System Preview</summary>
+          <pre className="mt-1">{debug.system_preview}</pre>
+        </details>
       ) : null}
     </div>
   );
