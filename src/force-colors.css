@@ -1,0 +1,33 @@
+/* Final safety net: force readable text everywhere */
+:root {
+  /* Re‑assert core variables in case tokens.css blanked them */
+  --message-fg: #000000;
+  --helper-fg: #4b5563;
+  --page-bg: #ffffff;
+  --card-bg: #ffffff;
+}
+
+html, body, #root {
+  color: var(--message-fg, #000) !important;
+  background: var(--page-bg, #fff) !important;
+}
+
+/* All descendants inherit (unless they explicitly set color) */
+#root, #root * {
+  color: inherit !important;
+}
+
+/* Make sure “helper” text stays darker than very light grays */
+.text-helper, .helper, .small-note {
+  color: var(--helper-fg, #4b5563) !important;
+}
+
+/* Buttons / inputs */
+button, input, textarea {
+  color: var(--message-fg, #000) !important;
+}
+
+/* If something explicitly painted very light (like #f5f5f5) on white bg, bump contrast */
+*[style*="color: rgb(245"], *[style*="#f5f5f5"] {
+  color: #000 !important;
+}
