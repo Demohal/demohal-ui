@@ -1,110 +1,100 @@
-// FormFillCard.jsx — FULL REPLACEMENT (Strategy 1 placeholder update for perspective)
-// CHANGES (this revision):
-//  - Implement Strategy 1 for the 'perspective' single_select field:
-//      * When value is null/empty, show a disabled, hidden placeholder <option>
-//        so that the placeholder text renders but is not a valid selectable choice.
-//      * No "clear" control is added (per request).
-//  - Non‑perspective selects keep prior behavior (placeholder option still selectable).
-//  - Internal value for perspective remains "" (empty string) when unset; caller
-//    can treat unset ("" or null) as null and substitute "general" server-side.
-//
-// Props:
-//   fields: Array<{ field_key, label, field_type, is_required, is_collected, options?, tooltip?, placeholder? }>
-//   defaults?: Record<string,string|null|undefined>
-//   onSubmit(values: Record<string,string>): void
-//   onCancel?: () => void
-//
+// FormFillCard.jsx — perspective placeholder strategy (non-selectable empty for perspective)
+// Empty perspective omitted on submit so server can treat as "general".
 import React from "react";
 
-function classNames(...xs) {
+function cls(...xs) {
   return xs.filter(Boolean).join(" ");
 }
 
 function FieldRow({ f, value, onChange, error }) {
   const id = `ff_${f.field_key}`;
-  const t = (f.field_type || "text").toLowerCase();
+  const type = (f.field_type || "text").toLowerCase();
   const opts = Array.isArray(f.options) ? f.options.filter(Boolean) : [];
   const isSelect =
-    t === "single_select" || (opts.length > 0 && t !== "multi_select");
+    type === "single_select" ||
+    (opts.length > 0 && type !== "multi_select");
   const isPerspective = f.field_key === "perspective";
 
-  // Placeholder text only when no value chosen
-  const effectivePlaceholder =
-    value
-      ? undefined
-      : f.placeholder ||
+  const placeholder =
+    !value
+      ? f.placeholder ||
         f.tooltip ||
-        (isSelect
-          ? `Select ${f.label || f.field_key}`
-          : "");
+        (isSelect ? `Select ${f.label || f.field_key}` : "")
+      : undefined;
 
   return (
     <div className="space-y-1">
-      <label htmlFor={id} className="text-sm font-medium flex items-center gap-1">
+      <label
+        htmlFor={id}
+        className="text-sm font-medium flex items-center gap-1"
+      >
         <span>{f.label || f.field_key}</span>
-        {f.is_required ? (
+        {f.is_required && (
           <span className="text-red-500 ml-0.5">*</span>
-        ) : null}
+        )}
       </label>
-
       {isSelect ? (
         <div>
           <select
             id={id}
-            className={classNames(
+            className={cls(
               "w-full rounded-[0.75rem] px-3 py-2 text-sm border",
               "border-[var(--border-default)] bg-[var(--card-bg)]",
               "focus:outline-none focus:ring-1 focus:ring-[var(--border-default)]"
             )}
-            // Keep empty string while unset so placeholder shows
             value={value ?? ""}
             onChange={(e) => onChange(e.target.value)}
           >
-            {/* Strategy 1: disabled+hidden placeholder ONLY for perspective */}
-            <option value="">
-              {effectivePlaceholder || `Select ${f.label || f.field_key}`}
-            </option>
+            {isPerspective ? (
+              <option value="" disabled hidden>
+                {placeholder || "Select Perspective"}
+              </option>
+            ) : (
+              <option value="">
+                {placeholder ||
+                  `Select ${f.label || f.field_key}`}
+              </option>
+            )}
             {opts.map((o) => {
               const k = o.key ?? o.value ?? o.id;
-              const lbl = o.label ?? o.title ?? k;
               if (k == null) return null;
               return (
                 <option key={k} value={String(k)}>
-                  {lbl}
+                  {o.label ?? o.title ?? k}
                 </option>
               );
             })}
           </select>
-          {error ? (
+          {error && (
             <div className="text-xs text-red-600 mt-1">{error}</div>
-          ) : null}
+          )}
         </div>
       ) : (
         <>
           <input
             id={id}
             type={
-              t === "email"
+              type === "email"
                 ? "email"
-                : t === "number"
+                : type === "number"
                 ? "number"
-                : t === "phone"
+                : type === "phone"
                 ? "tel"
                 : "text"
             }
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            placeholder={effectivePlaceholder || ""}
-            className={classNames(
+            placeholder={placeholder || ""}
+            className={cls(
               "w-full rounded-[0.75rem] px-3 py-2 text-sm border",
               "border-[var(--border-default)] bg-[var(--card-bg)]",
               "focus:outline-none focus:ring-1 focus:ring-[var(--border-default)]"
             )}
             autoComplete="off"
           />
-          {error ? (
+          {error && (
             <div className="text-xs text-red-600">{error}</div>
-          ) : null}
+          )}
         </>
       )}
     </div>
@@ -117,7 +107,7 @@ export default function FormFillCard({
   onSubmit,
   onCancel,
 }) {
-  const collectedFields = React.useMemo(
+  const collected = React.useMemo(
     () => (fields || []).filter((f) => f && f.is_collected),
     [fields]
   );
@@ -125,20 +115,25 @@ export default function FormFillCard({
   const initial = React.useMemo(() => {
     const o = {};
     (fields || []).forEach((f) => {
-      if (!f || !f.field_key) return;
-      const k = String(f.field_key);
-      const raw = defaults && Object.prototype.hasOwnProperty.call(defaults, k)
-        ? defaults[k]
-        : "";
-      // Preserve null by converting to "" for controlled components;
-      // caller interprets "" / missing perspective as null.
-      o[k] = typeof raw === "string" ? raw : (raw == null ? "" : String(raw));
+      if (!f?.field_key) return;
+      const k = f.field_key;
+      const raw =
+        defaults && Object.prototype.hasOwnProperty.call(defaults, k)
+          ? defaults[k]
+          : "";
+      o[k] =
+        typeof raw === "string"
+          ? raw
+          : raw == null
+          ? ""
+          : String(raw);
     });
     return o;
   }, [fields, defaults]);
 
   const [values, setValues] = React.useState(initial);
   const [errors, setErrors] = React.useState({});
+
   React.useEffect(() => {
     setValues(initial);
     setErrors({});
@@ -146,24 +141,34 @@ export default function FormFillCard({
 
   function validateField(f, v) {
     const s = (v ?? "").toString().trim();
-    const t = (f.field_type || "text").toLowerCase();
-    const opts = Array.isArray(f.options) ? f.options.filter(Boolean) : [];
-    const optionKeys = opts.map((o) =>
-      String(o.key ?? o.value ?? o.id ?? "").toLowerCase()
-    );
-    if (f.is_required && s.length === 0) {
-      return "Required";
-    }
+    if (f.is_required && s.length === 0) return "Required";
     if (s.length === 0) return null;
+    const t = (f.field_type || "text").toLowerCase();
     switch (t) {
       case "email":
-        return /[^@\s]+@[^@\s]+\.[^@\s]+/.test(s) ? null : "Invalid email";
+        return /[^@\s]+@[^@\s]+\.[^@\s]+/.test(s)
+          ? null
+          : "Invalid email";
       case "number":
-        return /^-?\d+(?:[.,]\d+)?$/.test(s) ? null : "Invalid number";
+        return /^-?\d+(?:[.,]\d+)?$/.test(s)
+          ? null
+          : "Invalid number";
       case "phone":
-        return /^[0-9+()\-\s]{7,}$/.test(s) ? null : "Invalid phone";
+        return /^[0-9+()\-\s]{7,}$/.test(s)
+          ? null
+          : "Invalid phone";
       case "single_select":
-        if (optionKeys.length && !optionKeys.includes(s.toLowerCase())) {
+        if (
+          Array.isArray(f.options) &&
+          f.options.length > 0 &&
+          !f.options
+            .map((o) =>
+              String(
+                o.key ?? o.value ?? o.id ?? ""
+              ).toLowerCase()
+            )
+            .includes(s.toLowerCase())
+        ) {
           return "Invalid choice";
         }
         return null;
@@ -174,11 +179,9 @@ export default function FormFillCard({
 
   function validateAll() {
     const e = {};
-    collectedFields.forEach((f) => {
-      if (!f?.field_key) return;
-      const k = String(f.field_key);
-      const err = validateField(f, values[k]);
-      if (err) e[k] = err;
+    collected.forEach((f) => {
+      const err = validateField(f, values[f.field_key]);
+      if (err) e[f.field_key] = err;
     });
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -187,35 +190,32 @@ export default function FormFillCard({
   function submit() {
     if (!validateAll()) return;
     const out = { ...values };
-    // For perspective: if still empty string, omit so caller can treat as null and fallback to 'general'
-    if (typeof out.perspective === "string" && !out.perspective.trim()) {
-      delete out.perspective;
-    }
-    onSubmit(out);
+    if (!out.perspective) delete out.perspective;
+    onSubmit && onSubmit(out);
   }
 
   return (
-    <div className="w-full bg-[var(--card-bg)] rounded-2xl p-4 md:p-5 border-2 border-[var(--border-default)] [box-shadow:var(--shadow-elevation)]">
+    <div className="w-full bg-[var(--card-bg)] rounded-2xl p-4 md:p-5 border border-[var(--border-default)] [box-shadow:var(--shadow-elevation)]">
       <div className="space-y-4">
-        {collectedFields.map((f) => (
+        {collected.map((f) => (
           <FieldRow
             key={f.field_key}
             f={f}
             value={values[f.field_key] ?? ""}
             onChange={(val) =>
-              setValues((s) => ({ ...s, [f.field_key]: val }))
+              setValues((p) => ({ ...p, [f.field_key]: val }))
             }
             error={errors[f.field_key]}
           />
         ))}
-        {collectedFields.length === 0 && (
+        {collected.length === 0 && (
           <div className="text-xs italic text-[var(--helper-fg)]">
-            No fields selected to collect.
+            No fields selected.
           </div>
         )}
       </div>
       <div className="mt-5 flex items-center justify-end gap-3">
-        {onCancel ? (
+        {onCancel && (
           <button
             type="button"
             onClick={onCancel}
@@ -223,10 +223,10 @@ export default function FormFillCard({
           >
             Cancel
           </button>
-        ) : null}
+        )}
         <button
           type="button"
-            aria-label="Continue"
+          aria-label="Continue"
           onClick={submit}
           className="h-10 w-10 rounded-full bg-[var(--send-color)] text-white flex items-center justify-center shadow hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-black"
         >
