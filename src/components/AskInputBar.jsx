@@ -44,8 +44,8 @@ export default function AskInputBar({
     <div
       className="relative px-4 pt-4 border-t border-[var(--border-default)]"
       style={{
-        // Logo h-6 is 24px, plus 16px (1rem) for symmetrical padding: 24 + 16 = 40px
-        paddingBottom: showLogo ? "40px" : "1rem",
+        // Logo h-4 is 16px, plus 16px (1rem) for symmetrical padding: 16 + 16 = 32px
+        paddingBottom: showLogo ? "32px" : "1rem",
       }}
       data-patch="ask-bottom-bar"
     >
