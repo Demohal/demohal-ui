@@ -13,7 +13,7 @@ export default function AskInputBar({
   disabled = false,
   show = true,
   poweredBy = "https://demohal.com/",
-  poweredByImg = "https://rvwcyysphhaawvzzyjxq.supabase.co/storage/v1/object/public/demohal-logos/f3ab3e92-9855-4c9b-8038-0a9e483218b7/Powered%20by%20logo.png",
+  poweredByImg = "https://rvwcyysphhaawvzzyjxq.supabase.co/storage/v1/object/public/demohal-logos/f3ab3e92-9855-4c9b-8038-0a9e483218b7/Powered%20By%20Logo.png",
   showLogo = true,
 }) {
   const localRef = useRef(null);
