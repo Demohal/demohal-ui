@@ -429,19 +429,17 @@ function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
 
   return (
     <div
+      className={[
+        "fixed z-[60] bg-white border border-black/20 rounded-xl shadow-xl overflow-y-auto",
+        "max-h-[92vh] p-3",
+        "w-[95vw] left-[2.5vw] top-2", // default: mobile
+        "sm:w-[460px] sm:left-auto sm:top-auto", // desktop: original width/placement
+      ].join(" ")}
       style={{
-        position: "fixed",
         left: pos.left,
         top: pos.top,
+        // Optionally: For desktop, you can let useFloatingPos still set left/top/width
         width: pos.width,
-        background: "#fff",
-        border: "1px solid rgba(0,0,0,0.2)",
-        borderRadius: 12,
-        padding: 12,
-        zIndex: 60,
-        boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
-        maxHeight: "92vh",
-        overflowY: "auto",
       }}
     >
       <div className="text-base font-bold mb-2">ThemeLab Colors</div>
@@ -754,19 +752,17 @@ function ThemeLabWordingBox({
 
   return (
     <div
+      className={[
+        "fixed z-[60] bg-white border border-black/20 rounded-xl shadow-xl overflow-y-auto",
+        "max-h-[92vh] p-3",
+        "w-[95vw] left-[2.5vw] top-2", // default: mobile
+        "sm:w-[460px] sm:left-auto sm:top-auto", // desktop: original width/placement
+      ].join(" ")}
       style={{
-        position: "fixed",
         left: pos.left,
         top: pos.top,
+        // Optionally: For desktop, you can let useFloatingPos still set left/top/width
         width: pos.width,
-        maxHeight: "92vh",
-        overflowY: "auto",
-        background: "#fff",
-        border: "1px solid rgba(0,0,0,0.2)",
-        borderRadius: 12,
-        padding: 14,
-        zIndex: 60,
-        boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
       }}
     >
       <div className="text-base font-bold mb-2">
