@@ -285,33 +285,48 @@ function EstimateCard({ estimate, outroText }) {
  * ============================================================ */
 function useFloatingPos(frameRef, side = "left", width = 460, gap = 12) {
   const [pos, setPos] = useState({ left: 16, top: 16, width });
+
   useEffect(() => {
     function update() {
-      const r = frameRef?.current?.getBoundingClientRect?.();
-      if (!r) return setPos({ left: 16, top: 16, width });
-      if (side === "left") {
-        setPos({
-          left: Math.max(8, r.left - width - gap),
-          top: Math.max(8, r.top + 8),
-          width,
-        });
+      const mainPanel = document.querySelector(
+        '.max-w-\\[720px\\]'
+      ); // this selects your main panel
+      let left = 16;
+      let top = 16;
+      let w = width;
+
+      // Responsive: match main panel horizontal position
+      if (window.innerWidth >= 640 && mainPanel) { // sm: and up
+        // Centered main panel: calc left edge
+        const mainRect = mainPanel.getBoundingClientRect();
+        if (side === "left") {
+          left = mainRect.left - width - gap;
+        } else {
+          left = mainRect.right + gap;
+        }
+        top = mainRect.top + 8;
+        w = width;
       } else {
-        setPos({
-          left: Math.min(window.innerWidth - width - 8, r.right + gap),
-          top: Math.max(8, r.top + 8),
-          width,
-        });
+        // Mobile: left align, nearly full width
+        left = Math.max(8, window.innerWidth * 0.025);
+        w = window.innerWidth * 0.95;
+        top = 8;
       }
+
+      // Prevent off screen
+      left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+      setPos({ left, top, width: w });
     }
+
     update();
-    const h = () => update();
-    window.addEventListener("resize", h);
-    window.addEventListener("scroll", h, { passive: true });
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, { passive: true });
     return () => {
-      window.removeEventListener("resize", h);
-      window.removeEventListener("scroll", h);
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update);
     };
   }, [frameRef, side, width, gap]);
+
   return pos;
 }
 
@@ -429,16 +444,13 @@ function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
 
   return (
     <div
-      className={[
-        "fixed z-[60] bg-white border border-black/20 rounded-xl shadow-xl overflow-y-auto",
-        "max-h-[92vh] p-3",
-        "w-[95vw] left-[2.5vw] top-2", // default: mobile
-        "sm:w-[460px] sm:left-auto sm:top-auto", // desktop: original width/placement
-      ].join(" ")}
+      className="fixed z-[60] bg-white border border-black/20 rounded-xl shadow-xl overflow-y-auto
+                 max-h-[92vh] p-2 text-sm
+                 w-[95vw] left-0 top-2
+                 sm:w-[460px] sm:p-4 sm:text-base"
       style={{
         left: pos.left,
         top: pos.top,
-        // Optionally: For desktop, you can let useFloatingPos still set left/top/width
         width: pos.width,
       }}
     >
@@ -752,16 +764,13 @@ function ThemeLabWordingBox({
 
   return (
     <div
-      className={[
-        "fixed z-[60] bg-white border border-black/20 rounded-xl shadow-xl overflow-y-auto",
-        "max-h-[92vh] p-3",
-        "w-[95vw] left-[2.5vw] top-2", // default: mobile
-        "sm:w-[460px] sm:left-auto sm:top-auto", // desktop: original width/placement
-      ].join(" ")}
+      className="fixed z-[60] bg-white border border-black/20 rounded-xl shadow-xl overflow-y-auto
+                 max-h-[92vh] p-2 text-sm
+                 w-[95vw] left-0 top-2
+                 sm:w-[460px] sm:p-4 sm:text-base"
       style={{
         left: pos.left,
         top: pos.top,
-        // Optionally: For desktop, you can let useFloatingPos still set left/top/width
         width: pos.width,
       }}
     >
