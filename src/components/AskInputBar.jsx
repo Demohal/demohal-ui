@@ -90,7 +90,7 @@ export default function AskInputBar({
           <img
             src={poweredByImg}
             alt="Powered by DemoHAL"
-            className="h-11 w-auto object-contain select-none"
+            className="h-6 w-auto object-contain select-none"
             loading="lazy"
             draggable="false"
           />
