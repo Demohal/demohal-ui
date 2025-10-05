@@ -44,7 +44,8 @@ export default function AskInputBar({
     <div
       className="relative px-4 pt-4 border-t border-[var(--border-default)]"
       style={{
-        paddingBottom: showLogo ? "calc(44px + 5px)" : "0.75rem",
+        // Logo h-6 is 24px, plus 16px (1rem) for symmetrical padding: 24 + 16 = 40px
+        paddingBottom: showLogo ? "40px" : "1rem",
       }}
       data-patch="ask-bottom-bar"
     >
@@ -85,7 +86,7 @@ export default function AskInputBar({
           target="_blank"
           rel="noopener noreferrer"
           title="Powered by DemoHAL"
-          className="absolute left-4 bottom-2 inline-flex"
+          className="absolute left-4 bottom-4 inline-flex"
         >
           <img
             src={poweredByImg}
