@@ -69,19 +69,19 @@ a:hover {
   line-height: 1.5;
   word-break: break-word;
 }
-.markdown-report table.markdown-table {
+.markdown-table {
   font-size: 0.75em;
   font-family: 'Roboto Mono', 'Consolas', 'Menlo', 'monospace', sans-serif;
   border-collapse: collapse;
   width: 100%;
 }
-.markdown-report table.markdown-table th,
-.markdown-report table.markdown-table td {
+.markdown-table th,
+.markdown-table td {
   border: 1px solid #ccc;
   padding: 4px 8px;
   font-weight: normal;
 }
-.markdown-report table.markdown-table th {
+.markdown-table th {
   background: #f6f6f6;
   font-weight: bold;
 }
