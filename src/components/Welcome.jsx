@@ -29,6 +29,7 @@ import DocIframe from "./DocIframe";
 import AskInputBar from "./AskInputBar";
 import FormFillCard from "./FormFillCard";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 /* ============================================================
  * CONSTANTS / HELPERS
@@ -2731,6 +2732,7 @@ export default function Welcome() {
                   explainMode && responseText ? (
                     <ReactMarkdown
                       className="markdown-report"
+                      remarkPlugins={[remarkGfm]}
                       components={{
                         table: ({node, ...props}) => <table {...props} className="markdown-table" />,
                       }}
