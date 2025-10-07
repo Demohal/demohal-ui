@@ -27,6 +27,7 @@ import Row from "./Row";
 import DocIframe from "./DocIframe";
 import AskInputBar from "./AskInputBar";
 import FormFillCard from "./FormFillCard";
+import ReactMarkdown from "react-markdown";
 
 /* ============================================================
  * CONSTANTS / HELPERS
@@ -2726,9 +2727,20 @@ export default function Welcome() {
                     Thinking…
                   </p>
                 ) : lastQuestion ? (
-                  <p className="text-base font-bold whitespace-pre-line">
-                    {responseText}
-                  </p>
+                  explainMode && responseText ? (
+                    <ReactMarkdown
+                      className="markdown-report"
+                      components={{
+                        table: ({node, ...props}) => <table {...props} className="markdown-table" />,
+                      }}
+                    >
+                      {responseText}
+                    </ReactMarkdown>
+                  ) : (
+                    <p className="text-base font-bold whitespace-pre-line">
+                      {responseText}
+                    </p>
+                  )
                 ) : null}
               </div>
               {(items || []).length > 0 && (
