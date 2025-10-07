@@ -1100,29 +1100,29 @@ export default function Welcome() {
   const apiBase =
     import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-  const {
+    const {
     alias,
     botIdFromUrl,
     themeLabOn,
     pidParam,
     agentAlias,
     urlParams,
+    explainMode: explainModeFromQS, // PATCH: add explainModeFromQS
   } = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     return {
       alias: (qs.get("alias") || qs.get("alais") || "").trim(),
       botIdFromUrl: (qs.get("bot_id") || "").trim(),
-      themeLabOn: (() => {
-        const v = (qs.get("themelab") || "").toLowerCase();
-        return v === "1" || v === "true";
-      })(),
-      pidParam: (qs.get("pid") || "").trim(),
-      agentAlias: (qs.get("agent") || "").trim(),
+      // ... other params ...
       urlParams: (() => {
         const o = {};
         qs.forEach((v, k) => (o[k] = v));
         return o;
       })(),
+      explainMode: (() => {
+        const v = (qs.get("explain") || "").toLowerCase();
+        return v === "1" || v === "true";
+      })(), // PATCH: add this block
     };
   }, []);
 
@@ -1148,6 +1148,7 @@ export default function Welcome() {
   const [promptOverride, setPromptOverride] = useState("");
   const [lastError, setLastError] = useState(null);
   const [websiteUrl, setWebsiteUrl] = useState(""); // NEW: captured website URL
+  const [explainMode, setExplainMode] = useState(explainModeFromQS); // PATCH: add this
 
   /* Theme */
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
@@ -1547,6 +1548,7 @@ export default function Welcome() {
       debug: true,
       perspective: perspectiveForCall,
       prompt_override: promptOverride || "",
+      ...(explainMode ? { explain: 1 } : {}), // PATCH: add this line
     });
 
     try {
@@ -1564,6 +1566,14 @@ export default function Welcome() {
       );
       const status = res.status;
       const data = res.data || {};
+      // --- PATCH: Handle explain mode response ---
+      if (explainMode && typeof data.report_markdown === "string") {
+        setResponseText(data.report_markdown);
+        setItems([]);
+        setLoading(false);
+        setLastError(null);
+        return;
+      }
       const ok =
         data.ok !== false &&
         status >= 200 &&
