@@ -1,16 +1,16 @@
-/* Welcome.jsx — Updated
- * CHANGE SUMMARY (2025-10-04):
- *  - ThemeLab live option toggles now immediately update:
- *      • Visible tabs (demos/docs/price/meeting)
- *      • Intro video visibility + URL
- *      • Form fill (show/hide) state
- *  - Form fill field “Collect” / “Required” checkbox toggles in ThemeLab panel now
- *    immediately propagate to the in‑app form (no page refresh needed).
- *  - Added onOptionsChange propagation path from ThemeLabWordingBox → ThemeLabPanels → Welcome.
+/* Welcome.jsx — Full File (with clickable top banner logo linking to bot website)
  *
- * Only ThemeLab related code paths changed; ask flow, pricing, recommendations, etc. unchanged.
+ * Adds:
+ *   - websiteUrl state populated from bot settings (bots_v2.website or fallback fields)
+ *   - Top banner logo becomes an <a> tag if websiteUrl exists (opens in new tab by default)
+ *   - Falls back to a "home" reset button when no website URL is provided
  *
- * NOTE: If you previously integrated this file, you can replace the whole file with this version.
+ * NOTE:
+ *   - Change target="_blank" to target="_self" below if you want same-tab navigation.
+ *   - Remove setLastQuestion("") in the fallback button if you prefer to retain last answer.
+ *
+ * (Includes earlier ThemeLab live option / wording changes, pricing, meeting scheduling,
+ *  form fill, demo/doc browsing, and color variable root mirroring for reliability.)
  */
 
 import React, {
@@ -68,7 +68,7 @@ const PERSPECTIVE_OPTIONS = [
 const FIELD_SYNONYMS = { fname: "first_name", lname: "last_name" };
 const CANON_LABELS = { first_name: "First Name", last_name: "Last Name" };
 
-const DEMO_PRUNE_MAX = 6;
+const DEMO_PRUNE_MAX = 4;
 const DEMO_STRONG_THRESHOLD = 2;
 const DEMO_STRONG_RATIO = 2.2;
 const DEMO_SECONDARY_KEEP = 2;
@@ -152,8 +152,10 @@ function OptionButton({ opt, selected, onClick }) {
     <button
       onClick={() => onClick(opt)}
       className={[
-        "w-full text-center rounded-[0.75rem] px-4 py-3 transition",
-        "text-[var(--price-button-fg)] bg-[var(--price-button-bg)] hover:brightness-110 active:brightness-95",
+        "w-full rounded-[0.75rem] px-4 py-3 transition",
+        "flex flex-col items-center justify-center text-center",
+        "text-[var(--price-button-fg)] bg-[var(--price-button-bg)]",
+        "hover:brightness-110 active:brightness-95",
         selected ? "ring-2 ring-black/20" : "",
       ].join(" ")}
       title={opt.tooltip || ""}
@@ -279,37 +281,52 @@ function EstimateCard({ estimate, outroText }) {
 }
 
 /* ============================================================
- * THEME LAB INLINE PANELS (UPDATED for live option + field propagation)
+ * THEME LAB INLINE PANELS
  * ============================================================ */
 function useFloatingPos(frameRef, side = "left", width = 460, gap = 12) {
   const [pos, setPos] = useState({ left: 16, top: 16, width });
+
   useEffect(() => {
     function update() {
-      const r = frameRef?.current?.getBoundingClientRect?.();
-      if (!r) return setPos({ left: 16, top: 16, width });
-      if (side === "left") {
-        setPos({
-          left: Math.max(8, r.left - width - gap),
-          top: Math.max(8, r.top + 8),
-          width,
-        });
+      const mainPanel = document.querySelector(
+        '.max-w-\\[720px\\]'
+      ); // this selects your main panel
+      let left = 16;
+      let top = 16;
+      let w = width;
+
+      // Responsive: match main panel horizontal position
+      if (window.innerWidth >= 640 && mainPanel) { // sm: and up
+        // Centered main panel: calc left edge
+        const mainRect = mainPanel.getBoundingClientRect();
+        if (side === "left") {
+          left = mainRect.left - width - gap;
+        } else {
+          left = mainRect.right + gap;
+        }
+        top = mainRect.top + 8;
+        w = width;
       } else {
-        setPos({
-          left: Math.min(window.innerWidth - width - 8, r.right + gap),
-          top: Math.max(8, r.top + 8),
-          width,
-        });
+        // Mobile: left align, nearly full width
+        left = Math.max(8, window.innerWidth * 0.025);
+        w = window.innerWidth * 0.95;
+        top = 8;
       }
+
+      // Prevent off screen
+      left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
+      setPos({ left, top, width: w });
     }
+
     update();
-    const h = () => update();
-    window.addEventListener("resize", h);
-    window.addEventListener("scroll", h, { passive: true });
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, { passive: true });
     return () => {
-      window.removeEventListener("resize", h);
-      window.removeEventListener("scroll", h);
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update);
     };
   }, [frameRef, side, width, gap]);
+
   return pos;
 }
 
@@ -427,19 +444,14 @@ function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
 
   return (
     <div
+      className="fixed z-[60] bg-white border border-black/20 rounded-xl shadow-xl overflow-y-auto
+                 max-h-[92vh] p-2 text-sm
+                 w-[95vw] left-0 top-2
+                 sm:w-[460px] sm:p-4 sm:text-base"
       style={{
-        position: "fixed",
         left: pos.left,
         top: pos.top,
         width: pos.width,
-        background: "#fff",
-        border: "1px solid rgba(0,0,0,0.2)",
-        borderRadius: 12,
-        padding: 12,
-        zIndex: 60,
-        boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
-        maxHeight: "92vh",
-        overflowY: "auto",
       }}
     >
       <div className="text-base font-bold mb-2">ThemeLab Colors</div>
@@ -522,7 +534,7 @@ function ThemeLabWordingBox({
   sharedAuth,
   onFormfillChange,
   onLiveMessages,
-  onOptionsChange, // NEW
+  onOptionsChange,
 }) {
   const pos = useFloatingPos(frameRef, "right", 460);
   const [loading, setLoading] = useState(false);
@@ -551,7 +563,6 @@ function ThemeLabWordingBox({
   const [standardFields, setStandardFields] = useState([]);
   const [editingKey, setEditingKey] = useState("");
   const [draft, setDraft] = useState("");
-
   const messageLabels = {
     welcome_message: "Welcome",
     formfill_intro: "Form Fill Intro",
@@ -653,7 +664,6 @@ function ThemeLabWordingBox({
     setOptions((p) => {
       const n = { ...p, [k]: !p[k] };
       markDirty();
-      // propagate both options and (if show_formfill changed) fields
       if (k === "show_formfill") propagateFields(standardFields, n);
       propagateOptions(n);
       return n;
@@ -754,19 +764,14 @@ function ThemeLabWordingBox({
 
   return (
     <div
+      className="fixed z-[60] bg-white border border-black/20 rounded-xl shadow-xl overflow-y-auto
+                 max-h-[92vh] p-2 text-sm
+                 w-[95vw] left-0 top-2
+                 sm:w-[460px] sm:p-4 sm:text-base"
       style={{
-        position: "fixed",
         left: pos.left,
         top: pos.top,
         width: pos.width,
-        maxHeight: "92vh",
-        overflowY: "auto",
-        background: "#fff",
-        border: "1px solid rgba(0,0,0,0.2)",
-        borderRadius: 12,
-        padding: 14,
-        zIndex: 60,
-        boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
       }}
     >
       <div className="text-base font-bold mb-2">
@@ -1035,7 +1040,7 @@ function ThemeLabPanels({
   onVars,
   onFormfillChange,
   onLiveMessages,
-  onOptionsChange, // NEW
+  onOptionsChange,
 }) {
   const [authState, setAuthState] = useState("checking");
   useEffect(() => {
@@ -1142,6 +1147,7 @@ export default function Welcome() {
   const [showIntroVideo, setShowIntroVideo] = useState(false);
   const [promptOverride, setPromptOverride] = useState("");
   const [lastError, setLastError] = useState(null);
+  const [websiteUrl, setWebsiteUrl] = useState(""); // NEW: captured website URL
 
   /* Theme */
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
@@ -1158,17 +1164,14 @@ export default function Welcome() {
     [derivedTheme, pickerVars]
   );
 
-  // Ensure CSS variables are always available on :root (prod safety)
+  // Mirror variables to :root (safety)
   useEffect(() => {
     const root = document.documentElement;
     Object.entries(liveTheme || {}).forEach(([k, v]) => {
-      if (k.startsWith('--')) root.style.setProperty(k, v);
+      if (k.startsWith("--")) root.style.setProperty(k, v);
     });
-    return () => {
-      // (Optional) clean-up not needed unless you hot-unmount/remount multiple variants
-    };
   }, [liveTheme]);
-  
+
   const [brandAssets, setBrandAssets] = useState({
     logo_url: null,
     logo_light_url: null,
@@ -1223,7 +1226,7 @@ export default function Welcome() {
   const embedDomain =
     typeof window !== "undefined" ? window.location.hostname : "";
 
-  /* Session helpers */
+  /* Session helper utilities */
   const withIdsHeaders = () => ({
     ...(sessionId ? { "X-Session-Id": sessionId } : {}),
     ...(visitorId ? { "X-Visitor-Id": visitorId } : {}),
@@ -1282,7 +1285,7 @@ export default function Welcome() {
     });
   }
 
-  /* Bot / alias resolution (unchanged) */
+  /* Bot / alias resolution */
   useEffect(() => {
     if (botId || !alias) return;
     let cancel = false;
@@ -1357,6 +1360,10 @@ export default function Welcome() {
       outro: bot.pricing_outro || "",
       custom_notice: bot.pricing_custom_notice || "",
     });
+    // Capture website URL from various possible fields
+    setWebsiteUrl(
+      bot.website || bot.site_url || bot.url || ""
+    );
   }
 
   useEffect(() => {
@@ -1390,7 +1397,7 @@ export default function Welcome() {
     return () => (cancel = true);
   }, [botId, apiBase]);
 
-  /* Form fill config */
+  /* Form fill config + visitors */
   function patchCanonicalFields(rawFields) {
     const map = new Map();
     (rawFields || []).forEach((f) => {
@@ -1517,7 +1524,7 @@ export default function Welcome() {
     return o;
   }, [activeFormFields, visitorDefaults, urlParams]);
 
-  /* Ask flow (unchanged logic) */
+  /* Ask flow */
   async function doSend(outgoing) {
     if (!outgoing || !botId) return;
     setMode("ask");
@@ -1579,19 +1586,32 @@ export default function Welcome() {
       const demoBtns = Array.isArray(data.demo_buttons)
         ? data.demo_buttons
         : [];
-      const docBtns = Array.isArray(data.doc_buttons)
+      // EXCLUDE-DOCS PATCH: Ignore docs for now
+      const _ignoredDocBtns = Array.isArray(data.doc_buttons)
         ? data.doc_buttons
         : [];
+
       const legacyItems = Array.isArray(data.items) ? data.items : [];
       const legacyButtons = Array.isArray(data.buttons)
         ? data.buttons
         : [];
-      const combined =
+
+      // EXCLUDE-DOCS PATCH: Filter out doc-type actions from legacy sets
+      function filterOutDocs(list) {
+        return list.filter((it) => {
+          const act = (it.action || it.button_action || "").toLowerCase();
+          return !act.includes("doc");
+        });
+      }
+
+      const combinedRaw =
         legacyItems.length > 0
-          ? legacyItems
+          ? filterOutDocs(legacyItems)
           : legacyButtons.length > 0
-          ? legacyButtons
-          : [...demoBtns, ...docBtns];
+          ? filterOutDocs(legacyButtons)
+          : demoBtns; // only demos (no doc buttons appended)
+
+      const combined = combinedRaw;
 
       let mapped = combined.map((it, idx) => ({
         id:
@@ -1933,7 +1953,7 @@ export default function Welcome() {
     el.style.height = `${el.scrollHeight}px`;
   }, [input]);
 
-  /* Pricing logic (unchanged) */
+  /* Pricing estimator */
   useEffect(() => {
     if (mode !== "price" || !botId) return;
     let cancel = false;
@@ -2147,7 +2167,7 @@ export default function Welcome() {
         const body = JSON.stringify({ session_id: sessionId, reason });
         if (navigator.sendBeacon) {
           const blob = new Blob([body], { type: "application/json" });
-          navigator.sendBeacon(url, blob);
+            navigator.sendBeacon(url, blob);
         } else {
           fetch(url, {
             method: "POST",
@@ -2227,7 +2247,7 @@ export default function Welcome() {
         prev.forEach((f) => f?.field_key && (byKey[f.field_key] = { ...f }));
         standard_fields.forEach((sf) => {
           if (!sf.field_key) return;
-            const canonical = sf.field_key;
+          const canonical = sf.field_key;
           if (!byKey[canonical]) {
             byKey[canonical] = {
               field_key: canonical,
@@ -2255,7 +2275,6 @@ export default function Welcome() {
   }
 
   function handleThemeLabOptionsChange(nextOptions) {
-    // Live update application state
     setTabsEnabled({
       demos: !!nextOptions.show_browse_demos,
       docs: !!nextOptions.show_browse_docs,
@@ -2325,11 +2344,46 @@ export default function Welcome() {
         <div className="px-4 sm:px-6 bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)]">
           <div className="flex items-center justify-between w-full py-3">
             <div className="flex items-center gap-3">
-              <img
-                src={logoSrc}
-                alt="Brand logo"
-                className="h-10 object-contain"
-              />
+              {/* TOP BANNER LOGO AREA: link if websiteUrl exists */}
+              {websiteUrl ? (
+                <a
+                  href={websiteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block focus-visible:ring-2 focus-visible:ring-white/60 rounded outline-none"
+                  title="Visit website"
+                  aria-label="Visit website"
+                >
+                  <img
+                    src={logoSrc}
+                    alt="Brand logo"
+                    className="h-10 object-contain pointer-events-none select-none"
+                    draggable="false"
+                  />
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("ask");
+                    setSelected(null);
+                    setLastQuestion("");
+                    requestAnimationFrame(() =>
+                      contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+                    );
+                  }}
+                  className="p-0 m-0 border-0 bg-transparent cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-white/60 rounded"
+                  title="Home"
+                  aria-label="Home"
+                >
+                  <img
+                    src={logoSrc}
+                    alt="Brand logo"
+                    className="h-10 object-contain pointer-events-none select-none"
+                    draggable="false"
+                  />
+                </button>
+              )}
             </div>
             <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
               {selected
