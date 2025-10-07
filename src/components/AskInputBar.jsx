@@ -13,7 +13,7 @@ export default function AskInputBar({
   disabled = false,
   show = true,
   poweredBy = "https://demohal.com/",
-  poweredByImg = "https://rvwcyysphhaawvzzyjxq.supabase.co/storage/v1/object/public/demohal-logos/f3ab3e92-9855-4c9b-8038-0a9e483218b7/Powered%20by%20logo.png",
+  poweredByImg = "https://rvwcyysphhaawvzzyjxq.supabase.co/storage/v1/object/public/demohal-logos/f3ab3e92-9855-4c9b-8038-0a9e483218b7/Powered%20By%20Logo.png",
   showLogo = true,
 }) {
   const localRef = useRef(null);
@@ -44,7 +44,8 @@ export default function AskInputBar({
     <div
       className="relative px-4 pt-4 border-t border-[var(--border-default)]"
       style={{
-        paddingBottom: showLogo ? "calc(44px + 5px)" : "0.75rem",
+        // Logo h-4 is 16px, plus 16px (1rem) for symmetrical padding: 16 + 16 = 32px
+        paddingBottom: showLogo ? "32px" : "1rem",
       }}
       data-patch="ask-bottom-bar"
     >
@@ -85,12 +86,12 @@ export default function AskInputBar({
           target="_blank"
           rel="noopener noreferrer"
           title="Powered by DemoHAL"
-          className="absolute left-4 bottom-2 inline-flex"
+          className="absolute left-4 bottom-4 inline-flex"
         >
           <img
             src={poweredByImg}
             alt="Powered by DemoHAL"
-            className="h-11 w-auto object-contain select-none"
+            className="h-4 w-auto object-contain select-none"
             loading="lazy"
             draggable="false"
           />
