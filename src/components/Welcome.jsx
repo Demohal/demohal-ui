@@ -76,20 +76,26 @@ const DEMO_STRONG_THRESHOLD = 2;
 const DEMO_STRONG_RATIO = 2.2;
 const DEMO_SECONDARY_KEEP = 2;
 
+const STOPWORDS = new Set([
+  "the","and","for","with","you","your","has","that","this","also","more","first","fully","without",
+  "across","every","their","they","them","of","in","on","to","as","is","it","at","by","be","or",
+  "from","but","was","are","an","so","can","if","all","we","our","not","will","about","after",
+  "before","which","into","how","when","what","who","where","why","should","could","would","support","supports"
+]);
+
+function tokenize(text) {
+  return ((text || "").toLowerCase().match(/[a-z0-9]{3,}/g) || []).filter(t => !STOPWORDS.has(t));
+}
+
 function scoreDemo(question, demo) {
-  const qTokens = new Set(
-    (question || "").toLowerCase().match(/[a-z0-9]{3,}/g) || []
+  const qTokens = new Set(tokenize(question));
+  const textTokens = tokenize(
+    (demo.title || "") +
+    " " +
+    (demo.description || "") +
+    " " +
+    (demo.functions_text || "")
   );
-  const textTokens =
-    (
-      (demo.title || "") +
-      " " +
-      (demo.description || "") +
-      " " +
-      (demo.functions_text || "")
-    )
-      .toLowerCase()
-      .match(/[a-z0-9]{3,}/g) || [];
   const dTokens = new Set(textTokens);
   let overlap = 0;
   qTokens.forEach((t) => {
