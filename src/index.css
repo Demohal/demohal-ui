@@ -62,3 +62,26 @@ a {
 a:hover {
   text-decoration: underline;
 }
+
+.markdown-report {
+  font-size: 0.8em; /* 20% smaller than base, adjust as you like */
+  font-family: 'Roboto Mono', 'Consolas', 'Menlo', 'monospace', sans-serif;
+  line-height: 1.5;
+  word-break: break-word;
+}
+.markdown-table {
+  font-size: 0.75em;
+  font-family: 'Roboto Mono', 'Consolas', 'Menlo', 'monospace', sans-serif;
+  border-collapse: collapse;
+  width: 100%;
+}
+.markdown-table th,
+.markdown-table td {
+  border: 1px solid #ccc;
+  padding: 4px 8px;
+  font-weight: normal;
+}
+.markdown-table th {
+  background: #f6f6f6;
+  font-weight: bold;
+}
