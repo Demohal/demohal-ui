@@ -1,3 +1,4 @@
+
 /* Welcome.jsx — Full File (with clickable top banner logo linking to bot website)
  *
  * Adds:
@@ -27,6 +28,8 @@ import Row from "./Row";
 import DocIframe from "./DocIframe";
 import AskInputBar from "./AskInputBar";
 import FormFillCard from "./FormFillCard";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 /* ============================================================
  * CONSTANTS / HELPERS
@@ -73,20 +76,26 @@ const DEMO_STRONG_THRESHOLD = 2;
 const DEMO_STRONG_RATIO = 2.2;
 const DEMO_SECONDARY_KEEP = 2;
 
+const STOPWORDS = new Set([
+  "the","and","for","with","you","your","has","that","this","also","more","first","fully","without",
+  "across","every","their","they","them","of","in","on","to","as","is","it","at","by","be","or",
+  "from","but","was","are","an","so","can","if","all","we","our","not","will","about","after",
+  "before","which","into","how","when","what","who","where","why","should","could","would","support","supports"
+]);
+
+function tokenize(text) {
+  return ((text || "").toLowerCase().match(/[a-z0-9]{3,}/g) || []).filter(t => !STOPWORDS.has(t));
+}
+
 function scoreDemo(question, demo) {
-  const qTokens = new Set(
-    (question || "").toLowerCase().match(/[a-z0-9]{3,}/g) || []
+  const qTokens = new Set(tokenize(question));
+  const textTokens = tokenize(
+    (demo.title || "") +
+    " " +
+    (demo.description || "") +
+    " " +
+    (demo.functions_text || "")
   );
-  const textTokens =
-    (
-      (demo.title || "") +
-      " " +
-      (demo.description || "") +
-      " " +
-      (demo.functions_text || "")
-    )
-      .toLowerCase()
-      .match(/[a-z0-9]{3,}/g) || [];
   const dTokens = new Set(textTokens);
   let overlap = 0;
   qTokens.forEach((t) => {
@@ -1100,29 +1109,29 @@ export default function Welcome() {
   const apiBase =
     import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-  const {
+    const {
     alias,
     botIdFromUrl,
     themeLabOn,
     pidParam,
     agentAlias,
     urlParams,
+    explainMode: explainModeFromQS, // PATCH: add explainModeFromQS
   } = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     return {
       alias: (qs.get("alias") || qs.get("alais") || "").trim(),
       botIdFromUrl: (qs.get("bot_id") || "").trim(),
-      themeLabOn: (() => {
-        const v = (qs.get("themelab") || "").toLowerCase();
-        return v === "1" || v === "true";
-      })(),
-      pidParam: (qs.get("pid") || "").trim(),
-      agentAlias: (qs.get("agent") || "").trim(),
+      // ... other params ...
       urlParams: (() => {
         const o = {};
         qs.forEach((v, k) => (o[k] = v));
         return o;
       })(),
+      explainMode: (() => {
+        const v = (qs.get("explain") || "").toLowerCase();
+        return v === "1" || v === "true";
+      })(), // PATCH: add this block
     };
   }, []);
 
@@ -1148,6 +1157,7 @@ export default function Welcome() {
   const [promptOverride, setPromptOverride] = useState("");
   const [lastError, setLastError] = useState(null);
   const [websiteUrl, setWebsiteUrl] = useState(""); // NEW: captured website URL
+  const [explainMode, setExplainMode] = useState(explainModeFromQS); // PATCH: add this
 
   /* Theme */
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
@@ -1547,6 +1557,7 @@ export default function Welcome() {
       debug: true,
       perspective: perspectiveForCall,
       prompt_override: promptOverride || "",
+      ...(explainMode ? { explain: 1 } : {}), // PATCH: add this line
     });
 
     try {
@@ -1564,6 +1575,14 @@ export default function Welcome() {
       );
       const status = res.status;
       const data = res.data || {};
+      // --- PATCH: Handle explain mode response ---
+      if (explainMode && typeof data.report_markdown === "string") {
+        setResponseText(data.report_markdown);
+        setItems([]);
+        setLoading(false);
+        setLastError(null);
+        return;
+      }
       const ok =
         data.ok !== false &&
         status >= 200 &&
@@ -2716,9 +2735,21 @@ export default function Welcome() {
                     Thinking…
                   </p>
                 ) : lastQuestion ? (
-                  <p className="text-base font-bold whitespace-pre-line">
-                    {responseText}
-                  </p>
+                  explainMode && responseText ? (
+                    <ReactMarkdown
+                      className="markdown-report"
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        table: ({node, ...props}) => <table {...props} className="markdown-table" />,
+                      }}
+                    >
+                      {responseText}
+                    </ReactMarkdown>
+                  ) : (
+                    <p className="text-base font-bold whitespace-pre-line">
+                      {responseText}
+                    </p>
+                  )
                 ) : null}
               </div>
               {(items || []).length > 0 && (
