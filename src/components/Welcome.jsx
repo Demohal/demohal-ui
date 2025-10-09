@@ -1109,20 +1109,25 @@ export default function Welcome() {
   const apiBase =
     import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-    const {
+  const {
     alias,
     botIdFromUrl,
     themeLabOn,
     pidParam,
     agentAlias,
     urlParams,
-    explainMode: explainModeFromQS, // PATCH: add explainModeFromQS
+    explainMode: explainModeFromQS,
   } = useMemo(() => {
     const qs = new URLSearchParams(window.location.search);
     return {
       alias: (qs.get("alias") || qs.get("alais") || "").trim(),
       botIdFromUrl: (qs.get("bot_id") || "").trim(),
-      // ... other params ...
+      themeLabOn: (() => {
+        const v = (qs.get("themelab") || "").toLowerCase();
+        return v === "1" || v === "true";
+      })(),
+      pidParam: (qs.get("pid") || "").trim(),
+      agentAlias: (qs.get("agent") || "").trim(),
       urlParams: (() => {
         const o = {};
         qs.forEach((v, k) => (o[k] = v));
@@ -1131,7 +1136,7 @@ export default function Welcome() {
       explainMode: (() => {
         const v = (qs.get("explain") || "").toLowerCase();
         return v === "1" || v === "true";
-      })(), // PATCH: add this block
+      })(),
     };
   }, []);
 
