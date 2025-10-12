@@ -2501,12 +2501,8 @@ export default function Welcome() {
                   </div>
                 )}
               </div>
-             <div className="mt-2 space-y-4">
-                {tabsEnabled.price && pricingCopy.intro && priceQuestions.length === 0 ? (
-                  <div className="text-base font-bold whitespace-pre-line">
-                    {pricingCopy.intro}
-                  </div>
-                ) : priceQuestions.length === 0 ? (
+              <div className="mt-2 space-y-4">
+                {!priceQuestions.length ? (
                   <div className="text-sm text-[var(--helper-fg)]">
                     Loading questions…
                   </div>
