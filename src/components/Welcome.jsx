@@ -57,6 +57,18 @@ const DEFAULT_THEME_VARS = {
   "--border-default": "#9ca3af",
 };
 
+// --- ADD THIS FUNCTION HERE ---
+function getSortedRecommended(recommendedItems, selected) {
+  if (!Array.isArray(recommendedItems)) return [];
+  if (!selected) return recommendedItems;
+  const primary = selected.action === "demo" ? "demo" : selected.action === "doc" ? "doc" : null;
+  if (!primary) return recommendedItems;
+  return [
+    ...recommendedItems.filter(it => (it.action || it.type) === primary),
+    ...recommendedItems.filter(it => (it.action || it.type) !== primary)
+  ];
+}
+
 const PERSPECTIVE_OPTIONS = [
   { key: "general", label: "General" },
   { key: "financial", label: "Financial" },
@@ -151,6 +163,17 @@ function normalizeOptions(q) {
       return { key, label, tooltip, id: String(o.id ?? key ?? idx) };
     })
     .filter(Boolean);
+}
+
+function getSortedRecommended(recommendedItems, selected) {
+  if (!Array.isArray(recommendedItems)) return [];
+  if (!selected) return recommendedItems;
+  const primary = selected.action === "demo" ? "demo" : selected.action === "doc" ? "doc" : null;
+  if (!primary) return recommendedItems;
+  return [
+    ...recommendedItems.filter(it => (it.action || it.type) === primary),
+    ...recommendedItems.filter(it => (it.action || it.type) !== primary)
+  ];
 }
 
 /* ============================================================
@@ -1163,6 +1186,7 @@ export default function Welcome() {
   const [lastError, setLastError] = useState(null);
   const [websiteUrl, setWebsiteUrl] = useState(""); // NEW: captured website URL
   const [explainMode, setExplainMode] = useState(explainModeFromQS); // PATCH: add this
+  const [recommendedItems, setRecommendedItems] = useState([]);
 
   /* Theme */
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
@@ -1607,13 +1631,17 @@ export default function Welcome() {
       }
       const text = data.response_text || "";
 
-      const demoBtns = Array.isArray(data.demo_buttons)
-        ? data.demo_buttons
-        : [];
-      // EXCLUDE-DOCS PATCH: Ignore docs for now
-      const _ignoredDocBtns = Array.isArray(data.doc_buttons)
-        ? data.doc_buttons
-        : [];
+      const demoBtns = Array.isArray(data.demo_buttons) ? data.demo_buttons : [];
+      const docBtns = Array.isArray(data.doc_buttons) ? data.doc_buttons : [];
+      if (Array.isArray(data.recommended_items)) {
+        setRecommendedItems(data.recommended_items);
+      } else {
+        setRecommendedItems(
+          demoBtns.map(x => ({...x, action: "demo"})).concat(
+            docBtns.map(x => ({...x, action: "doc"}))
+          )
+        );
+      }
 
       const legacyItems = Array.isArray(data.items) ? data.items : [];
       const legacyButtons = Array.isArray(data.buttons)
@@ -2606,19 +2634,60 @@ export default function Welcome() {
                   />
                 </div>
               )}
-              {mode === "ask" && (visibleUnderVideo || []).length > 0 && (
+              {getSortedRecommended(recommendedItems, selected).length > 0 && (
                 <>
                   <div className="flex items-center justify-between mt-1 mb-3">
                     <p className="italic text-[var(--helper-fg)]">
-                      Recommended demos
+                      Recommended for you
                     </p>
                   </div>
                   <div className="flex flex-col gap-3">
-                    {visibleUnderVideo.map((it) => (
+                    {getSortedRecommended(recommendedItems, selected).map((it) => (
                       <Row
                         key={it.id || it.url || it.title}
                         item={it}
-                        onPick={(val) => normalizeAndSelectDemo(val)}
+                        kind={it.action || it.type}
+                        onPick={async (val) => {
+                          if ((val.action || val.type) === "doc") {
+                            // Open doc view
+                            try {
+                              const r = await fetch(
+                                `${apiBase}/render-doc-iframe`,
+                                {
+                                  method: "POST",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                  },
+                                  body: JSON.stringify(
+                                    withIdsBody({
+                                      bot_id: botId,
+                                      doc_id: val.id || "",
+                                      title: val.title || "",
+                                      url: val.url || "",
+                                    })
+                                  ),
+                                }
+                              );
+                              const j = await r.json();
+                              setSelected({
+                                ...val,
+                                _iframe_html: j?.iframe_html || null,
+                                action: "doc"
+                              });
+                              setMode("docs");
+                            } catch {
+                              setSelected({ ...val, action: "doc" });
+                              setMode("docs");
+                            }
+                            requestAnimationFrame(() =>
+                              contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+                            );
+                          } else {
+                            // Demo
+                            await normalizeAndSelectDemo(val);
+                            setMode("ask");
+                          }
+                        }}
                       />
                     ))}
                   </div>
@@ -2757,19 +2826,60 @@ export default function Welcome() {
                   )
                 ) : null}
               </div>
-              {(items || []).length > 0 && (
+              {getSortedRecommended(recommendedItems, selected).length > 0 && (
                 <>
                   <div className="flex items-center justify-between mt-3 mb-2">
                     <p className="italic text-[var(--helper-fg)]">
-                      Recommended demos
+                      Recommended for you
                     </p>
                   </div>
                   <div className="flex flex-col gap-3">
-                    {items.map((it) => (
+                    {getSortedRecommended(recommendedItems, selected).map((it) => (
                       <Row
                         key={it.id || it.url || it.title}
                         item={it}
-                        onPick={(val) => normalizeAndSelectDemo(val)}
+                        kind={it.action || it.type}
+                        onPick={async (val) => {
+                          if ((val.action || val.type) === "doc") {
+                            // Open doc view
+                            try {
+                              const r = await fetch(
+                                `${apiBase}/render-doc-iframe`,
+                                {
+                                  method: "POST",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                  },
+                                  body: JSON.stringify(
+                                    withIdsBody({
+                                      bot_id: botId,
+                                      doc_id: val.id || "",
+                                      title: val.title || "",
+                                      url: val.url || "",
+                                    })
+                                  ),
+                                }
+                              );
+                              const j = await r.json();
+                              setSelected({
+                                ...val,
+                                _iframe_html: j?.iframe_html || null,
+                                action: "doc"
+                              });
+                              setMode("docs");
+                            } catch {
+                              setSelected({ ...val, action: "doc" });
+                              setMode("docs");
+                            }
+                            requestAnimationFrame(() =>
+                              contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+                            );
+                          } else {
+                            // Demo
+                            await normalizeAndSelectDemo(val);
+                            setMode("ask");
+                          }
+                        }}
                       />
                     ))}
                   </div>
