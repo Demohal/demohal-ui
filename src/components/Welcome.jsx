@@ -57,18 +57,6 @@ const DEFAULT_THEME_VARS = {
   "--border-default": "#9ca3af",
 };
 
-// --- ADD THIS FUNCTION HERE ---
-function getSortedRecommended(recommendedItems, selected) {
-  if (!Array.isArray(recommendedItems)) return [];
-  if (!selected) return recommendedItems;
-  const primary = selected.action === "demo" ? "demo" : selected.action === "doc" ? "doc" : null;
-  if (!primary) return recommendedItems;
-  return [
-    ...recommendedItems.filter(it => (it.action || it.type) === primary),
-    ...recommendedItems.filter(it => (it.action || it.type) !== primary)
-  ];
-}
-
 const PERSPECTIVE_OPTIONS = [
   { key: "general", label: "General" },
   { key: "financial", label: "Financial" },
