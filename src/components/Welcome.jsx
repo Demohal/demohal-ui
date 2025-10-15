@@ -54,7 +54,7 @@ const DEFAULT_THEME_VARS = {
   "--price-button-bg": "#1a1a1a",
   "--price-button-fg": "#ffffff",
   "--send-color": "#000000",
-  "--border-default": "#9ca3af",
+  "--border-default": "#000000",
 };
 
 const PERSPECTIVE_OPTIONS = [
