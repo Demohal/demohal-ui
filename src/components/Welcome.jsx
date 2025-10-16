@@ -2757,6 +2757,7 @@ export default function Welcome() {
                       <Row
                         key={it.id || it.url || it.title}
                         item={it}
+                        kind={it.action === "doc" ? "doc" : "demo"}
                         onPick={(val) => normalizeAndSelectDemo(val)}
                       />
                     ))}
