@@ -1607,13 +1607,8 @@ export default function Welcome() {
       }
       const text = data.response_text || "";
 
-      const demoBtns = Array.isArray(data.demo_buttons)
-        ? data.demo_buttons
-        : [];
-      // EXCLUDE-DOCS PATCH: Ignore docs for now
-      const _ignoredDocBtns = Array.isArray(data.doc_buttons)
-        ? data.doc_buttons
-        : [];
+      const demoBtns = Array.isArray(data.demo_buttons) ? data.demo_buttons : [];
+      const docBtns = Array.isArray(data.doc_buttons) ? data.doc_buttons : [];
 
       const legacyItems = Array.isArray(data.items) ? data.items : [];
       const legacyButtons = Array.isArray(data.buttons)
@@ -2754,7 +2749,7 @@ export default function Welcome() {
                 <>
                   <div className="flex items-center justify-between mt-3 mb-2">
                     <p className="italic text-[var(--helper-fg)]">
-                      Recommended demos
+                      Recommended for you
                     </p>
                   </div>
                   <div className="flex flex-col gap-3">
