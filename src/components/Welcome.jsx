@@ -1620,21 +1620,14 @@ export default function Welcome() {
         ? data.buttons
         : [];
 
-      // EXCLUDE-DOCS PATCH: Filter out doc-type actions from legacy sets
-      function filterOutDocs(list) {
-        return list.filter((it) => {
-          const act = (it.action || it.button_action || "").toLowerCase();
-          return !act.includes("doc");
-        });
-      }
-
+      // Instead of filtering out docs, combine both demos and docs
       const combinedRaw =
-        legacyItems.length > 0
-          ? filterOutDocs(legacyItems)
-          : legacyButtons.length > 0
-          ? filterOutDocs(legacyButtons)
-          : demoBtns; // only demos (no doc buttons appended)
-
+        Array.isArray(data.items) && data.items.length > 0
+          ? data.items
+          : Array.isArray(data.buttons) && data.buttons.length > 0
+          ? data.buttons
+          : [...demoBtns, ...docBtns]; // combine both demo and doc buttons if legacy arrays are empty
+      
       const combined = combinedRaw;
 
       let mapped = combined.map((it, idx) => ({
@@ -2610,7 +2603,7 @@ export default function Welcome() {
                 <>
                   <div className="flex items-center justify-between mt-1 mb-3">
                     <p className="italic text-[var(--helper-fg)]">
-                      Recommended demos
+                      Recommended for you
                     </p>
                   </div>
                   <div className="flex flex-col gap-3">
