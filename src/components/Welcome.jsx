@@ -1756,8 +1756,30 @@ export default function Welcome() {
         action: it.action ?? it.button_action ?? "demo",
       }));
 
-      mapped = mapped.filter(Boolean);
-      mapped = pruneDemoButtons(outgoing, mapped);
+      // Split into demos and docs
+      const mappedDemos = mapped.filter(it => (it.action || it.type) === "demo");
+      const mappedDocs = mapped.filter(it => (it.action || it.type) === "doc");
+
+      // Prune demos by scoring, limit to 4
+      const prunedDemos = pruneDemoButtons(outgoing, mappedDemos).slice(0, 4);
+      // Limit docs to 2 (no scoring applied)
+      const prunedDocs = mappedDocs.slice(0, 2);
+
+      // Combine for recommended section
+      const recommendedItems = [...prunedDemos, ...prunedDocs];
+
+if (typeof data.perspective === "string" && data.perspective) {
+  if (
+    visitorDefaults.perspective !== null &&
+    visitorDefaults.perspective !== undefined
+  ) {
+    updateLocalVisitorValues({
+      perspective: data.perspective.toLowerCase(),
+    });
+  }
+}
+
+setItems(recommendedItems);
 
       if (typeof data.perspective === "string" && data.perspective) {
         if (
