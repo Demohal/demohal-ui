@@ -31,6 +31,102 @@ import FormFillCard from "./FormFillCard";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+// PATCH: Recommended section - show up to 4 demos, then up to 2 docs; if docs are shown, add "Recommended documents" help text.
+
+//
+// Add this helper component at the top level of the file (after imports, before the main component):
+//
+function RecommendedSection({ items, onPick, normalizeAndSelectDemo, apiBase, botId, contentRef, setSelected, setMode }) {
+  // Split items into demos and docs
+  const demos = (items || []).filter(it => (it.action || it.type) === "demo").slice(0, 4);
+  const docs = (items || []).filter(it => (it.action || it.type) === "doc").slice(0, 2);
+
+  if (demos.length === 0 && docs.length === 0) return null;
+
+  // Pick handler
+  const handlePick = async (val) => {
+    if ((val.action || val.type) === "doc") {
+      try {
+        const r = await fetch(
+          `${apiBase}/render-doc-iframe`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              bot_id: botId,
+              doc_id: val.id || "",
+              title: val.title || "",
+              url: val.url || "",
+            }),
+          }
+        );
+        const j = await r.json();
+        setSelected({
+          ...val,
+          _iframe_html: j?.iframe_html || null,
+          action: "doc"
+        });
+        setMode && setMode("docs");
+      } catch {
+        setSelected({ ...val, action: "doc" });
+        setMode && setMode("docs");
+      }
+      requestAnimationFrame(() =>
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+      );
+    } else {
+      await normalizeAndSelectDemo(val);
+      setMode && setMode("ask");
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-1">
+      {demos.length > 0 && (
+        <>
+          <div className="flex items-center justify-between mt-3 mb-2">
+            <p className="italic text-[var(--helper-fg)]">
+              Recommended for you
+            </p>
+          </div>
+          <div className="flex flex-col gap-3">
+            {demos.map((it) =>
+              <Row
+                key={it.id || it.url || it.title}
+                item={it}
+                kind="demo"
+                onPick={handlePick}
+              />
+            )}
+          </div>
+        </>
+      )}
+      {docs.length > 0 && (
+        <>
+          <div className="flex items-center justify-between mt-2 mb-2">
+            <p className="italic text-[var(--helper-fg)]">
+              Recommended documents
+            </p>
+          </div>
+          <div className="flex flex-col gap-3">
+            {docs.map((it) =>
+              <Row
+                key={it.id || it.url || it.title}
+                item={it}
+                kind="doc"
+                onPick={handlePick}
+              />
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+
 /* ============================================================
  * CONSTANTS / HELPERS
  * ============================================================ */
@@ -54,7 +150,7 @@ const DEFAULT_THEME_VARS = {
   "--price-button-bg": "#1a1a1a",
   "--price-button-fg": "#ffffff",
   "--send-color": "#000000",
-  "--border-default": "#9ca3af",
+  "--border-default": "#000000",
 };
 
 const PERSPECTIVE_OPTIONS = [
@@ -151,130 +247,6 @@ function normalizeOptions(q) {
       return { key, label, tooltip, id: String(o.id ?? key ?? idx) };
     })
     .filter(Boolean);
-}
-
-// PATCH for the recommended section: up to 4 demos, then up to 2 docs, with "Recommended documents" help text if docs exist
-
-function getSortedRecommended(recommendedItems, selected) {
-  // Don't change sorting logic—just return all
-  if (!Array.isArray(recommendedItems)) return [];
-  if (!selected) return recommendedItems;
-  const primary = selected.action === "demo" ? "demo" : selected.action === "doc" ? "doc" : null;
-  if (!primary) return recommendedItems;
-  return [
-    ...recommendedItems.filter(it => (it.action || it.type) === primary),
-    ...recommendedItems.filter(it => (it.action || it.type) !== primary)
-  ];
-}
-
-/**
- * Patch for recommended section display:
- * - Show up to 4 demo items
- * - Then up to 2 doc items
- * - If docs are shown, insert "Recommended documents" label before docs
- * - Used in both the selected case and the main ask/result case
- * Usage: replace both occurrences of the recommended section with this function's output.
- */
-function RecommendedSection({ recommendedItems, selected, onPick, apiBase, botId, contentRef, setSelected, setMode }) {
-  // 1. Split into demos and docs
-  const demos = (recommendedItems || []).filter(
-    it => (it.action || it.type) === "demo"
-  ).slice(0, 4);
-  const docs = (recommendedItems || []).filter(
-    it => (it.action || it.type) === "doc"
-  ).slice(0, 2);
-
-  if (demos.length === 0 && docs.length === 0) return null;
-
-  // Handler for picking items
-  const handlePick = async (val) => {
-    if ((val.action || val.type) === "doc") {
-      // Open doc view
-      try {
-        const r = await fetch(
-          `${apiBase}/render-doc-iframe`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              bot_id: botId,
-              doc_id: val.id || "",
-              title: val.title || "",
-              url: val.url || "",
-            }),
-          }
-        );
-        const j = await r.json();
-        setSelected({
-          ...val,
-          _iframe_html: j?.iframe_html || null,
-          action: "doc"
-        });
-        setMode && setMode("docs");
-      } catch {
-        setSelected({ ...val, action: "doc" });
-        setMode && setMode("docs");
-      }
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
-    } else {
-      // Demo
-      if (onPick) {
-        await onPick(val);
-      }
-      setMode && setMode("ask");
-    }
-  };
-
-  return (
-    <>
-      {(demos.length > 0 || docs.length > 0) && (
-        <div className="flex flex-col gap-1">
-          {demos.length > 0 && (
-            <>
-              <div className="flex items-center justify-between mt-3 mb-2">
-                <p className="italic text-[var(--helper-fg)]">
-                  Recommended for you
-                </p>
-              </div>
-              <div className="flex flex-col gap-3">
-                {demos.map((it) =>
-                  <Row
-                    key={it.id || it.url || it.title}
-                    item={it}
-                    kind={it.action || it.type}
-                    onPick={handlePick}
-                  />
-                )}
-              </div>
-            </>
-          )}
-          {docs.length > 0 && (
-            <>
-              <div className="flex items-center justify-between mt-2 mb-2">
-                <p className="italic text-[var(--helper-fg)]">
-                  Recommended documents
-                </p>
-              </div>
-              <div className="flex flex-col gap-3">
-                {docs.map((it) =>
-                  <Row
-                    key={it.id || it.url || it.title}
-                    item={it}
-                    kind={it.action || it.type}
-                    onPick={handlePick}
-                  />
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      )}
-    </>
-  );
 }
 
 /* ============================================================
@@ -1233,37 +1205,38 @@ export default function Welcome() {
   const apiBase =
     import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
 
-  const {
-    alias,
-    botIdFromUrl,
-    themeLabOn,
-    pidParam,
-    agentAlias,
-    urlParams,
-    explainMode: explainModeFromQS,
-  } = useMemo(() => {
-    const qs = new URLSearchParams(window.location.search);
-    return {
-      alias: (qs.get("alias") || qs.get("alais") || "").trim(),
-      botIdFromUrl: (qs.get("bot_id") || "").trim(),
-      themeLabOn: (() => {
-        const v = (qs.get("themelab") || "").toLowerCase();
-        return v === "1" || v === "true";
-      })(),
-      pidParam: (qs.get("pid") || "").trim(),
-      agentAlias: (qs.get("agent") || "").trim(),
-      urlParams: (() => {
-        const o = {};
-        qs.forEach((v, k) => (o[k] = v));
-        return o;
-      })(),
-      explainMode: (() => {
-        const v = (qs.get("explain") || "").toLowerCase();
-        return v === "1" || v === "true";
-      })(),
-    };
-  }, []);
+    const {
+      alias,
+      botIdFromUrl,
+      themeLabOn,
+      pidParam,
+      agentAlias,
+      urlParams,
+      explainMode: explainModeFromQS,
+    } = useMemo(() => {
+      const qs = new URLSearchParams(window.location.search);
+      return {
+        alias: (qs.get("alias") || qs.get("alais") || "").trim(),
+        botIdFromUrl: (qs.get("bot_id") || "").trim(),
+        themeLabOn: (() => {
+          const v = (qs.get("themelab") || "").toLowerCase();
+          return v === "1" || v === "true";
+        })(),
+        pidParam: (qs.get("pid") || "").trim(),
+        agentAlias: (qs.get("agent") || "").trim(),
+        urlParams: (() => {
+          const o = {};
+          qs.forEach((v, k) => (o[k] = v));
+          return o;
+        })(),
+        explainMode: (() => {
+          const v = (qs.get("explain") || "").toLowerCase();
+          return v === "1" || v === "true";
+        })(),
+      };
+    }, []);
 
+ 
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
 
   /* Core state */
@@ -1287,7 +1260,6 @@ export default function Welcome() {
   const [lastError, setLastError] = useState(null);
   const [websiteUrl, setWebsiteUrl] = useState(""); // NEW: captured website URL
   const [explainMode, setExplainMode] = useState(explainModeFromQS); // PATCH: add this
-  const [recommendedItems, setRecommendedItems] = useState([]);
 
   /* Theme */
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
@@ -1734,36 +1706,20 @@ export default function Welcome() {
 
       const demoBtns = Array.isArray(data.demo_buttons) ? data.demo_buttons : [];
       const docBtns = Array.isArray(data.doc_buttons) ? data.doc_buttons : [];
-      if (Array.isArray(data.recommended_items)) {
-        setRecommendedItems(data.recommended_items);
-      } else {
-        setRecommendedItems(
-          demoBtns.map(x => ({...x, action: "demo"})).concat(
-            docBtns.map(x => ({...x, action: "doc"}))
-          )
-        );
-      }
 
       const legacyItems = Array.isArray(data.items) ? data.items : [];
       const legacyButtons = Array.isArray(data.buttons)
         ? data.buttons
         : [];
 
-      // EXCLUDE-DOCS PATCH: Filter out doc-type actions from legacy sets
-      function filterOutDocs(list) {
-        return list.filter((it) => {
-          const act = (it.action || it.button_action || "").toLowerCase();
-          return !act.includes("doc");
-        });
-      }
-
+      // Instead of filtering out docs, combine both demos and docs
       const combinedRaw =
-        legacyItems.length > 0
-          ? filterOutDocs(legacyItems)
-          : legacyButtons.length > 0
-          ? filterOutDocs(legacyButtons)
-          : demoBtns; // only demos (no doc buttons appended)
-
+        Array.isArray(data.items) && data.items.length > 0
+          ? data.items
+          : Array.isArray(data.buttons) && data.buttons.length > 0
+          ? data.buttons
+          : [...demoBtns, ...docBtns]; // combine both demo and doc buttons if legacy arrays are empty
+      
       const combined = combinedRaw;
 
       let mapped = combined.map((it, idx) => ({
@@ -1800,8 +1756,30 @@ export default function Welcome() {
         action: it.action ?? it.button_action ?? "demo",
       }));
 
-      mapped = mapped.filter(Boolean);
-      mapped = pruneDemoButtons(outgoing, mapped);
+      // Split into demos and docs
+      const mappedDemos = mapped.filter(it => (it.action || it.type) === "demo");
+      const mappedDocs = mapped.filter(it => (it.action || it.type) === "doc");
+
+      // Prune demos by scoring, limit to 4
+      const prunedDemos = pruneDemoButtons(outgoing, mappedDemos).slice(0, 4);
+      // Limit docs to 2 (no scoring applied)
+      const prunedDocs = mappedDocs.slice(0, 2);
+
+      // Combine for recommended section
+      const recommendedItems = [...prunedDemos, ...prunedDocs];
+
+if (typeof data.perspective === "string" && data.perspective) {
+  if (
+    visitorDefaults.perspective !== null &&
+    visitorDefaults.perspective !== undefined
+  ) {
+    updateLocalVisitorValues({
+      perspective: data.perspective.toLowerCase(),
+    });
+  }
+}
+
+setItems(recommendedItems);
 
       if (typeof data.perspective === "string" && data.perspective) {
         if (
@@ -2735,64 +2713,16 @@ export default function Welcome() {
                   />
                 </div>
               )}
-              {getSortedRecommended(recommendedItems, selected).length > 0 && (
-                <>
-                  <div className="flex items-center justify-between mt-1 mb-3">
-                    <p className="italic text-[var(--helper-fg)]">
-                      Recommended for you
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    {getSortedRecommended(recommendedItems, selected).map((it) => (
-                      <Row
-                        key={it.id || it.url || it.title}
-                        item={it}
-                        kind={it.action || it.type}
-                        onPick={async (val) => {
-                          if ((val.action || val.type) === "doc") {
-                            // Open doc view
-                            try {
-                              const r = await fetch(
-                                `${apiBase}/render-doc-iframe`,
-                                {
-                                  method: "POST",
-                                  headers: {
-                                    "Content-Type": "application/json",
-                                  },
-                                  body: JSON.stringify(
-                                    withIdsBody({
-                                      bot_id: botId,
-                                      doc_id: val.id || "",
-                                      title: val.title || "",
-                                      url: val.url || "",
-                                    })
-                                  ),
-                                }
-                              );
-                              const j = await r.json();
-                              setSelected({
-                                ...val,
-                                _iframe_html: j?.iframe_html || null,
-                                action: "doc"
-                              });
-                              setMode("docs");
-                            } catch {
-                              setSelected({ ...val, action: "doc" });
-                              setMode("docs");
-                            }
-                            requestAnimationFrame(() =>
-                              contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-                            );
-                          } else {
-                            // Demo
-                            await normalizeAndSelectDemo(val);
-                            setMode("ask");
-                          }
-                        }}
-                      />
-                    ))}
-                  </div>
-                </>
+              {mode === "ask" && (visibleUnderVideo || []).length > 0 && (
+                <RecommendedSection
+                  items={visibleUnderVideo}
+                  normalizeAndSelectDemo={normalizeAndSelectDemo}
+                  apiBase={apiBase}
+                  botId={botId}
+                  contentRef={contentRef}
+                  setSelected={setSelected}
+                  setMode={setMode}
+                />
               )}
             </div>
           ) : mode === "browse" ? (
@@ -2927,65 +2857,15 @@ export default function Welcome() {
                   )
                 ) : null}
               </div>
-              {getSortedRecommended(recommendedItems, selected).length > 0 && (
-                <>
-                  <div className="flex items-center justify-between mt-3 mb-2">
-                    <p className="italic text-[var(--helper-fg)]">
-                      Recommended for you
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    {getSortedRecommended(recommendedItems, selected).map((it) => (
-                      <Row
-                        key={it.id || it.url || it.title}
-                        item={it}
-                        kind={it.action || it.type}
-                        onPick={async (val) => {
-                          if ((val.action || val.type) === "doc") {
-                            // Open doc view
-                            try {
-                              const r = await fetch(
-                                `${apiBase}/render-doc-iframe`,
-                                {
-                                  method: "POST",
-                                  headers: {
-                                    "Content-Type": "application/json",
-                                  },
-                                  body: JSON.stringify(
-                                    withIdsBody({
-                                      bot_id: botId,
-                                      doc_id: val.id || "",
-                                      title: val.title || "",
-                                      url: val.url || "",
-                                    })
-                                  ),
-                                }
-                              );
-                              const j = await r.json();
-                              setSelected({
-                                ...val,
-                                _iframe_html: j?.iframe_html || null,
-                                action: "doc"
-                              });
-                              setMode("docs");
-                            } catch {
-                              setSelected({ ...val, action: "doc" });
-                              setMode("docs");
-                            }
-                            requestAnimationFrame(() =>
-                              contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-                            );
-                          } else {
-                            // Demo
-                            await normalizeAndSelectDemo(val);
-                            setMode("ask");
-                          }
-                        }}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
+              <RecommendedSection
+                items={items}
+                normalizeAndSelectDemo={normalizeAndSelectDemo}
+                apiBase={apiBase}
+                botId={botId}
+                contentRef={contentRef}
+                setSelected={setSelected}
+                setMode={setMode}
+              />
               {lastError && (
                 <details className="mt-4 text-[11px] p-2 border border-red-300 rounded bg-red-50">
                   <summary className="cursor-pointer text-red-700 font-semibold">
