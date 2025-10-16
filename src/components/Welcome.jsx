@@ -153,7 +153,10 @@ function normalizeOptions(q) {
     .filter(Boolean);
 }
 
+// PATCH for the recommended section: up to 4 demos, then up to 2 docs, with "Recommended documents" help text if docs exist
+
 function getSortedRecommended(recommendedItems, selected) {
+  // Don't change sorting logic—just return all
   if (!Array.isArray(recommendedItems)) return [];
   if (!selected) return recommendedItems;
   const primary = selected.action === "demo" ? "demo" : selected.action === "doc" ? "doc" : null;
@@ -162,6 +165,116 @@ function getSortedRecommended(recommendedItems, selected) {
     ...recommendedItems.filter(it => (it.action || it.type) === primary),
     ...recommendedItems.filter(it => (it.action || it.type) !== primary)
   ];
+}
+
+/**
+ * Patch for recommended section display:
+ * - Show up to 4 demo items
+ * - Then up to 2 doc items
+ * - If docs are shown, insert "Recommended documents" label before docs
+ * - Used in both the selected case and the main ask/result case
+ * Usage: replace both occurrences of the recommended section with this function's output.
+ */
+function RecommendedSection({ recommendedItems, selected, onPick, apiBase, botId, contentRef, setSelected, setMode }) {
+  // 1. Split into demos and docs
+  const demos = (recommendedItems || []).filter(
+    it => (it.action || it.type) === "demo"
+  ).slice(0, 4);
+  const docs = (recommendedItems || []).filter(
+    it => (it.action || it.type) === "doc"
+  ).slice(0, 2);
+
+  if (demos.length === 0 && docs.length === 0) return null;
+
+  // Handler for picking items
+  const handlePick = async (val) => {
+    if ((val.action || val.type) === "doc") {
+      // Open doc view
+      try {
+        const r = await fetch(
+          `${apiBase}/render-doc-iframe`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              bot_id: botId,
+              doc_id: val.id || "",
+              title: val.title || "",
+              url: val.url || "",
+            }),
+          }
+        );
+        const j = await r.json();
+        setSelected({
+          ...val,
+          _iframe_html: j?.iframe_html || null,
+          action: "doc"
+        });
+        setMode && setMode("docs");
+      } catch {
+        setSelected({ ...val, action: "doc" });
+        setMode && setMode("docs");
+      }
+      requestAnimationFrame(() =>
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+      );
+    } else {
+      // Demo
+      if (onPick) {
+        await onPick(val);
+      }
+      setMode && setMode("ask");
+    }
+  };
+
+  return (
+    <>
+      {(demos.length > 0 || docs.length > 0) && (
+        <div className="flex flex-col gap-1">
+          {demos.length > 0 && (
+            <>
+              <div className="flex items-center justify-between mt-3 mb-2">
+                <p className="italic text-[var(--helper-fg)]">
+                  Recommended for you
+                </p>
+              </div>
+              <div className="flex flex-col gap-3">
+                {demos.map((it) =>
+                  <Row
+                    key={it.id || it.url || it.title}
+                    item={it}
+                    kind={it.action || it.type}
+                    onPick={handlePick}
+                  />
+                )}
+              </div>
+            </>
+          )}
+          {docs.length > 0 && (
+            <>
+              <div className="flex items-center justify-between mt-2 mb-2">
+                <p className="italic text-[var(--helper-fg)]">
+                  Recommended documents
+                </p>
+              </div>
+              <div className="flex flex-col gap-3">
+                {docs.map((it) =>
+                  <Row
+                    key={it.id || it.url || it.title}
+                    item={it}
+                    kind={it.action || it.type}
+                    onPick={handlePick}
+                  />
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </>
+  );
 }
 
 /* ============================================================
