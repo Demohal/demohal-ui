@@ -1140,6 +1140,147 @@ export default function Welcome() {
       };
     }, []);
 
+// PATCH: Recommended section - show up to 4 demos, then up to 2 docs; if docs are shown, add "Recommended documents" help text.
+
+//
+// Add this helper component at the top level of the file (after imports, before the main component):
+//
+function RecommendedSection({ items, onPick, normalizeAndSelectDemo, apiBase, botId, contentRef, setSelected, setMode }) {
+  // Split items into demos and docs
+  const demos = (items || []).filter(it => (it.action || it.type) === "demo").slice(0, 4);
+  const docs = (items || []).filter(it => (it.action || it.type) === "doc").slice(0, 2);
+
+  if (demos.length === 0 && docs.length === 0) return null;
+
+  // Pick handler
+  const handlePick = async (val) => {
+    if ((val.action || val.type) === "doc") {
+      try {
+        const r = await fetch(
+          `${apiBase}/render-doc-iframe`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              bot_id: botId,
+              doc_id: val.id || "",
+              title: val.title || "",
+              url: val.url || "",
+            }),
+          }
+        );
+        const j = await r.json();
+        setSelected({
+          ...val,
+          _iframe_html: j?.iframe_html || null,
+          action: "doc"
+        });
+        setMode && setMode("docs");
+      } catch {
+        setSelected({ ...val, action: "doc" });
+        setMode && setMode("docs");
+      }
+      requestAnimationFrame(() =>
+        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
+      );
+    } else {
+      await normalizeAndSelectDemo(val);
+      setMode && setMode("ask");
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-1">
+      {demos.length > 0 && (
+        <>
+          <div className="flex items-center justify-between mt-3 mb-2">
+            <p className="italic text-[var(--helper-fg)]">
+              Recommended for you
+            </p>
+          </div>
+          <div className="flex flex-col gap-3">
+            {demos.map((it) =>
+              <Row
+                key={it.id || it.url || it.title}
+                item={it}
+                kind="demo"
+                onPick={handlePick}
+              />
+            )}
+          </div>
+        </>
+      )}
+      {docs.length > 0 && (
+        <>
+          <div className="flex items-center justify-between mt-2 mb-2">
+            <p className="italic text-[var(--helper-fg)]">
+              Recommended documents
+            </p>
+          </div>
+          <div className="flex flex-col gap-3">
+            {docs.map((it) =>
+              <Row
+                key={it.id || it.url || it.title}
+                item={it}
+                kind="doc"
+                onPick={handlePick}
+              />
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+//
+// In the main component, replace BOTH recommended sections (ask/answer and under-video) with this new component.
+// Find the sections like:
+//
+//   {(items || []).length > 0 && (
+//     <>
+//       <div ...>Recommended for you</div>
+//       <div ...>{items.map(...</div>
+//     </>
+//   )}
+//
+// And replace with:
+//
+<RecommendedSection
+  items={items}
+  onPick={normalizeAndSelectDemo}
+  normalizeAndSelectDemo={normalizeAndSelectDemo}
+  apiBase={apiBase}
+  botId={botId}
+  contentRef={contentRef}
+  setSelected={setSelected}
+  setMode={setMode}
+/>
+
+// And for the under-video area, where you may have:
+//   {mode === "ask" && (visibleUnderVideo || []).length > 0 && (
+//     <>
+//       <div ...>Recommended for you</div>
+//       <div ...>{visibleUnderVideo.map(...</div>
+//     </>
+//   )}
+//
+// Replace with:
+{mode === "ask" && (visibleUnderVideo || []).length > 0 && (
+  <RecommendedSection
+    items={visibleUnderVideo}
+    onPick={normalizeAndSelectDemo}
+    normalizeAndSelectDemo={normalizeAndSelectDemo}
+    apiBase={apiBase}
+    botId={botId}
+    contentRef={contentRef}
+    setSelected={setSelected}
+    setMode={setMode}
+  />
+)}
+  
   const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
 
   /* Core state */
@@ -2595,22 +2736,15 @@ export default function Welcome() {
                 </div>
               )}
               {mode === "ask" && (visibleUnderVideo || []).length > 0 && (
-                <>
-                  <div className="flex items-center justify-between mt-1 mb-3">
-                    <p className="italic text-[var(--helper-fg)]">
-                      Recommended for you
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    {visibleUnderVideo.map((it) => (
-                      <Row
-                        key={it.id || it.url || it.title}
-                        item={it}
-                        onPick={(val) => normalizeAndSelectDemo(val)}
-                      />
-                    ))}
-                  </div>
-                </>
+                <RecommendedSection
+                  items={visibleUnderVideo}
+                  normalizeAndSelectDemo={normalizeAndSelectDemo}
+                  apiBase={apiBase}
+                  botId={botId}
+                  contentRef={contentRef}
+                  setSelected={setSelected}
+                  setMode={setMode}
+                />
               )}
             </div>
           ) : mode === "browse" ? (
@@ -2745,25 +2879,15 @@ export default function Welcome() {
                   )
                 ) : null}
               </div>
-              {(items || []).length > 0 && (
-                <>
-                  <div className="flex items-center justify-between mt-3 mb-2">
-                    <p className="italic text-[var(--helper-fg)]">
-                      Recommended for you
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    {items.map((it) => (
-                      <Row
-                        key={it.id || it.url || it.title}
-                        item={it}
-                        kind={it.action === "doc" ? "doc" : "demo"}
-                        onPick={(val) => normalizeAndSelectDemo(val)}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
+              <RecommendedSection
+                items={items}
+                normalizeAndSelectDemo={normalizeAndSelectDemo}
+                apiBase={apiBase}
+                botId={botId}
+                contentRef={contentRef}
+                setSelected={setSelected}
+                setMode={setMode}
+              />
               {lastError && (
                 <details className="mt-4 text-[11px] p-2 border border-red-300 rounded bg-red-50">
                   <summary className="cursor-pointer text-red-700 font-semibold">
