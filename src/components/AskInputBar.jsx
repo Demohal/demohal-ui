@@ -53,7 +53,7 @@ export default function AskInputBar({
         <textarea
           ref={ref}
           rows={1}
-          className="w-full rounded-[0.75rem] px-4 py-3 pr-14 text-base placeholder-gray-400 resize-y min-h-[3.25rem] max-h-[200px] bg-[var(--card-bg)] border border-[var(--border-default)] focus:border-[var(--border-default)] focus:ring-1 focus:ring-[var(--border-default)] outline-none mb-[5px]"
+          className="w-full rounded-[0.75rem] px-4 py-3 pr-14 text-base placeholder-black-400 resize-y min-h-[3.25rem] max-h-[200px] bg-[var(--card-bg)] border-2 border-[var(--border-default)] focus:border-[var(--border-default)] focus:ring-1 focus:ring-[var(--border-default)] outline-none mb-[5px]"
           placeholder={placeholder}
           value={value}
           disabled={disabled}
