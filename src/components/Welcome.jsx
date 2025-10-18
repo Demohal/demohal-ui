@@ -88,7 +88,7 @@ function RecommendedSection({ items, onPick, normalizeAndSelectDemo, apiBase, bo
         <>
           <div className="flex items-center justify-between mt-3 mb-2">
             <p className="italic text-[var(--helper-fg)]">
-              Recommended for you
+              Recommended videos
             </p>
           </div>
           <div className="flex flex-col gap-3">
