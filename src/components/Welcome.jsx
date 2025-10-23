@@ -2322,6 +2322,47 @@ setItems(recommendedItems);
     };
   }, [sessionId, apiBase]);
 
+    // ✅ Session heartbeat + hard-end safety
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const HEARTBEAT_MS = 2 * 60 * 1000; // every 2 minutes
+    let timer;
+
+    async function sendHeartbeat() {
+      try {
+        await fetch(`${apiBase}/session/heartbeat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId, visitor_id: visitorId }),
+        });
+      } catch {}
+    }
+
+    // initial + repeat
+    sendHeartbeat();
+    timer = setInterval(sendHeartbeat, HEARTBEAT_MS);
+
+    // hard exit on tab close
+    const handleUnload = () => {
+      try {
+        fetch(`${apiBase}/session/end`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId, reason: "force-unload" }),
+          keepalive: true,
+        });
+      } catch {}
+    };
+    window.addEventListener("beforeunload", handleUnload);
+
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("beforeunload", handleUnload);
+    };
+  }, [sessionId, visitorId, apiBase]);
+
+  
   const tabs = useMemo(() => {
     const out = [];
     out.push({
