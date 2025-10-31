@@ -28,6 +28,7 @@ import Row from "./Row";
 import DocIframe from "./DocIframe";
 import AskInputBar from "./AskInputBar";
 import FormFillCard from "./FormFillCard";
+import TopicPicker from "./TopicPicker";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -1260,6 +1261,12 @@ export default function Welcome() {
   const [lastError, setLastError] = useState(null);
   const [websiteUrl, setWebsiteUrl] = useState(""); // NEW: captured website URL
   const [explainMode, setExplainMode] = useState(explainModeFromQS); // PATCH: add this
+  
+  /* Topic filtering */
+  const [demoPickListEnabled, setDemoPickListEnabled] = useState(false);
+  const [availableTopics, setAvailableTopics] = useState([]);
+  const [selectedDemoTopic, setSelectedDemoTopic] = useState(null);
+  const [selectedDocTopic, setSelectedDocTopic] = useState(null);
 
   /* Theme */
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
@@ -1476,6 +1483,8 @@ export default function Welcome() {
     setWebsiteUrl(
       bot.website || bot.site_url || bot.url || ""
     );
+    // Set demo pick list flag
+    setDemoPickListEnabled(!!bot.demo_pick_list);
   }
 
   useEffect(() => {
@@ -1603,6 +1612,26 @@ export default function Welcome() {
     )
       refetchVisitorValues();
   }, [mode, visitorId, botId]);
+
+  // Fetch topics when demo pick list is enabled
+  useEffect(() => {
+    if (botId && demoPickListEnabled) {
+      fetchTopics();
+    }
+  }, [botId, demoPickListEnabled]);
+
+  // Re-fetch browse items when topic selection changes
+  useEffect(() => {
+    if (mode === "browse" && botId) {
+      _openBrowse();
+    }
+  }, [selectedDemoTopic]);
+
+  useEffect(() => {
+    if (mode === "docs" && botId) {
+      _openBrowseDocs();
+    }
+  }, [selectedDocTopic]);
 
   const activeFormFields = useMemo(
     () =>
@@ -1887,15 +1916,32 @@ setItems(recommendedItems);
     }
   }
 
+  async function fetchTopics() {
+    if (!botId || !demoPickListEnabled) return;
+    try {
+      const url = `${apiBase}/topics?bot_id=${encodeURIComponent(botId)}`;
+      const r = await fetch(url, { headers: withIdsHeaders() });
+      const j = await r.json();
+      if (j?.ok && Array.isArray(j.topics)) {
+        setAvailableTopics(j.topics);
+      }
+    } catch {
+      // Silently fail - feature is optional
+      setAvailableTopics([]);
+    }
+  }
+
   async function _openBrowse() {
     if (!botId) return;
     setMode("browse");
     setSelected(null);
     try {
-      const url = withIdsQS(
-        `${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`
-      );
-      const r = await fetch(url, { headers: withIdsHeaders() });
+      let url = `${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`;
+      if (selectedDemoTopic) {
+        url += `&topic=${encodeURIComponent(selectedDemoTopic)}`;
+      }
+      const fullUrl = withIdsQS(url);
+      const r = await fetch(fullUrl, { headers: withIdsHeaders() });
       const j = await r.json();
       const src = Array.isArray(j?.items) ? j.items : [];
       setBrowseItems(
@@ -1937,10 +1983,12 @@ setItems(recommendedItems);
     setMode("docs");
     setSelected(null);
     try {
-      const url = withIdsQS(
-        `${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`
-      );
-      const r = await fetch(url, { headers: withIdsHeaders() });
+      let url = `${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`;
+      if (selectedDocTopic) {
+        url += `&topic=${encodeURIComponent(selectedDocTopic)}`;
+      }
+      const fullUrl = withIdsQS(url);
+      const r = await fetch(fullUrl, { headers: withIdsHeaders() });
       const j = await r.json();
       const src = Array.isArray(j?.items) ? j.items : [];
       setBrowseDocs(
@@ -2456,6 +2504,9 @@ setItems(recommendedItems);
     setShowIntroVideo(!!nextOptions.show_intro_video);
     setIntroVideoUrl(nextOptions.intro_video_url || "");
     setShowFormfill(!!nextOptions.show_formfill);
+    if (nextOptions.demo_pick_list !== undefined) {
+      setDemoPickListEnabled(!!nextOptions.demo_pick_list);
+    }
   }
 
   if (fatal) {
@@ -2768,6 +2819,17 @@ setItems(recommendedItems);
             </div>
           ) : mode === "browse" ? (
             <div className="w-full flex-1 flex flex-col">
+              {demoPickListEnabled && availableTopics.length > 0 && (
+                <TopicPicker
+                  topics={availableTopics}
+                  selectedTopic={selectedDemoTopic}
+                  onTopicChange={(topic) => {
+                    setSelectedDemoTopic(topic);
+                    setSelected(null); // Clear selected demo when changing topic
+                  }}
+                  label="Filter by topic"
+                />
+              )}
               {(browseItems || []).length > 0 && (
                 <>
                   <div className="flex items-center justify-between mt-2 mb-3">
@@ -2789,6 +2851,17 @@ setItems(recommendedItems);
             </div>
           ) : mode === "docs" ? (
             <div className="w-full flex-1 flex flex-col">
+              {demoPickListEnabled && availableTopics.length > 0 && (
+                <TopicPicker
+                  topics={availableTopics}
+                  selectedTopic={selectedDocTopic}
+                  onTopicChange={(topic) => {
+                    setSelectedDocTopic(topic);
+                    setSelected(null); // Clear selected doc when changing topic
+                  }}
+                  label="Filter by topic"
+                />
+              )}
               {(browseDocs || []).length > 0 && (
                 <>
                   <div className="flex items-center justify-between mt-2 mb-3">
