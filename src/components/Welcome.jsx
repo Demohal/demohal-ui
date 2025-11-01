@@ -2792,6 +2792,7 @@ setItems(recommendedItems);
                 const filteredItems = selectedDemoTopic === "all" 
                   ? browseItems 
                   : browseItems.filter(it => it.topic === selectedDemoTopic);
+                console.log("Filtering: item.topic =", it.topic, "selectedDemoTopic =", selectedDemoTopic);
 
                 return (
                   <>
@@ -2841,6 +2842,7 @@ setItems(recommendedItems);
                 const filteredDocs = selectedDocTopic === "all" 
                   ? browseDocs 
                   : browseDocs.filter(it => it.topic === selectedDocTopic);
+                console.log("Filtering: item.topic =", it.topic, "selectedDocTopic =", selectedDocTopic);
 
                 return (
                   <>
