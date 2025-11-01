@@ -239,7 +239,7 @@ function normalizeTopicToString(topic) {
   // Handle various possible topic formats and always return a string
   if (!topic) return "";
   if (typeof topic === "string") return topic.trim();
-  if (typeof topic === "object" && topic.name && typeof topic.name === "string") {
+  if (typeof topic === "object" && typeof topic.name === "string") {
     return topic.name.trim();
   }
   return String(topic).trim();
