@@ -235,6 +235,17 @@ function inverseBW(hex) {
   return L > 0.5 ? "#000000" : "#ffffff";
 }
 
+function normalizeTopicToString(topic) {
+  // Handle various possible topic formats and always return a string
+  if (!topic) return "";
+  if (typeof topic === "string") return topic.trim();
+  if (typeof topic === "object" && topic && typeof topic.name === "string") {
+    return topic.name.trim();
+  }
+  // Fallback: convert any other format to string
+  return String(topic).trim();
+}
+
 function normalizeOptions(q) {
   const raw = q?.options ?? q?.choices ?? q?.buttons ?? q?.values ?? [];
   return (Array.isArray(raw) ? raw : [])
@@ -1928,7 +1939,7 @@ setItems(recommendedItems);
             it.description ??
             it.summary ??
             "",
-          topic: it.topic ?? "",
+          topic: normalizeTopicToString(it.topic),
         }))
       );
       requestAnimationFrame(() =>
@@ -1975,7 +1986,7 @@ setItems(recommendedItems);
             it.description ??
             it.summary ??
             "",
-          topic: it.topic ?? "",
+          topic: normalizeTopicToString(it.topic),
         }))
       );
       requestAnimationFrame(() =>
@@ -2873,7 +2884,7 @@ setItems(recommendedItems);
                       </p>
                     </div>
                     <div className="flex flex-col gap-3">
-                      {filteredDocs.map((it) => (
+                      {filteredItems.map((it) => (
                         <Row
                           key={it.id || it.url || it.title}
                           item={it}
