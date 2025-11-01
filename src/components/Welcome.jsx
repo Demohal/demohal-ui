@@ -2784,8 +2784,8 @@ setItems(recommendedItems);
             <div className="w-full flex-1 flex flex-col">
               {(browseItems || []).length > 0 && (() => {
                 // Get demo topics
-                const demoTopics = Array.isArray(botTopics) 
-                  ? botTopics.filter(t => t.for_demos).map(t => ({ name: t.name, value: t.name }))
+                const demoTopics = Array.isArray(botTopics?.topics)
+                  ? botTopics.topics.filter(t => t.for_demos).map(t => ({ name: t.name, value: t.name }))
                   : [];
                 console.log("Demo topics array:", demoTopics);
                 // Filter items by selected topic
@@ -2833,8 +2833,8 @@ setItems(recommendedItems);
             <div className="w-full flex-1 flex flex-col">
               {(browseDocs || []).length > 0 && (() => {
                 // Get doc topics
-                const docTopics = Array.isArray(botTopics) 
-                  ? botTopics.filter(t => t.for_docs).map(t => ({ name: t.name, value: t.name }))
+                const docTopics = Array.isArray(botTopics?.topics)
+                  ? botTopics.topics.filter(t => t.for_docs).map(t => ({ name: t.name, value: t.name }))
                   : [];
                 console.log("Doc topics array:", docTopics);
                 // Filter items by selected topic
