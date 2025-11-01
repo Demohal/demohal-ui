@@ -235,6 +235,17 @@ function inverseBW(hex) {
   return L > 0.5 ? "#000000" : "#ffffff";
 }
 
+function normalizeTopicToString(topic) {
+  // Handle various possible topic formats and always return a string
+  if (!topic) return "";
+  if (typeof topic === "string") return topic.trim();
+  if (typeof topic === "object" && topic && typeof topic.name === "string") {
+    return topic.name.trim();
+  }
+  // Fallback: convert any other format to string
+  return String(topic).trim();
+}
+
 function normalizeOptions(q) {
   const raw = q?.options ?? q?.choices ?? q?.buttons ?? q?.values ?? [];
   return (Array.isArray(raw) ? raw : [])
@@ -1252,6 +1263,11 @@ export default function Welcome() {
   const [browseDocs, setBrowseDocs] = useState([]);
   const [selected, setSelected] = useState(null);
   const [agent, setAgent] = useState(null);
+
+  // Topic filtering
+  const [botTopics, setBotTopics] = useState(null);
+  const [selectedDemoTopic, setSelectedDemoTopic] = useState("all");
+  const [selectedDocTopic, setSelectedDocTopic] = useState("all");
   const [visitorId, setVisitorId] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [introVideoUrl, setIntroVideoUrl] = useState("");
@@ -1275,6 +1291,8 @@ export default function Welcome() {
     () => ({ ...derivedTheme, ...pickerVars }),
     [derivedTheme, pickerVars]
   );
+
+  console.log("Rendering Welcome.jsx - botTopics:", botTopics);
 
   // Mirror variables to :root (safety)
   useEffect(() => {
@@ -1476,6 +1494,9 @@ export default function Welcome() {
     setWebsiteUrl(
       bot.website || bot.site_url || bot.url || ""
     );
+    // TOPICS from bot settings
+    setBotTopics(bot.topics || null);
+    console.log("Loaded bot topics:", bot.topics);
   }
 
   useEffect(() => {
@@ -1891,6 +1912,7 @@ setItems(recommendedItems);
     if (!botId) return;
     setMode("browse");
     setSelected(null);
+    setSelectedDemoTopic("all"); // Reset topic filter
     try {
       const url = withIdsQS(
         `${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`
@@ -1917,6 +1939,7 @@ setItems(recommendedItems);
             it.description ??
             it.summary ??
             "",
+          topic: normalizeTopicToString(it.topic),
         }))
       );
       requestAnimationFrame(() =>
@@ -1936,6 +1959,7 @@ setItems(recommendedItems);
     if (!botId) return;
     setMode("docs");
     setSelected(null);
+    setSelectedDocTopic("all"); // Reset topic filter
     try {
       const url = withIdsQS(
         `${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`
@@ -1962,6 +1986,7 @@ setItems(recommendedItems);
             it.description ??
             it.summary ??
             "",
+          topic: normalizeTopicToString(it.topic),
         }))
       );
       requestAnimationFrame(() =>
@@ -2768,80 +2793,143 @@ setItems(recommendedItems);
             </div>
           ) : mode === "browse" ? (
             <div className="w-full flex-1 flex flex-col">
-              {(browseItems || []).length > 0 && (
-                <>
-                  <div className="flex items-center justify-between mt-2 mb-3">
-                    <p className="italic text-[var(--helper-fg)]">
-                      Select a demo to view it
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    {browseItems.map((it) => (
-                      <Row
-                        key={it.id || it.url || it.title}
-                        item={it}
-                        onPick={(val) => normalizeAndSelectDemo(val)}
-                      />
+              {(browseItems || []).length > 0 && (() => {
+                // Get demo topics
+                const demoTopics = Array.isArray(botTopics?.topics)
+                  ? botTopics.topics.filter(t => t.for_demos).map(t => ({ name: t.name, value: t.name }))
+                  : [];
+                console.log("Demo topics array:", demoTopics);
+                // Filter items by selected topic
+                const filteredItems = selectedDemoTopic === "all" 
+                  ? browseItems 
+                  : browseItems.filter(it => {
+                      console.log("Filtering: item.topic =", it.topic, "selectedDemoTopic =", selectedDemoTopic);
+                      return it.topic === selectedDemoTopic;
+                    });
+                
+
+                return (
+                  <>
+                    {demoTopics.length > 0 && (
+                      <div className="mb-3">
+                        <select
+                          value={selectedDemoTopic}
+                          onChange={(e) => setSelectedDemoTopic(e.target.value)}
+                          className="w-full px-3 py-2 border border-[var(--border-default,#9ca3af)] rounded-md bg-[var(--card-bg)] text-[var(--message-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--send-color,#22c55e)]"
+                        >
+                          <option value="all">Show All</option>
+                          {demoTopics.map((topic) => (
+                            <option key={topic.value} value={topic.value}>
+                              {topic.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between mt-2 mb-3">
+                      <p className="italic text-[var(--helper-fg)]">
+                        Select a demo to view it
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      {filteredItems.map((it) => (
+                        <Row
+                          key={it.id || it.url || it.title}
+                          item={it}
+                          onPick={(val) => normalizeAndSelectDemo(val)}
+                        />
                     ))}
                   </div>
                 </>
-              )}
+                );
+              })()}
             </div>
           ) : mode === "docs" ? (
             <div className="w-full flex-1 flex flex-col">
-              {(browseDocs || []).length > 0 && (
-                <>
-                  <div className="flex items-center justify-between mt-2 mb-3">
-                    <p className="italic text-[var(--helper-fg)]">
-                      Select a document to view it
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    {browseDocs.map((it) => (
-                      <Row
-                        key={it.id || it.url || it.title}
-                        item={it}
-                        kind="doc"
-                        onPick={async (val) => {
-                          try {
-                            const r = await fetch(
-                              `${apiBase}/render-doc-iframe`,
-                              {
-                                method: "POST",
-                                headers: {
-                                  "Content-Type": "application/json",
-                                },
-                                body: JSON.stringify(
-                                  withIdsBody({
-                                    bot_id: botId,
-                                    doc_id: val.id || "",
-                                    title: val.title || "",
-                                    url: val.url || "",
-                                  })
-                                ),
-                              }
+              {(browseDocs || []).length > 0 && (() => {
+                // Get doc topics
+                const docTopics = Array.isArray(botTopics?.topics)
+                  ? botTopics.topics.filter(t => t.for_docs).map(t => ({ name: t.name, value: t.name }))
+                  : [];
+                console.log("Doc topics array:", docTopics);
+                // Filter items by selected topic
+                const filteredItems = selectedDocTopic === "all" 
+                  ? browseDocs 
+                  : browseDocs.filter(it => {
+                      console.log("Filtering: item.topic =", it.topic, "selectedDocTopic =", selectedDocTopic);
+                      return it.topic === selectedDocTopic;
+                    });
+               
+                return (
+                  <>
+                    {docTopics.length > 0 && (
+                      <div className="mb-3">
+                        <select
+                          value={selectedDocTopic}
+                          onChange={(e) => setSelectedDocTopic(e.target.value)}
+                          className="w-full px-3 py-2 border border-[var(--border-default,#9ca3af)] rounded-md bg-[var(--card-bg)] text-[var(--message-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--send-color,#22c55e)]"
+                        >
+                          <option value="all">Show All</option>
+                          {docTopics.map((topic) => (
+                            <option key={topic.value} value={topic.value}>
+                              {topic.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between mt-2 mb-3">
+                      <p className="italic text-[var(--helper-fg)]">
+                        Select a document to view it
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      {filteredItems.map((it) => (
+                        <Row
+                          key={it.id || it.url || it.title}
+                          item={it}
+                          kind="doc"
+                          onPick={async (val) => {
+                            try {
+                              const r = await fetch(
+                                `${apiBase}/render-doc-iframe`,
+                                {
+                                  method: "POST",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                  },
+                                  body: JSON.stringify(
+                                    withIdsBody({
+                                      bot_id: botId,
+                                      doc_id: val.id || "",
+                                      title: val.title || "",
+                                      url: val.url || "",
+                                    })
+                                  ),
+                                }
+                              );
+                              const j = await r.json();
+                              setSelected({
+                                ...val,
+                                _iframe_html: j?.iframe_html || null,
+                              });
+                            } catch {
+                              setSelected(val);
+                            }
+                            requestAnimationFrame(() =>
+                              contentRef.current?.scrollTo({
+                                top: 0,
+                                behavior: "auto",
+                              })
                             );
-                            const j = await r.json();
-                            setSelected({
-                              ...val,
-                              _iframe_html: j?.iframe_html || null,
-                            });
-                          } catch {
-                            setSelected(val);
-                          }
-                          requestAnimationFrame(() =>
-                            contentRef.current?.scrollTo({
-                              top: 0,
-                              behavior: "auto",
-                            })
-                          );
-                        }}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </>
+                  );
+                })()}
+              </div>
           ) : (
             <div className="w-full flex-1 flex flex-col">
               {!lastQuestion && !loading && (
