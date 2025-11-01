@@ -2843,12 +2843,12 @@ setItems(recommendedItems);
                 console.log("Doc topics array:", docTopics);
                 // Filter items by selected topic
                 const filteredItems = selectedDocTopic === "all" 
-                  ? browseItems 
-                  : browseItems.filter(it => {
+                  ? browseDocs 
+                  : browseDocs.filter(it => {
                       console.log("Filtering: item.topic =", it.topic, "selectedDocTopic =", selectedDocTopic);
                       return it.topic === selectedDocTopic;
                     });
-
+               
                 return (
                   <>
                     {docTopics.length > 0 && (
