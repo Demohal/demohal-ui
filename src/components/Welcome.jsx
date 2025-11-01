@@ -1281,6 +1281,8 @@ export default function Welcome() {
     [derivedTheme, pickerVars]
   );
 
+  console.log("Rendering Welcome.jsx - botTopics:", botTopics);
+
   // Mirror variables to :root (safety)
   useEffect(() => {
     const root = document.documentElement;
@@ -1483,6 +1485,7 @@ export default function Welcome() {
     );
     // TOPICS from bot settings
     setBotTopics(bot.topics || null);
+    console.log("Loaded bot topics:", bot.topics);
   }
 
   useEffect(() => {
@@ -2784,7 +2787,7 @@ setItems(recommendedItems);
                 const demoTopics = Array.isArray(botTopics) 
                   ? botTopics.filter(t => t.for_demos).map(t => ({ name: t.name, value: t.name }))
                   : [];
-                
+                console.log("Demo topics array:", demoTopics);
                 // Filter items by selected topic
                 const filteredItems = selectedDemoTopic === "all" 
                   ? browseItems 
@@ -2833,7 +2836,7 @@ setItems(recommendedItems);
                 const docTopics = Array.isArray(botTopics) 
                   ? botTopics.filter(t => t.for_docs).map(t => ({ name: t.name, value: t.name }))
                   : [];
-                
+                console.log("Doc topics array:", docTopics);
                 // Filter items by selected topic
                 const filteredDocs = selectedDocTopic === "all" 
                   ? browseDocs 
