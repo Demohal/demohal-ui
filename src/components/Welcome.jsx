@@ -2791,8 +2791,11 @@ setItems(recommendedItems);
                 // Filter items by selected topic
                 const filteredItems = selectedDemoTopic === "all" 
                   ? browseItems 
-                  : browseItems.filter(it => it.topic === selectedDemoTopic);
-                console.log("Filtering: item.topic =", it.topic, "selectedDemoTopic =", selectedDemoTopic);
+                  : browseItems.filter(it => {
+                      console.log("Filtering: item.topic =", it.topic, "selectedDemoTopic =", selectedDemoTopic);
+                      return it.topic === selectedDemoTopic;
+                    });
+                
 
                 return (
                   <>
@@ -2839,10 +2842,12 @@ setItems(recommendedItems);
                   : [];
                 console.log("Doc topics array:", docTopics);
                 // Filter items by selected topic
-                const filteredDocs = selectedDocTopic === "all" 
-                  ? browseDocs 
-                  : browseDocs.filter(it => it.topic === selectedDocTopic);
-                console.log("Filtering: item.topic =", it.topic, "selectedDocTopic =", selectedDocTopic);
+                const filteredItems = selectedDocTopic === "all" 
+                  ? browseItems 
+                  : browseItems.filter(it => {
+                      console.log("Filtering: item.topic =", it.topic, "selectedDocTopic =", selectedDocTopic);
+                      return it.topic === selectedDocTopic;
+                    });
 
                 return (
                   <>
