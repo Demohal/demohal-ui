@@ -2547,10 +2547,11 @@ setItems(recommendedItems);
         {/* Header */}
         <div className={[
           "bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)] flex flex-col",
-          useBannerUrl ? "items-center" : ""
-        ].join(" ")}>
+          useBannerUrl ? "items-center relative" : ""
+        ].join(" ")}
+        style={useBannerUrl ? { height: '250px' } : {}}>
           {useBannerUrl && bannerUrl && bannerUrl.trim() ? (
-            // When use_banner_url is TRUE: Show banner image at 720px × 150px, centered
+            // When use_banner_url is TRUE: Show banner image at 720px × 150px, tabs anchored at 250px line
             <>
               <div className="relative w-full max-w-[720px]" style={{ height: '150px', borderBottom: '2px solid black' }}>
                 <img
@@ -2564,8 +2565,8 @@ setItems(recommendedItems);
                   }}
                 />
               </div>
-              {/* Tabs below banner */}
-              <div className="w-full px-4 sm:px-6">
+              {/* Tabs anchored at bottom of 250px container */}
+              <div className="absolute bottom-0 left-0 right-0 px-4 sm:px-6">
                 <TabsNav
                   mode={mode === "formfill" ? "personalize" : mode}
                   tabs={tabs}
