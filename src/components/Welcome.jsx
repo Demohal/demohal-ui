@@ -1474,7 +1474,7 @@ export default function Welcome() {
     };
   }, [botId, alias, defaultAlias, apiBase]);
 
-    function applyBotSettings(bot) {
+  function applyBotSettings(bot) {
     if (!bot) return;
     setPromptOverride(bot.prompt_override || "");
     setResponseText(bot.welcome_message || "");
