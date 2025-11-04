@@ -1498,7 +1498,9 @@ export default function Welcome() {
     );
     // Capture banner URL and use_banner_url settings
     setBannerUrl(bot.banner_url || "");
-    setUseBannerUrl(!!bot.use_banner_url);
+    // Check both bot settings and URL params for use_banner_url
+    const useBannerFromUrl = urlParams.use_banner_url === "true" || urlParams.use_banner_url === "1";
+    setUseBannerUrl(!!bot.use_banner_url || useBannerFromUrl);
     // TOPICS from bot settings
     setBotTopics(bot.topics || null);
     console.log("Loaded bot topics:", bot.topics);
@@ -2541,36 +2543,35 @@ setItems(recommendedItems);
       ].join(" ")}
       style={liveTheme}
     >
-      <div className={[
-        "w-full h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all",
-        useBannerUrl ? "max-w-[1128px]" : "max-w-[720px]"
-      ].join(" ")}>
+      <div className="w-full h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all max-w-[720px]">
         {/* Header */}
         <div className={[
           "bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)] flex flex-col",
-          useBannerUrl ? "h-[250px]" : ""
+          useBannerUrl ? "items-center" : ""
         ].join(" ")}>
           {useBannerUrl && bannerUrl && bannerUrl.trim() ? (
-            // When use_banner_url is TRUE: Show banner image, hide logo and title
-            <div className="flex-1 relative">
-              <img
-                src={bannerUrl}
-                alt="Banner"
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  // Fallback: hide the image and show traditional layout
-                  console.warn("Banner image failed to load:", bannerUrl);
-                  setUseBannerUrl(false);
-                }}
-              />
-              {/* Tabs anchored to bottom of banner */}
-              <div className="absolute bottom-0 left-0 right-0 px-4 sm:px-6">
+            // When use_banner_url is TRUE: Show banner image at 720px × 150px, centered
+            <>
+              <div className="relative" style={{ width: '720px', height: '150px', borderBottom: '2px solid black' }}>
+                <img
+                  src={bannerUrl}
+                  alt="Banner"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    // Fallback: hide the image and show traditional layout
+                    console.warn("Banner image failed to load:", bannerUrl);
+                    setUseBannerUrl(false);
+                  }}
+                />
+              </div>
+              {/* Tabs below banner */}
+              <div className="w-full px-4 sm:px-6">
                 <TabsNav
                   mode={mode === "formfill" ? "personalize" : mode}
                   tabs={tabs}
                 />
               </div>
-            </div>
+            </>
           ) : (
             // When use_banner_url is FALSE/null: Show logo and title as before
             <>
