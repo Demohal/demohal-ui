@@ -2550,13 +2550,18 @@ setItems(recommendedItems);
           "bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)] flex flex-col",
           useBannerUrl ? "h-[250px]" : ""
         ].join(" ")}>
-          {useBannerUrl && bannerUrl ? (
+          {useBannerUrl && bannerUrl && bannerUrl.trim() ? (
             // When use_banner_url is TRUE: Show banner image, hide logo and title
             <div className="flex-1 relative">
               <img
                 src={bannerUrl}
                 alt="Banner"
                 className="w-full h-full object-cover"
+                onError={(e) => {
+                  // Fallback: hide the image and show traditional layout
+                  console.warn("Banner image failed to load:", bannerUrl);
+                  setUseBannerUrl(false);
+                }}
               />
               {/* Tabs anchored to bottom of banner */}
               <div className="absolute bottom-0 left-0 right-0 px-4 sm:px-6">
