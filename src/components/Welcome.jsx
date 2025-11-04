@@ -1496,8 +1496,21 @@ export default function Welcome() {
     setWebsiteUrl(
       bot.website || bot.site_url || bot.url || ""
     );
-    // Banner URL settings
-    setBannerUrl(bot.banner_url || "");
+    // Banner URL settings - validate URL to prevent CSS injection
+    const rawBannerUrl = bot.banner_url || "";
+    let validatedBannerUrl = "";
+    if (rawBannerUrl) {
+      try {
+        const url = new URL(rawBannerUrl);
+        // Only allow http and https protocols
+        if (url.protocol === "http:" || url.protocol === "https:") {
+          validatedBannerUrl = rawBannerUrl;
+        }
+      } catch {
+        // Invalid URL, leave empty
+      }
+    }
+    setBannerUrl(validatedBannerUrl);
     setUseBannerUrl(!!bot.use_banner_url);
     // TOPICS from bot settings
     setBotTopics(bot.topics || null);
@@ -2433,6 +2446,17 @@ setItems(recommendedItems);
     brandAssets.logo_dark_url ||
     fallbackLogo;
 
+  // Memoize the header title to avoid duplication
+  const headerTitle = useMemo(() => {
+    if (selected) return selected.title;
+    if (mode === "personalize" || mode === "formfill") return "Personalize";
+    if (mode === "browse") return "Browse Demos";
+    if (mode === "docs") return "Browse Documents";
+    if (mode === "meeting") return "Schedule Meeting";
+    if (mode === "price") return "Price Estimate";
+    return "Ask the Assistant";
+  }, [selected, mode]);
+
   const listSource = mode === "browse" ? browseItems : items;
   const visibleUnderVideo = selected
     ? mode === "ask"
@@ -2545,18 +2569,14 @@ setItems(recommendedItems);
         {/* Header */}
         <div 
           className="px-4 sm:px-6 text-[var(--banner-fg)] border-b border-[var(--border-default)]"
-          style={
-            useBannerUrl && bannerUrl
-              ? {
-                  backgroundImage: `url(${bannerUrl})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  backgroundColor: 'var(--banner-bg)',
-                }
-              : {
-                  backgroundColor: 'var(--banner-bg)',
-                }
-          }
+          style={{
+            backgroundColor: 'var(--banner-bg)',
+            ...(useBannerUrl && bannerUrl && {
+              backgroundImage: `url(${bannerUrl})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }),
+          }}
         >
           {useBannerUrl && bannerUrl && websiteUrl ? (
             <a
@@ -2577,19 +2597,7 @@ setItems(recommendedItems);
                   />
                 </div>
                 <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
-                  {selected
-                    ? selected.title
-                    : mode === "personalize" || mode === "formfill"
-                    ? "Personalize"
-                    : mode === "browse"
-                    ? "Browse Demos"
-                    : mode === "docs"
-                    ? "Browse Documents"
-                    : mode === "meeting"
-                    ? "Schedule Meeting"
-                    : mode === "price"
-                    ? "Price Estimate"
-                    : "Ask the Assistant"}
+                  {headerTitle}
                 </div>
               </div>
             </a>
@@ -2638,19 +2646,7 @@ setItems(recommendedItems);
                 )}
               </div>
               <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
-                {selected
-                  ? selected.title
-                  : mode === "personalize" || mode === "formfill"
-                  ? "Personalize"
-                  : mode === "browse"
-                  ? "Browse Demos"
-                  : mode === "docs"
-                  ? "Browse Documents"
-                  : mode === "meeting"
-                  ? "Schedule Meeting"
-                  : mode === "price"
-                  ? "Price Estimate"
-                  : "Ask the Assistant"}
+                {headerTitle}
               </div>
             </div>
           )}
