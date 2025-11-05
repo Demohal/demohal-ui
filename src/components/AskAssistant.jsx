@@ -80,6 +80,9 @@ const SCREEN_ORDER = [
   { key: "price", label: "Price Estimate" },
 ];
 
+// Affirmative keywords that trigger suggested question submission
+const AFFIRMATIVE_KEYWORDS = ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'y'];
+
 const classNames = (...xs) => xs.filter(Boolean).join(" ");
 function inverseBW(hex) {
   const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(
@@ -91,6 +94,13 @@ function inverseBW(hex) {
     b = parseInt(m[3], 16);
   const L = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   return L > 0.5 ? "#000000" : "#ffffff";
+}
+
+// Sanitize suggested question text to prevent potential issues
+function sanitizeSuggestedQuestion(text) {
+  if (typeof text !== 'string') return '';
+  // Trim and limit length to prevent abuse
+  return text.trim().substring(0, 500);
 }
 
 /* ========================== *
@@ -1192,8 +1202,7 @@ useEffect(() => {
     
     // Intercept affirmative responses and replace with suggested question
     if (suggestNextQuestion && suggestedQuestion) {
-      const affirmatives = ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'y'];
-      if (affirmatives.includes(outgoing.toLowerCase())) {
+      if (AFFIRMATIVE_KEYWORDS.includes(outgoing.toLowerCase())) {
         outgoing = suggestedQuestion;
       }
     }
@@ -1278,9 +1287,20 @@ useEffect(() => {
       setScopePayload({ scope: "standard" });
       
       // Capture suggested followup question from response
-      if (data?.suggest_next_question && data?.suggested_question) {
-        setSuggestNextQuestion(true);
-        setSuggestedQuestion(data.suggested_question);
+      // Validate that suggest_next_question is explicitly true and suggested_question is a non-empty string
+      if (
+        data?.suggest_next_question === true && 
+        typeof data?.suggested_question === 'string' && 
+        data.suggested_question.trim().length > 0
+      ) {
+        const sanitized = sanitizeSuggestedQuestion(data.suggested_question);
+        if (sanitized.length > 0) {
+          setSuggestNextQuestion(true);
+          setSuggestedQuestion(sanitized);
+        } else {
+          setSuggestNextQuestion(false);
+          setSuggestedQuestion("");
+        }
       } else {
         setSuggestNextQuestion(false);
         setSuggestedQuestion("");
