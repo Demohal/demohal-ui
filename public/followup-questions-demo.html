@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suggested Followup Questions - Visual Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #e6e6e6;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 720px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: #000;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 20px;
+        }
+        
+        .content {
+            padding: 24px;
+        }
+        
+        .scenario {
+            margin-bottom: 40px;
+            padding: 20px;
+            background: #f9fafb;
+            border-radius: 8px;
+        }
+        
+        .scenario-title {
+            font-weight: 700;
+            font-size: 18px;
+            margin-bottom: 16px;
+            color: #111;
+        }
+        
+        .question {
+            background: #e5e7eb;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            font-style: italic;
+            text-align: center;
+            color: #4b5563;
+        }
+        
+        .response {
+            background: white;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+        
+        .response-text {
+            font-weight: 700;
+            line-height: 1.5;
+            margin-bottom: 12px;
+        }
+        
+        .suggestion-box {
+            margin-top: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            background: white;
+            border: 1px solid #9ca3af;
+            font-size: 14px;
+            color: #4b5563;
+        }
+        
+        .suggestion-text {
+            font-weight: 600;
+            color: #000;
+        }
+        
+        .user-input {
+            background: #dbeafe;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin: 12px 0;
+            font-family: monospace;
+        }
+        
+        .arrow {
+            text-align: center;
+            font-size: 24px;
+            margin: 12px 0;
+            color: #6b7280;
+        }
+        
+        .actual-sent {
+            background: #d1fae5;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 2px solid #10b981;
+        }
+        
+        .label {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #6b7280;
+            margin-bottom: 8px;
+        }
+        
+        .feature-list {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        
+        .feature-list h3 {
+            margin-bottom: 12px;
+            color: #111;
+        }
+        
+        .feature-list ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .feature-list li {
+            padding: 8px 0;
+            padding-left: 24px;
+            position: relative;
+        }
+        
+        .feature-list li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #10b981;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            Suggested Followup Questions - Visual Demo
+        </div>
+        
+        <div class="content">
+            <!-- Scenario 1 -->
+            <div class="scenario">
+                <div class="scenario-title">Scenario 1: User Types "yes" (Lowercase)</div>
+                
+                <div class="label">User Question:</div>
+                <div class="question">"Tell me about your pricing"</div>
+                
+                <div class="label">Bot Response:</div>
+                <div class="response">
+                    <div class="response-text">
+                        Our pricing is flexible and based on your specific needs. We offer three tiers: Basic, Professional, and Enterprise.
+                    </div>
+                    <div class="suggestion-box">
+                        A good followup question might be '<span class="suggestion-text">Would you like to see a detailed comparison of the pricing tiers?</span>'. Just type "Yes" in the question box below to ask it.
+                    </div>
+                </div>
+                
+                <div class="label">User Types:</div>
+                <div class="user-input">yes</div>
+                
+                <div class="arrow">↓</div>
+                
+                <div class="label">Actually Sent to Bot:</div>
+                <div class="actual-sent">Would you like to see a detailed comparison of the pricing tiers?</div>
+            </div>
+            
+            <!-- Scenario 2 -->
+            <div class="scenario">
+                <div class="scenario-title">Scenario 2: User Types "Sure" (Affirmative Variation)</div>
+                
+                <div class="label">Bot Response with Suggestion:</div>
+                <div class="response">
+                    <div class="response-text">
+                        Our demos are categorized by industry and use case to help you find the most relevant examples.
+                    </div>
+                    <div class="suggestion-box">
+                        A good followup question might be '<span class="suggestion-text">Can you show me demos for the healthcare industry?</span>'. Just type "Yes" in the question box below to ask it.
+                    </div>
+                </div>
+                
+                <div class="label">User Types:</div>
+                <div class="user-input">sure</div>
+                
+                <div class="arrow">↓</div>
+                
+                <div class="label">Actually Sent to Bot:</div>
+                <div class="actual-sent">Can you show me demos for the healthcare industry?</div>
+            </div>
+            
+            <!-- Scenario 3 -->
+            <div class="scenario">
+                <div class="scenario-title">Scenario 3: User Types Different Question</div>
+                
+                <div class="label">Bot Response with Suggestion:</div>
+                <div class="response">
+                    <div class="response-text">
+                        We integrate with over 50 popular tools including Salesforce, HubSpot, and Slack.
+                    </div>
+                    <div class="suggestion-box">
+                        A good followup question might be '<span class="suggestion-text">How does the Salesforce integration work?</span>'. Just type "Yes" in the question box below to ask it.
+                    </div>
+                </div>
+                
+                <div class="label">User Types (Not Affirmative):</div>
+                <div class="user-input">Do you integrate with Microsoft Teams?</div>
+                
+                <div class="arrow">↓</div>
+                
+                <div class="label">Actually Sent to Bot:</div>
+                <div class="actual-sent">Do you integrate with Microsoft Teams?</div>
+            </div>
+            
+            <!-- Feature List -->
+            <div class="feature-list">
+                <h3>Key Features Implemented</h3>
+                <ul>
+                    <li>Accepts <code>suggest_next_question</code> (boolean) and <code>suggested_question</code> (string) from API</li>
+                    <li>Displays suggestion box with formatted message after bot response</li>
+                    <li>Intercepts affirmative responses: yes, yeah, yep, sure, ok, okay, y (case-insensitive)</li>
+                    <li>Replaces user input with suggested question before sending</li>
+                    <li>Shows actual suggested question in conversation history (not "yes")</li>
+                    <li>Clears suggestions after use or when new question is sent</li>
+                    <li>Maintains correct state throughout conversation flow</li>
+                    <li>Handles errors gracefully by clearing suggestions</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
