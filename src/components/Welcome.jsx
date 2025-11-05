@@ -1681,6 +1681,23 @@ export default function Welcome() {
 
   /* Ask flow */
   
+  // useEffect to ensure affirmative inputs are replaced with suggested question
+  // This handles edge cases where React batching might cause the replacement to not show
+  useEffect(() => {
+    if (!suggestNextQuestion || !suggestedQuestion || !input) return;
+    
+    const trimmed = input.trim();
+    if (trimmed.length > 0) {
+      const lowerInput = trimmed.toLowerCase();
+      if (AFFIRMATIVE_KEYWORDS.includes(lowerInput)) {
+        // Replace affirmative with suggested question if not already replaced
+        if (input !== suggestedQuestion) {
+          setInput(suggestedQuestion);
+        }
+      }
+    }
+  }, [input, suggestNextQuestion, suggestedQuestion]);
+  
   // Handler for input changes with auto-replacement of affirmatives
   function handleInputChange(newValue) {
     // Guard clause for null/undefined
