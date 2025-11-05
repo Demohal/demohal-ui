@@ -180,7 +180,8 @@ const STOPWORDS = new Set([
 ]);
 
 // Affirmative keywords that trigger suggested question submission
-const AFFIRMATIVE_KEYWORDS = ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'y'];
+// Supports English and international affirmatives (e.g., "ja" for Dutch)
+const AFFIRMATIVE_KEYWORDS = ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'y', 'ja', 'si', 'oui', 'da'];
 
 function tokenize(text) {
   return ((text || "").toLowerCase().match(/[a-z0-9]{3,}/g) || []).filter(t => !STOPWORDS.has(t));
@@ -1679,6 +1680,23 @@ export default function Welcome() {
   }, [activeFormFields, visitorDefaults, urlParams]);
 
   /* Ask flow */
+  
+  // useEffect to ensure affirmative inputs are replaced with suggested question
+  // This handles edge cases where React batching might cause the replacement to not show
+  useEffect(() => {
+    if (!suggestNextQuestion || !suggestedQuestion || !input) return;
+    
+    const trimmed = input.trim();
+    if (trimmed.length > 0) {
+      const lowerInput = trimmed.toLowerCase();
+      if (AFFIRMATIVE_KEYWORDS.includes(lowerInput)) {
+        // Replace affirmative with suggested question if not already replaced
+        if (input !== suggestedQuestion) {
+          setInput(suggestedQuestion);
+        }
+      }
+    }
+  }, [input, suggestNextQuestion, suggestedQuestion]);
   
   // Handler for input changes with auto-replacement of affirmatives
   function handleInputChange(newValue) {
