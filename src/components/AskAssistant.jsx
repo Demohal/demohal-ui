@@ -1195,17 +1195,24 @@ useEffect(() => {
     });
   }
 
+  // Handle input change with auto-suggestion replacement
+  function handleInputChange(value) {
+    setInput(value);
+    
+    // Auto-replace affirmative with suggested question in real-time
+    if (suggestNextQuestion && suggestedQuestion) {
+      const trimmed = value.trim();
+      if (AFFIRMATIVE_KEYWORDS.includes(trimmed.toLowerCase())) {
+        // Replace the input with the suggested question
+        setInput(suggestedQuestion);
+      }
+    }
+  }
+
   // Ask flow
   async function sendMessage() {
     if (!input.trim() || !botId) return;
-    let outgoing = input.trim();
-    
-    // Intercept affirmative responses and replace with suggested question
-    if (suggestNextQuestion && suggestedQuestion) {
-      if (AFFIRMATIVE_KEYWORDS.includes(outgoing.toLowerCase())) {
-        outgoing = suggestedQuestion;
-      }
-    }
+    const outgoing = input.trim();
     
     // Capture screen-scoped context synchronously at submit time
     const commitScope = (() => {
@@ -1821,7 +1828,7 @@ useEffect(() => {
                 className="w-full rounded-[0.75rem] px-4 py-2 pr-14 text-base placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px] bg-[var(--card-bg)] border border-[var(--border-default)] focus:border-[var(--border-default)] focus:ring-1 focus:ring-[var(--border-default)] outline-none"
                 placeholder="Ask your question here"
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => handleInputChange(e.target.value)}
                 onInput={(e) => {
                   e.currentTarget.style.height = "auto";
                   e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
