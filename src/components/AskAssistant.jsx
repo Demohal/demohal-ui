@@ -441,6 +441,10 @@ export default function AskAssistant() {
   const [agent, setAgent] = useState(null);
   // Screen-scoped chat context (reset after each answer)
   const [scopePayload, setScopePayload] = useState({ scope: "standard" });
+  
+  // Suggested followup question feature
+  const [suggestNextQuestion, setSuggestNextQuestion] = useState(false);
+  const [suggestedQuestion, setSuggestedQuestion] = useState("");
 
 
   // Small helpers to always attach identity in requests
@@ -1184,7 +1188,15 @@ useEffect(() => {
   // Ask flow
   async function sendMessage() {
     if (!input.trim() || !botId) return;
-    const outgoing = input.trim();
+    let outgoing = input.trim();
+    
+    // Intercept affirmative responses and replace with suggested question
+    if (suggestNextQuestion && suggestedQuestion) {
+      const affirmatives = ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'y'];
+      if (affirmatives.includes(outgoing.toLowerCase())) {
+        outgoing = suggestedQuestion;
+      }
+    }
     
     // Capture screen-scoped context synchronously at submit time
     const commitScope = (() => {
@@ -1207,6 +1219,9 @@ useEffect(() => {
     setHelperPhase("hidden");
     setItems([]);
     setLoading(true);
+    // Clear any previous suggestions
+    setSuggestNextQuestion(false);
+    setSuggestedQuestion("");
     try {
       const res = await axios.post(
         `${apiBase}/demo-hal`,
@@ -1261,6 +1276,15 @@ useEffect(() => {
       setLoading(false);
       // Reset scope to standard after completing the response
       setScopePayload({ scope: "standard" });
+      
+      // Capture suggested followup question from response
+      if (data?.suggest_next_question && data?.suggested_question) {
+        setSuggestNextQuestion(true);
+        setSuggestedQuestion(data.suggested_question);
+      } else {
+        setSuggestNextQuestion(false);
+        setSuggestedQuestion("");
+      }
 
       if (recs.length > 0) {
         setHelperPhase("header");
@@ -1282,6 +1306,8 @@ useEffect(() => {
       setResponseText("Sorry—something went wrong.");
       setHelperPhase("hidden");
       setItems([]);
+      setSuggestNextQuestion(false);
+      setSuggestedQuestion("");
     }
   }
 
@@ -1727,9 +1753,16 @@ useEffect(() => {
                       Thinking…
                     </p>
                   ) : lastQuestion ? (
-                    <p className="text-base font-bold whitespace-pre-line">
-                      {responseText}
-                    </p>
+                    <>
+                      <p className="text-base font-bold whitespace-pre-line">
+                        {responseText}
+                      </p>
+                      {suggestNextQuestion && suggestedQuestion && (
+                        <div className="mt-3 p-3 rounded-lg bg-[var(--card-bg)] border border-[var(--border-default)] text-sm text-[var(--helper-fg)]">
+                          A good followup question might be &apos;<span className="font-semibold text-[var(--message-fg)]">{suggestedQuestion}</span>&apos;. Just type &quot;Yes&quot; in the question box below to ask it.
+                        </div>
+                      )}
+                    </>
                   ) : null}
                 </div>
                 {helperPhase !== "hidden" && (
