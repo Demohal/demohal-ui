@@ -40,7 +40,10 @@ Example API response:
    - okay
    - y
    
-   The system automatically replaces their input with the suggested question before sending.
+   The system **instantly** replaces their input with the suggested question in real-time (WYSIWYG behavior).
+   - The replacement happens immediately as the user types, not on send
+   - The user sees the suggested question in the input box before pressing Enter
+   - This provides clear visual feedback of what will be sent
 
 3. **Suggestion Lifecycle**: 
    - Suggestions are stored when a response is received
@@ -60,13 +63,33 @@ Located in the response area, after the bot's answer:
 ```
 
 #### Input Interception
-In the `sendMessage()` function:
+Real-time input change handler in `Welcome.jsx`:
 ```javascript
-// Intercept affirmative responses and replace with suggested question
+// Handler for input changes with auto-replacement of affirmatives
+function handleInputChange(newValue) {
+  // Check if we should auto-replace with suggested question
+  if (suggestNextQuestion && suggestedQuestion && newValue.trim().length > 0) {
+    const lowerInput = newValue.trim().toLowerCase();
+    if (AFFIRMATIVE_KEYWORDS.includes(lowerInput)) {
+      // Auto-replace input with suggested question for WYSIWYG experience
+      setInput(suggestedQuestion);
+      return;
+    }
+  }
+  // Normal input update
+  setInput(newValue);
+}
+```
+
+And as a fallback safety in the `doSend()` function:
+```javascript
+// Note: Input is already replaced if affirmative was typed, but keep this
+// as a safety fallback for edge cases or programmatic sends
+let finalQuestion = outgoing;
 if (suggestNextQuestion && suggestedQuestion) {
-  const affirmatives = ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'y'];
-  if (affirmatives.includes(outgoing.toLowerCase())) {
-    outgoing = suggestedQuestion;
+  const lowerInput = outgoing.toLowerCase();
+  if (AFFIRMATIVE_KEYWORDS.includes(lowerInput)) {
+    finalQuestion = suggestedQuestion;
   }
 }
 ```
@@ -83,14 +106,17 @@ if (suggestNextQuestion && suggestedQuestion) {
    - Verify the suggested question text is displayed correctly
    - Verify the formatting matches the spec
 
-3. **Test Case 2: Affirmative Response Interception**
-   - After receiving a suggestion, type "yes" (lowercase)
-   - Verify the suggested question is sent instead
+3. **Test Case 2: Real-Time Affirmative Response Replacement**
+   - After receiving a suggestion, start typing "yes" (lowercase)
+   - **Verify the input box instantly replaces "yes" with the suggested question**
+   - **Verify this happens before pressing Enter (WYSIWYG)**
+   - Press Enter and verify the suggested question is sent
    - Verify the conversation history shows the suggested question, not "yes"
 
 4. **Test Case 3: Case Insensitivity**
    - Test with: "Yes", "YES", "yeah", "YEAH", "ok", "OK"
-   - Verify all variations are intercepted correctly
+   - **Verify all variations are replaced in the input box immediately**
+   - Verify all variations result in the suggested question being sent
 
 5. **Test Case 4: Non-Affirmative Responses**
    - After receiving a suggestion, type any other text (e.g., "no", "tell me more")
@@ -111,11 +137,13 @@ if (suggestNextQuestion && suggestedQuestion) {
 
 ✅ **Correct**:
 - Suggestion appears only when both fields are present
-- Affirmative responses are replaced seamlessly
+- **Affirmative responses are replaced instantly in the input box (real-time/WYSIWYG)**
+- **User can see the suggested question before pressing Enter**
 - User sees the actual question sent in history
 - Suggestions don't persist across conversations
 
 ❌ **Incorrect**:
+- **User sees "yes" in the input box until they press Enter**
 - User sees "yes" in the conversation history
 - Suggestions persist after being used
 - Non-affirmative responses are intercepted
@@ -124,19 +152,28 @@ if (suggestNextQuestion && suggestedQuestion) {
 ## Code Locations
 
 ### Modified Files
-- `/src/components/AskAssistant.jsx`
+- `/src/components/Welcome.jsx`
 
-### Key Functions Modified
-1. **sendMessage()** (Line ~1189-1306)
-   - Added affirmative response interception
-   - Added suggestion clearing
+### Key Functions Modified/Added
+1. **handleInputChange()** (New function ~Line 1683-1696)
+   - Intercepts input changes in real-time
+   - Detects affirmative responses
+   - Automatically replaces input with suggested question for WYSIWYG experience
 
-2. **Response Handler** (Line ~1275-1304)
-   - Added capture of `suggest_next_question` and `suggested_question`
-   - Added suggestion state updates
+2. **doSend()** (Line ~1698-1727)
+   - Keeps fallback affirmative response interception for safety
+   - Clears suggestions after sending
 
-3. **Response Display UI** (Line ~1750-1770)
-   - Added suggestion box component
+3. **Response Handler** (Line ~1842-1860)
+   - Captures `suggest_next_question` and `suggested_question` from API
+   - Updates suggestion state with sanitization
+
+4. **Response Display UI** (Line ~3066-3072)
+   - Displays suggestion box component
+
+5. **AskInputBar Integration** (Line ~3099-3107)
+   - Changed from `onChange={setInput}` to `onChange={handleInputChange}`
+   - Enables real-time input interception
 
 ## Styling
 
@@ -150,11 +187,12 @@ The suggestion box uses existing CSS variables for consistency:
 
 Potential improvements for future iterations:
 1. Allow customization of affirmative keywords per bot
-2. Add animation when suggestion appears
+2. Add animation/transition when input text is auto-replaced
 3. Support multiple suggested questions
 4. Add analytics tracking for suggestion acceptance rate
 5. Support for suggestion expiration (e.g., after 1 minute)
 6. Add a "Not interested" button to explicitly dismiss suggestions
+7. Add visual indicator (e.g., subtle highlight) when input is auto-replaced
 
 ## Security Considerations
 
