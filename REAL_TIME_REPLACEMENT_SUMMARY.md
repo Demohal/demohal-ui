@@ -22,7 +22,27 @@ Successfully implemented real-time input box replacement for suggested followup 
 
 **File:** `src/components/Welcome.jsx`
 
-**Added Function:**
+**useEffect for Robust Replacement:**
+```javascript
+// useEffect to ensure affirmative inputs are replaced with suggested question
+// This handles edge cases where React batching might cause the replacement to not show
+useEffect(() => {
+  if (!suggestNextQuestion || !suggestedQuestion || !input) return;
+  
+  const trimmed = input.trim();
+  if (trimmed.length > 0) {
+    const lowerInput = trimmed.toLowerCase();
+    if (AFFIRMATIVE_KEYWORDS.includes(lowerInput)) {
+      // Replace affirmative with suggested question if not already replaced
+      if (input !== suggestedQuestion) {
+        setInput(suggestedQuestion);
+      }
+    }
+  }
+}, [input, suggestNextQuestion, suggestedQuestion]);
+```
+
+**Primary Input Handler:**
 ```javascript
 function handleInputChange(newValue) {
   // Guard clause for null/undefined
@@ -70,6 +90,15 @@ The following case-insensitive keywords trigger auto-replacement:
 - **Russian/Romanian**: da
 
 This ensures international users can use affirmative responses in their native language.
+
+### Dual-Layer Replacement Strategy
+
+The implementation uses TWO mechanisms to ensure replacement always works:
+
+1. **Primary: handleInputChange()** - Intercepts onChange events and replaces immediately
+2. **Secondary: useEffect()** - Monitors input state and ensures replacement even if React batching delays the primary mechanism
+
+This dual approach handles edge cases where React's state batching or rapid typing might cause the primary replacement to be missed.
 
 ## User Experience Flow
 

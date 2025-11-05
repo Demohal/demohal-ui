@@ -61,22 +61,60 @@ Located in the response area, after the bot's answer:
 ```
 
 #### Input Interception
-Real-time input change handler in `Welcome.jsx`:
+Real-time input change handler in `Welcome.jsx` with useEffect for robust replacement:
+
+**useEffect (monitors input and ensures replacement):**
+```javascript
+// useEffect to ensure affirmative inputs are replaced with suggested question
+// This handles edge cases where React batching might cause the replacement to not show
+useEffect(() => {
+  if (!suggestNextQuestion || !suggestedQuestion || !input) return;
+  
+  const trimmed = input.trim();
+  if (trimmed.length > 0) {
+    const lowerInput = trimmed.toLowerCase();
+    if (AFFIRMATIVE_KEYWORDS.includes(lowerInput)) {
+      // Replace affirmative with suggested question if not already replaced
+      if (input !== suggestedQuestion) {
+        setInput(suggestedQuestion);
+      }
+    }
+  }
+}, [input, suggestNextQuestion, suggestedQuestion]);
+```
+
+**handleInputChange (primary replacement logic):**
 ```javascript
 // Handler for input changes with auto-replacement of affirmatives
 function handleInputChange(newValue) {
+  // Guard clause for null/undefined
+  if (newValue === null || newValue === undefined) {
+    setInput('');
+    return;
+  }
+  
   // Check if we should auto-replace with suggested question
-  if (suggestNextQuestion && suggestedQuestion && newValue.trim().length > 0) {
-    const lowerInput = newValue.trim().toLowerCase();
-    if (AFFIRMATIVE_KEYWORDS.includes(lowerInput)) {
-      // Auto-replace input with suggested question for WYSIWYG experience
-      setInput(suggestedQuestion);
-      return;
+  if (suggestNextQuestion && suggestedQuestion) {
+    const trimmed = newValue.trim();
+    if (trimmed.length > 0) {
+      const lowerInput = trimmed.toLowerCase();
+      if (AFFIRMATIVE_KEYWORDS.includes(lowerInput)) {
+        // Auto-replace input with suggested question for WYSIWYG experience
+        setInput(suggestedQuestion);
+        return;
+      }
     }
   }
   // Normal input update
   setInput(newValue);
 }
+```
+
+**AFFIRMATIVE_KEYWORDS (supports international affirmatives):**
+```javascript
+// Affirmative keywords that trigger suggested question submission
+// Supports English and international affirmatives (e.g., "ja" for Dutch)
+const AFFIRMATIVE_KEYWORDS = ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'y', 'ja', 'si', 'oui', 'da'];
 ```
 
 And as a fallback safety in the `doSend()` function:
@@ -153,12 +191,17 @@ if (suggestNextQuestion && suggestedQuestion) {
 - `/src/components/Welcome.jsx`
 
 ### Key Functions Modified/Added
-1. **handleInputChange()** (New function ~Line 1683-1696)
+1. **handleInputChange()** (New function ~Line 1700-1722)
    - Intercepts input changes in real-time
-   - Detects affirmative responses
+   - Detects affirmative responses (including international: ja, si, oui, da)
    - Automatically replaces input with suggested question for WYSIWYG experience
 
-2. **doSend()** (Line ~1698-1727)
+2. **useEffect for input monitoring** (New useEffect ~Line 1686-1699)
+   - Monitors input state changes
+   - Ensures affirmatives are replaced even if React batching delays the update
+   - Provides additional safeguard against edge cases
+
+3. **doSend()** (Line ~1724-1753)
    - Keeps fallback affirmative response interception for safety
    - Clears suggestions after sending
 
