@@ -63,13 +63,13 @@ function handleInputChange(newValue) {
 ### Affirmative Keywords
 
 The following case-insensitive keywords trigger auto-replacement:
-- yes
-- yeah
-- yep
-- sure
-- ok
-- okay
-- y
+- **English**: yes, yeah, yep, sure, ok, okay, y
+- **Dutch**: ja
+- **Spanish/Italian**: si
+- **French**: oui
+- **Russian/Romanian**: da
+
+This ensures international users can use affirmative responses in their native language.
 
 ## User Experience Flow
 

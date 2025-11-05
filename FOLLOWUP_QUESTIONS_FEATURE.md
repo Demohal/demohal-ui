@@ -32,13 +32,11 @@ Example API response:
    - A suggestion box below with the message: "A good followup question might be '[suggested question]'. Just type "Yes" in the question box below to ask it."
 
 2. **User Affirmative Response**: When the user types any of these affirmative responses (case-insensitive):
-   - yes
-   - yeah
-   - yep
-   - sure
-   - ok
-   - okay
-   - y
+   - yes, yeah, yep, sure, ok, okay, y (English)
+   - ja (Dutch, German, Swedish, Norwegian, etc.)
+   - si (Spanish, Italian)
+   - oui (French)
+   - da (Russian, Romanian)
    
    The system **instantly** replaces their input with the suggested question in real-time (WYSIWYG behavior).
    - The replacement happens immediately as the user types, not on send

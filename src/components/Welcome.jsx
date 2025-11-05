@@ -180,7 +180,8 @@ const STOPWORDS = new Set([
 ]);
 
 // Affirmative keywords that trigger suggested question submission
-const AFFIRMATIVE_KEYWORDS = ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'y'];
+// Supports English and international affirmatives (e.g., "ja" for Dutch)
+const AFFIRMATIVE_KEYWORDS = ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'y', 'ja', 'si', 'oui', 'da'];
 
 function tokenize(text) {
   return ((text || "").toLowerCase().match(/[a-z0-9]{3,}/g) || []).filter(t => !STOPWORDS.has(t));

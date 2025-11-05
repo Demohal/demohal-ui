@@ -64,10 +64,17 @@ To test this feature, you need to configure your backend API to return responses
    - "OK"
    - "okay"
    - "y"
+   - "ja" (Dutch)
+   - "Ja" (capitalized)
+   - "JA" (all caps)
+   - "si" (Spanish)
+   - "oui" (French)
+   - "da" (Russian)
 
 **Expected Result**:
 - All variations should trigger the suggested question
 - Each should send the suggested question, not the typed affirmative
+- Input box should show the suggested question immediately after typing the affirmative
 
 **Status**: □ Pass  □ Fail
 
