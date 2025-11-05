@@ -1682,13 +1682,22 @@ export default function Welcome() {
   
   // Handler for input changes with auto-replacement of affirmatives
   function handleInputChange(newValue) {
+    // Guard clause for null/undefined
+    if (newValue === null || newValue === undefined) {
+      setInput('');
+      return;
+    }
+    
     // Check if we should auto-replace with suggested question
-    if (suggestNextQuestion && suggestedQuestion && newValue.trim().length > 0) {
-      const lowerInput = newValue.trim().toLowerCase();
-      if (AFFIRMATIVE_KEYWORDS.includes(lowerInput)) {
-        // Auto-replace input with suggested question for WYSIWYG experience
-        setInput(suggestedQuestion);
-        return;
+    if (suggestNextQuestion && suggestedQuestion) {
+      const trimmed = newValue.trim();
+      if (trimmed.length > 0) {
+        const lowerInput = trimmed.toLowerCase();
+        if (AFFIRMATIVE_KEYWORDS.includes(lowerInput)) {
+          // Auto-replace input with suggested question for WYSIWYG experience
+          setInput(suggestedQuestion);
+          return;
+        }
       }
     }
     // Normal input update
@@ -1698,8 +1707,8 @@ export default function Welcome() {
   async function doSend(outgoing) {
     if (!outgoing || !botId) return;
     
-    // Note: Input is already replaced if affirmative was typed, but keep this
-    // as a safety fallback for edge cases or programmatic sends
+    // Safety fallback: Input is already replaced if affirmative was typed,
+    // but keep this as fallback for edge cases or programmatic sends
     let finalQuestion = outgoing;
     if (suggestNextQuestion && suggestedQuestion) {
       const lowerInput = outgoing.toLowerCase();
