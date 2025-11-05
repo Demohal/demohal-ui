@@ -3073,15 +3073,15 @@ setItems(recommendedItems);
               {/* Suggested next question "Yes" button */}
               {!loading && lastQuestion && suggestNextQuestion && suggestedQuestion && (
                 <div className="mt-4">
-                  <p className="text-sm text-[var(--helper-fg)] mb-2">
-                    Suggested next question: <span className="font-semibold text-[var(--message-fg)]">{suggestedQuestion}</span>
+                  <p className="text-sm text-[var(--helper-fg)]">
+                    {suggestedQuestion}{' '}
+                    <button
+                      onClick={onAcceptSuggestedQuestion}
+                      className="inline-block px-4 py-2 bg-[var(--send-color)] text-white rounded-lg hover:brightness-110 transition-all active:scale-95"
+                    >
+                      Yes
+                    </button>
                   </p>
-                  <button
-                    onClick={onAcceptSuggestedQuestion}
-                    className="px-4 py-2 bg-[var(--send-color)] text-white rounded-lg hover:brightness-110 transition-all active:scale-95"
-                  >
-                    Yes
-                  </button>
                 </div>
               )}
               <RecommendedSection
