@@ -179,10 +179,6 @@ const STOPWORDS = new Set([
   "before","which","into","how","when","what","who","where","why","should","could","would","support","supports"
 ]);
 
-// Affirmative keywords that trigger suggested question submission
-// Supports English and international affirmatives (e.g., "ja" for Dutch)
-const AFFIRMATIVE_KEYWORDS = ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'y', 'ja', 'si', 'oui', 'da'];
-
 function tokenize(text) {
   return ((text || "").toLowerCase().match(/[a-z0-9]{3,}/g) || []).filter(t => !STOPWORDS.has(t));
 }
@@ -248,13 +244,6 @@ function normalizeTopicToString(topic) {
   }
   // Fallback: convert any other format to string
   return String(topic).trim();
-}
-
-// Sanitize suggested question text to prevent potential issues
-function sanitizeSuggestedQuestion(text) {
-  if (typeof text !== 'string') return '';
-  // Trim and limit length to prevent abuse
-  return text.trim().substring(0, 500);
 }
 
 function normalizeOptions(q) {
@@ -1289,10 +1278,6 @@ export default function Welcome() {
   const [explainMode, setExplainMode] = useState(explainModeFromQS); // PATCH: add this
   const [bannerUrl, setBannerUrl] = useState(""); // Banner URL from bot settings
   const [useBannerUrl, setUseBannerUrl] = useState(false); // Whether to use banner URL
-  
-  /* Suggested followup question feature */
-  const [suggestNextQuestion, setSuggestNextQuestion] = useState(false);
-  const [suggestedQuestion, setSuggestedQuestion] = useState("");
 
   /* Theme */
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
@@ -1680,73 +1665,16 @@ export default function Welcome() {
   }, [activeFormFields, visitorDefaults, urlParams]);
 
   /* Ask flow */
-  
-  // useEffect to ensure affirmative inputs are replaced with suggested question
-  // This handles edge cases where React batching might cause the replacement to not show
-  useEffect(() => {
-    if (!suggestNextQuestion || !suggestedQuestion || !input) return;
-    
-    const trimmed = input.trim();
-    if (trimmed.length > 0) {
-      const lowerInput = trimmed.toLowerCase();
-      if (AFFIRMATIVE_KEYWORDS.includes(lowerInput)) {
-        // Replace affirmative with suggested question if not already replaced
-        if (input !== suggestedQuestion) {
-          setInput(suggestedQuestion);
-        }
-      }
-    }
-  }, [input, suggestNextQuestion, suggestedQuestion]);
-  
-  // Handler for input changes with auto-replacement of affirmatives
-  function handleInputChange(newValue) {
-    // Guard clause for null/undefined
-    if (newValue === null || newValue === undefined) {
-      setInput('');
-      return;
-    }
-    
-    // Check if we should auto-replace with suggested question
-    if (suggestNextQuestion && suggestedQuestion) {
-      const trimmed = newValue.trim();
-      if (trimmed.length > 0) {
-        const lowerInput = trimmed.toLowerCase();
-        if (AFFIRMATIVE_KEYWORDS.includes(lowerInput)) {
-          // Auto-replace input with suggested question for WYSIWYG experience
-          setInput(suggestedQuestion);
-          return;
-        }
-      }
-    }
-    // Normal input update
-    setInput(newValue);
-  }
-  
   async function doSend(outgoing) {
     if (!outgoing || !botId) return;
-    
-    // Safety fallback: Input is already replaced if affirmative was typed,
-    // but keep this as fallback for edge cases or programmatic sends
-    let finalQuestion = outgoing;
-    if (suggestNextQuestion && suggestedQuestion) {
-      const lowerInput = outgoing.toLowerCase();
-      if (AFFIRMATIVE_KEYWORDS.includes(lowerInput)) {
-        finalQuestion = suggestedQuestion;
-      }
-    }
-    
     setMode("ask");
-    setLastQuestion(finalQuestion);
+    setLastQuestion(outgoing);
     setInput("");
     setSelected(null);
     setResponseText("");
     setItems([]);
     setLoading(true);
     setLastError(null);
-    
-    // Clear any previous suggestions
-    setSuggestNextQuestion(false);
-    setSuggestedQuestion("");
 
     const perspectiveForCall = visitorDefaults.perspective
       ? visitorDefaults.perspective.toLowerCase()
@@ -1754,7 +1682,7 @@ export default function Welcome() {
 
     const payload = withIdsBody({
       bot_id: botId,
-      user_question: finalQuestion,
+      user_question: outgoing,
       scope: "standard",
       debug: true,
       perspective: perspectiveForCall,
@@ -1868,6 +1796,19 @@ export default function Welcome() {
       // Combine for recommended section
       const recommendedItems = [...prunedDemos, ...prunedDocs];
 
+if (typeof data.perspective === "string" && data.perspective) {
+  if (
+    visitorDefaults.perspective !== null &&
+    visitorDefaults.perspective !== undefined
+  ) {
+    updateLocalVisitorValues({
+      perspective: data.perspective.toLowerCase(),
+    });
+  }
+}
+
+setItems(recommendedItems);
+
       if (typeof data.perspective === "string" && data.perspective) {
         if (
           visitorDefaults.perspective !== null &&
@@ -1879,30 +1820,9 @@ export default function Welcome() {
         }
       }
 
-      setItems(recommendedItems);
+      setItems(mapped);
       setResponseText(text);
       setLoading(false);
-      
-      // Capture suggested followup question from response
-      // Validate that suggest_next_question is explicitly true and suggested_question is a non-empty string
-      if (
-        data?.suggest_next_question === true && 
-        typeof data?.suggested_question === 'string' && 
-        data.suggested_question.trim().length > 0
-      ) {
-        const sanitized = sanitizeSuggestedQuestion(data.suggested_question);
-        if (sanitized.length > 0) {
-          setSuggestNextQuestion(true);
-          setSuggestedQuestion(sanitized);
-        } else {
-          setSuggestNextQuestion(false);
-          setSuggestedQuestion("");
-        }
-      } else {
-        setSuggestNextQuestion(false);
-        setSuggestedQuestion("");
-      }
-      
       requestAnimationFrame(() =>
         contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
       );
@@ -1929,9 +1849,6 @@ export default function Welcome() {
       });
       setItems([]);
       setLoading(false);
-      // Clear suggestions on error
-      setSuggestNextQuestion(false);
-      setSuggestedQuestion("");
     }
   }
 
@@ -3103,16 +3020,9 @@ export default function Welcome() {
                       {responseText}
                     </ReactMarkdown>
                   ) : (
-                    <>
-                      <p className="text-base font-bold whitespace-pre-line">
-                        {responseText}
-                      </p>
-                      {suggestNextQuestion && suggestedQuestion && (
-                        <div className="mt-3 p-3 rounded-lg bg-[var(--card-bg)] border border-[var(--border-default)] text-sm text-[var(--helper-fg)]">
-                          A good followup question might be &apos;<span className="font-semibold text-[var(--message-fg)]">{suggestedQuestion}</span>&apos;. Just type &quot;Yes&quot; in the question box below to ask it.
-                        </div>
-                      )}
-                    </>
+                    <p className="text-base font-bold whitespace-pre-line">
+                      {responseText}
+                    </p>
                   )
                 ) : null}
               </div>
@@ -3142,7 +3052,7 @@ export default function Welcome() {
         {showAskBottom && (
           <AskInputBar
             value={input}
-            onChange={handleInputChange}
+            onChange={setInput}
             onSend={onSendClick}
             inputRef={inputRef}
             placeholder="Ask your question here"
