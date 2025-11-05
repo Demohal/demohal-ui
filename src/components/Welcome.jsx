@@ -3073,7 +3073,7 @@ setItems(recommendedItems);
               {/* Suggested next question "Yes" button */}
               {!loading && lastQuestion && suggestNextQuestion && suggestedQuestion && (
                 <div className="mt-4">
-                  <p className="text-sm text-[var(--helper-fg)]">
+                  <div className="text-sm text-[var(--helper-fg)]">
                     <span className="mr-2">{suggestedQuestion}</span>
                     <button
                       onClick={onAcceptSuggestedQuestion}
@@ -3082,7 +3082,7 @@ setItems(recommendedItems);
                     >
                       Yes
                     </button>
-                  </p>
+                  </div>
                 </div>
               )}
               <RecommendedSection
