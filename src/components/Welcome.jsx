@@ -1679,10 +1679,36 @@ export default function Welcome() {
   }, [activeFormFields, visitorDefaults, urlParams]);
 
   /* Ask flow */
+  
+  // Handler for input changes with auto-replacement of affirmatives
+  function handleInputChange(newValue) {
+    // Guard clause for null/undefined
+    if (newValue === null || newValue === undefined) {
+      setInput('');
+      return;
+    }
+    
+    // Check if we should auto-replace with suggested question
+    if (suggestNextQuestion && suggestedQuestion) {
+      const trimmed = newValue.trim();
+      if (trimmed.length > 0) {
+        const lowerInput = trimmed.toLowerCase();
+        if (AFFIRMATIVE_KEYWORDS.includes(lowerInput)) {
+          // Auto-replace input with suggested question for WYSIWYG experience
+          setInput(suggestedQuestion);
+          return;
+        }
+      }
+    }
+    // Normal input update
+    setInput(newValue);
+  }
+  
   async function doSend(outgoing) {
     if (!outgoing || !botId) return;
     
-    // Intercept affirmative responses and replace with suggested question
+    // Safety fallback: Input is already replaced if affirmative was typed,
+    // but keep this as fallback for edge cases or programmatic sends
     let finalQuestion = outgoing;
     if (suggestNextQuestion && suggestedQuestion) {
       const lowerInput = outgoing.toLowerCase();
@@ -3098,7 +3124,7 @@ export default function Welcome() {
         {showAskBottom && (
           <AskInputBar
             value={input}
-            onChange={setInput}
+            onChange={handleInputChange}
             onSend={onSendClick}
             inputRef={inputRef}
             placeholder="Ask your question here"
