@@ -2550,8 +2550,8 @@ setItems(recommendedItems);
           useBannerUrl ? "items-center" : ""
         ].join(" ")}>
           {useBannerUrl && bannerUrl && bannerUrl.trim() ? (
-            // When use_banner_url is TRUE: Show banner image at 720px × 150px with tabs inside at bottom
-            <div className="relative w-full max-w-[720px]" style={{ height: '150px', borderBottom: '2px solid black' }}>
+            // When use_banner_url is TRUE: Show banner image at 720px × 160px with tabs inside at bottom
+            <div className="relative w-full max-w-[720px]" style={{ height: '160px', borderBottom: '2px solid black' }}>
               <img
                 src={bannerUrl}
                 alt="Banner"
