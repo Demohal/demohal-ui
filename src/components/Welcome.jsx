@@ -3074,10 +3074,11 @@ setItems(recommendedItems);
               {!loading && lastQuestion && suggestNextQuestion && suggestedQuestion && (
                 <div className="mt-4">
                   <p className="text-sm text-[var(--helper-fg)]">
-                    {suggestedQuestion}{' '}
+                    <span className="mr-2">{suggestedQuestion}</span>
                     <button
                       onClick={onAcceptSuggestedQuestion}
                       className="inline-block px-4 py-2 bg-[var(--send-color)] text-white rounded-lg hover:brightness-110 transition-all active:scale-95"
+                      aria-label={`Accept suggestion: ${suggestedQuestion}`}
                     >
                       Yes
                     </button>
