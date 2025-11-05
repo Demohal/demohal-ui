@@ -80,6 +80,9 @@ const SCREEN_ORDER = [
   { key: "price", label: "Price Estimate" },
 ];
 
+// Affirmative keywords that trigger suggested question submission
+const AFFIRMATIVE_KEYWORDS = ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'y'];
+
 const classNames = (...xs) => xs.filter(Boolean).join(" ");
 function inverseBW(hex) {
   const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(
@@ -91,6 +94,13 @@ function inverseBW(hex) {
     b = parseInt(m[3], 16);
   const L = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   return L > 0.5 ? "#000000" : "#ffffff";
+}
+
+// Sanitize suggested question text to prevent potential issues
+function sanitizeSuggestedQuestion(text) {
+  if (typeof text !== 'string') return '';
+  // Trim and limit length to prevent abuse
+  return text.trim().substring(0, 500);
 }
 
 /* ========================== *
@@ -441,6 +451,10 @@ export default function AskAssistant() {
   const [agent, setAgent] = useState(null);
   // Screen-scoped chat context (reset after each answer)
   const [scopePayload, setScopePayload] = useState({ scope: "standard" });
+  
+  // Suggested followup question feature
+  const [suggestNextQuestion, setSuggestNextQuestion] = useState(false);
+  const [suggestedQuestion, setSuggestedQuestion] = useState("");
 
 
   // Small helpers to always attach identity in requests
@@ -1181,6 +1195,20 @@ useEffect(() => {
     });
   }
 
+  // Handle input change with auto-suggestion replacement
+  function handleInputChange(value) {
+    setInput(value);
+    
+    // Auto-replace affirmative with suggested question in real-time
+    if (suggestNextQuestion && suggestedQuestion) {
+      const trimmed = value.trim();
+      if (AFFIRMATIVE_KEYWORDS.includes(trimmed.toLowerCase())) {
+        // Replace the input with the suggested question
+        setInput(suggestedQuestion);
+      }
+    }
+  }
+
   // Ask flow
   async function sendMessage() {
     if (!input.trim() || !botId) return;
@@ -1207,6 +1235,9 @@ useEffect(() => {
     setHelperPhase("hidden");
     setItems([]);
     setLoading(true);
+    // Clear any previous suggestions
+    setSuggestNextQuestion(false);
+    setSuggestedQuestion("");
     try {
       const res = await axios.post(
         `${apiBase}/demo-hal`,
@@ -1261,6 +1292,26 @@ useEffect(() => {
       setLoading(false);
       // Reset scope to standard after completing the response
       setScopePayload({ scope: "standard" });
+      
+      // Capture suggested followup question from response
+      // Validate that suggest_next_question is explicitly true and suggested_question is a non-empty string
+      if (
+        data?.suggest_next_question === true && 
+        typeof data?.suggested_question === 'string' && 
+        data.suggested_question.trim().length > 0
+      ) {
+        const sanitized = sanitizeSuggestedQuestion(data.suggested_question);
+        if (sanitized.length > 0) {
+          setSuggestNextQuestion(true);
+          setSuggestedQuestion(sanitized);
+        } else {
+          setSuggestNextQuestion(false);
+          setSuggestedQuestion("");
+        }
+      } else {
+        setSuggestNextQuestion(false);
+        setSuggestedQuestion("");
+      }
 
       if (recs.length > 0) {
         setHelperPhase("header");
@@ -1282,6 +1333,8 @@ useEffect(() => {
       setResponseText("Sorry—something went wrong.");
       setHelperPhase("hidden");
       setItems([]);
+      setSuggestNextQuestion(false);
+      setSuggestedQuestion("");
     }
   }
 
@@ -1727,9 +1780,16 @@ useEffect(() => {
                       Thinking…
                     </p>
                   ) : lastQuestion ? (
-                    <p className="text-base font-bold whitespace-pre-line">
-                      {responseText}
-                    </p>
+                    <>
+                      <p className="text-base font-bold whitespace-pre-line">
+                        {responseText}
+                      </p>
+                      {suggestNextQuestion && suggestedQuestion && (
+                        <div className="mt-3 p-3 rounded-lg bg-[var(--card-bg)] border border-[var(--border-default)] text-sm text-[var(--helper-fg)]">
+                          A good followup question might be &apos;<span className="font-semibold text-[var(--message-fg)]">{suggestedQuestion}</span>&apos;. Just type &quot;Yes&quot; in the question box below to ask it.
+                        </div>
+                      )}
+                    </>
                   ) : null}
                 </div>
                 {helperPhase !== "hidden" && (
@@ -1768,7 +1828,7 @@ useEffect(() => {
                 className="w-full rounded-[0.75rem] px-4 py-2 pr-14 text-base placeholder-gray-400 resize-y min-h-[3rem] max-h-[160px] bg-[var(--card-bg)] border border-[var(--border-default)] focus:border-[var(--border-default)] focus:ring-1 focus:ring-[var(--border-default)] outline-none"
                 placeholder="Ask your question here"
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => handleInputChange(e.target.value)}
                 onInput={(e) => {
                   e.currentTarget.style.height = "auto";
                   e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;

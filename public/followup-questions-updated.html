@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suggested Followup Questions - Updated Behavior</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #e6e6e6;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 720px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: #000;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 20px;
+        }
+        
+        .content {
+            padding: 24px;
+        }
+        
+        .scenario {
+            margin-bottom: 40px;
+            padding: 20px;
+            background: #f9fafb;
+            border-radius: 8px;
+        }
+        
+        .scenario-title {
+            font-weight: 700;
+            font-size: 18px;
+            margin-bottom: 16px;
+            color: #111;
+        }
+        
+        .step {
+            margin-bottom: 16px;
+            padding: 12px;
+            background: white;
+            border-radius: 8px;
+        }
+        
+        .step-label {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #6b7280;
+            margin-bottom: 8px;
+        }
+        
+        .suggestion-box {
+            margin-top: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            background: white;
+            border: 1px solid #9ca3af;
+            font-size: 14px;
+            color: #4b5563;
+        }
+        
+        .suggestion-text {
+            font-weight: 600;
+            color: #000;
+        }
+        
+        .input-box {
+            background: #fff;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 1px solid #9ca3af;
+            font-family: monospace;
+            margin: 8px 0;
+        }
+        
+        .input-typing {
+            background: #dbeafe;
+            border-color: #3b82f6;
+        }
+        
+        .input-replaced {
+            background: #d1fae5;
+            border-color: #10b981;
+        }
+        
+        .arrow {
+            text-align: center;
+            font-size: 24px;
+            margin: 12px 0;
+            color: #6b7280;
+        }
+        
+        .highlight {
+            background: #fef3c7;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+        
+        .change-indicator {
+            display: inline-block;
+            background: #10b981;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+        
+        .feature-list {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        
+        .feature-list h3 {
+            margin-bottom: 12px;
+            color: #111;
+        }
+        
+        .feature-list ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .feature-list li {
+            padding: 8px 0;
+            padding-left: 24px;
+            position: relative;
+        }
+        
+        .feature-list li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #10b981;
+            font-weight: bold;
+        }
+        
+        .new-badge {
+            display: inline-block;
+            background: #3b82f6;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            Suggested Followup Questions - Updated Behavior
+        </div>
+        
+        <div class="content">
+            <!-- New Behavior -->
+            <div class="scenario">
+                <div class="scenario-title">
+                    New Behavior: Auto-Replacement in Input Box 
+                    <span class="new-badge">UPDATED</span>
+                </div>
+                
+                <div class="step">
+                    <div class="step-label">Step 1: Bot Response with Suggestion</div>
+                    <div style="font-weight: 700; margin-bottom: 12px;">
+                        Our pricing is flexible and based on your specific needs. We offer three tiers: Basic, Professional, and Enterprise.
+                    </div>
+                    <div class="suggestion-box">
+                        A good followup question might be '<span class="suggestion-text">Would you like to see a detailed comparison of the pricing tiers?</span>'. Just type "Yes" in the question box below to ask it.
+                    </div>
+                </div>
+                
+                <div class="arrow">↓</div>
+                
+                <div class="step">
+                    <div class="step-label">Step 2: User Types "yes"</div>
+                    <div class="input-box input-typing">
+                        yes
+                    </div>
+                </div>
+                
+                <div class="arrow">↓ <span class="highlight">INSTANT AUTO-REPLACEMENT</span></div>
+                
+                <div class="step">
+                    <div class="step-label">
+                        Step 3: Input Box Automatically Shows Suggested Question
+                        <span class="change-indicator">NEW!</span>
+                    </div>
+                    <div class="input-box input-replaced">
+                        Would you like to see a detailed comparison of the pricing tiers?
+                    </div>
+                    <div style="margin-top: 8px; font-size: 12px; color: #6b7280; font-style: italic;">
+                        ✓ User can see what question will be sent before pressing Enter
+                    </div>
+                </div>
+                
+                <div class="arrow">↓</div>
+                
+                <div class="step">
+                    <div class="step-label">Step 4: User Presses Enter or Clicks Send</div>
+                    <div style="font-style: italic; color: #4b5563;">
+                        "Would you like to see a detailed comparison of the pricing tiers?"
+                    </div>
+                    <div style="margin-top: 8px; font-size: 12px; color: #10b981; font-weight: 600;">
+                        ✓ Question mirror shows the suggested question<br>
+                        ✓ Bot receives and processes the suggested question
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Comparison -->
+            <div class="scenario">
+                <div class="scenario-title">What Changed?</div>
+                
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f3f4f6;">
+                            <th style="padding: 12px; text-align: left; border: 1px solid #e5e7eb;">Aspect</th>
+                            <th style="padding: 12px; text-align: left; border: 1px solid #e5e7eb;">Old Behavior</th>
+                            <th style="padding: 12px; text-align: left; border: 1px solid #e5e7eb;">New Behavior</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: 600;">Input Box</td>
+                            <td style="padding: 12px; border: 1px solid #e5e7eb;">Shows "yes" until sent</td>
+                            <td style="padding: 12px; border: 1px solid #e5e7eb; background: #d1fae5;">
+                                <strong>Auto-replaces with suggested question</strong>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: 600;">User Visibility</td>
+                            <td style="padding: 12px; border: 1px solid #e5e7eb;">User couldn't preview question</td>
+                            <td style="padding: 12px; border: 1px solid #e5e7eb; background: #d1fae5;">
+                                <strong>User sees question before sending</strong>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: 600;">Timing</td>
+                            <td style="padding: 12px; border: 1px solid #e5e7eb;">Replacement happened on send</td>
+                            <td style="padding: 12px; border: 1px solid #e5e7eb; background: #d1fae5;">
+                                <strong>Instant replacement on typing</strong>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: 600;">Question Mirror</td>
+                            <td style="padding: 12px; border: 1px solid #e5e7eb;">✓ Shows suggested question</td>
+                            <td style="padding: 12px; border: 1px solid #e5e7eb; background: #d1fae5;">
+                                <strong>✓ Shows suggested question</strong>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 12px; border: 1px solid #e5e7eb; font-weight: 600;">API Call</td>
+                            <td style="padding: 12px; border: 1px solid #e5e7eb;">✓ Sends suggested question</td>
+                            <td style="padding: 12px; border: 1px solid #e5e7eb; background: #d1fae5;">
+                                <strong>✓ Sends suggested question</strong>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Key Improvements -->
+            <div class="feature-list">
+                <h3>Key Improvements <span class="new-badge">UPDATED</span></h3>
+                <ul>
+                    <li><strong>Real-time replacement:</strong> Suggested question appears in input box immediately when user types affirmative</li>
+                    <li><strong>Visual feedback:</strong> User can see exactly what question will be sent before pressing Enter</li>
+                    <li><strong>Better UX:</strong> No confusion - what you see is what gets sent</li>
+                    <li><strong>Question mirror accuracy:</strong> Always shows the actual question that was sent</li>
+                    <li><strong>Bot processing:</strong> Bot receives and processes the suggested question correctly</li>
+                    <li><strong>Supports all affirmatives:</strong> yes, yeah, yep, sure, ok, okay, y (case-insensitive)</li>
+                </ul>
+            </div>
+            
+            <!-- Technical Details -->
+            <div class="feature-list" style="margin-top: 20px;">
+                <h3>Technical Implementation</h3>
+                <ul>
+                    <li><strong>handleInputChange():</strong> New function that intercepts input changes</li>
+                    <li><strong>Auto-replacement logic:</strong> When affirmative detected, input state is updated to suggested question</li>
+                    <li><strong>No delays:</strong> Replacement happens synchronously for instant feedback</li>
+                    <li><strong>Maintains all existing features:</strong> Validation, sanitization, and lifecycle management</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
