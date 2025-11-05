@@ -31,6 +31,14 @@ import FormFillCard from "./FormFillCard";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+// Helper function to sanitize suggested question text
+function sanitizeSuggestedQuestion(text) {
+  if (typeof text !== "string") return "";
+  const trimmed = text.trim();
+  // Limit to 500 characters to prevent excessively long suggestions
+  return trimmed.length > 500 ? trimmed.substring(0, 500) : trimmed;
+}
+
 // PATCH: Recommended section - show up to 4 demos, then up to 2 docs; if docs are shown, add "Recommended documents" help text.
 
 //
@@ -1835,12 +1843,9 @@ setItems(recommendedItems);
       setItems(mapped);
       setResponseText(text);
       
-      // Capture suggested_question from API response if present
-      if (typeof data.suggested_question === "string" && data.suggested_question.trim()) {
-        setSuggestedQuestion(data.suggested_question.trim());
-      } else {
-        setSuggestedQuestion("");
-      }
+      // Capture and sanitize suggested_question from API response
+      const sanitized = sanitizeSuggestedQuestion(data.suggested_question);
+      setSuggestedQuestion(sanitized);
       
       // Capture is_suggested_question flag for badge display
       setIsSuggestedQuestion(data.is_suggested_question === true);
@@ -3033,7 +3038,10 @@ setItems(recommendedItems);
                 <p className="text-base italic text-center mb-2 text-[var(--helper-fg)]">
                   "{lastQuestion}"
                   {isSuggestedQuestion && (
-                    <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                    <span 
+                      className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800"
+                      aria-label="This question was suggested by the bot"
+                    >
                       Suggested
                     </span>
                   )}
