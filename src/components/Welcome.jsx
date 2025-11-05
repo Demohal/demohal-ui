@@ -1278,6 +1278,11 @@ export default function Welcome() {
   const [explainMode, setExplainMode] = useState(explainModeFromQS); // PATCH: add this
   const [bannerUrl, setBannerUrl] = useState(""); // Banner URL from bot settings
   const [useBannerUrl, setUseBannerUrl] = useState(false); // Whether to use banner URL
+  
+  // Suggested next question feature
+  const [suggestNextQuestion, setSuggestNextQuestion] = useState(false); // From bot settings
+  const [suggestedQuestion, setSuggestedQuestion] = useState(""); // From API response
+  const [isSuggestedQuestion, setIsSuggestedQuestion] = useState(false); // Badge display flag
 
   /* Theme */
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
@@ -1504,6 +1509,8 @@ export default function Welcome() {
     // TOPICS from bot settings
     setBotTopics(bot.topics || null);
     console.log("Loaded bot topics:", bot.topics);
+    // Suggested next question feature from bot settings
+    setSuggestNextQuestion(!!bot.suggest_next_question);
   }
 
   useEffect(() => {
@@ -1665,7 +1672,7 @@ export default function Welcome() {
   }, [activeFormFields, visitorDefaults, urlParams]);
 
   /* Ask flow */
-  async function doSend(outgoing) {
+  async function doSend(outgoing, useSuggestedQuestion = false) {
     if (!outgoing || !botId) return;
     setMode("ask");
     setLastQuestion(outgoing);
@@ -1675,6 +1682,10 @@ export default function Welcome() {
     setItems([]);
     setLoading(true);
     setLastError(null);
+    
+    // Clear suggested question state when sending a new question
+    setSuggestedQuestion("");
+    setIsSuggestedQuestion(false);
 
     const perspectiveForCall = visitorDefaults.perspective
       ? visitorDefaults.perspective.toLowerCase()
@@ -1688,6 +1699,7 @@ export default function Welcome() {
       perspective: perspectiveForCall,
       prompt_override: promptOverride || "",
       ...(explainMode ? { explain: 1 } : {}), // PATCH: add this line
+      ...(useSuggestedQuestion ? { use_suggested_question: true } : {}), // Add flag if using suggested question
     });
 
     try {
@@ -1822,6 +1834,17 @@ setItems(recommendedItems);
 
       setItems(mapped);
       setResponseText(text);
+      
+      // Capture suggested_question from API response if present
+      if (typeof data.suggested_question === "string" && data.suggested_question.trim()) {
+        setSuggestedQuestion(data.suggested_question.trim());
+      } else {
+        setSuggestedQuestion("");
+      }
+      
+      // Capture is_suggested_question flag for badge display
+      setIsSuggestedQuestion(data.is_suggested_question === true);
+      
       setLoading(false);
       requestAnimationFrame(() =>
         contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
@@ -1875,6 +1898,14 @@ setItems(recommendedItems);
     if (maybeOpenForm({ type: "ask", payload: { text: outgoing } }))
       return;
     await doSend(outgoing);
+  }
+  
+  // Handler for "Yes" button click to accept suggested question
+  async function onAcceptSuggestedQuestion() {
+    if (!suggestedQuestion || !botId) return;
+    if (maybeOpenForm({ type: "ask", payload: { text: suggestedQuestion } }))
+      return;
+    await doSend(suggestedQuestion, true); // Pass true to indicate use_suggested_question
   }
 
   function openPersonalize() {
@@ -3001,6 +3032,11 @@ setItems(recommendedItems);
               {lastQuestion && (
                 <p className="text-base italic text-center mb-2 text-[var(--helper-fg)]">
                   "{lastQuestion}"
+                  {isSuggestedQuestion && (
+                    <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                      Suggested
+                    </span>
+                  )}
                 </p>
               )}
               <div className="text-left mt-2">
@@ -3026,6 +3062,20 @@ setItems(recommendedItems);
                   )
                 ) : null}
               </div>
+              {/* Suggested next question "Yes" button */}
+              {!loading && lastQuestion && suggestNextQuestion && suggestedQuestion && (
+                <div className="mt-4">
+                  <p className="text-sm text-[var(--helper-fg)] mb-2">
+                    Suggested next question: <span className="font-semibold text-[var(--message-fg)]">{suggestedQuestion}</span>
+                  </p>
+                  <button
+                    onClick={onAcceptSuggestedQuestion}
+                    className="px-4 py-2 bg-[var(--send-color)] text-white rounded-lg hover:brightness-110 transition-all active:scale-95"
+                  >
+                    Yes
+                  </button>
+                </div>
+              )}
               <RecommendedSection
                 items={items}
                 normalizeAndSelectDemo={normalizeAndSelectDemo}
