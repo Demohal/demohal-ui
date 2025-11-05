@@ -1,3165 +1,3525 @@
+# =====================================================================
+# app/routes.py — DemoHAL API (v2 RAG + Perspective Controls)
+# =====================================================================
+#
+# CHANGES (Perspective Refactor):
+#   - Removed persona-based logic (personas_v2) for retrieval & prompt shaping.
+#   - Added Perspective system (single directive added to system prompt).
+#   - Perspective sources (precedence):
+#        1. Request body: body.perspective
+#        2. Session context: activity_sessions_v2.context.perspective
+#        3. Visitor form fill: visitors_v2.formfill_fields (array with field_key=perspective)
+#        4. Default "general"
+#   - Persist perspective to session context (not rewriting visitor automatically unless via formfill POST).
+#   - Form fill config (/formfill-config) now guarantees a "perspective" single_select field
+#     (collected + required) with canonical options; visitor default normalized (lowercase) or "general".
+#   - /visitor-formfill POST normalizes and validates perspective (fallback to "general").
+#   - /demo-hal prompt now includes perspective directive (PERSPECTIVE_PROMPTS) and logs 'perspective'.
+#   - Knob defaults (retrieval & generation) now static (no persona table lookup).
+#
+# NOTE:
+#   Existing schema uses visitors_v2.formfill_fields as an array:
+#       [{field_key, field_value}, ...]
+#   This file merges new perspective updates seamlessly with existing structure.
+#
+# =====================================================================
 
-/* Welcome.jsx — Full File (with clickable top banner logo linking to bot website)
- *
- * Adds:
- *   - websiteUrl state populated from bot settings (bots_v2.website or fallback fields)
- *   - Top banner logo becomes an <a> tag if websiteUrl exists (opens in new tab by default)
- *   - Falls back to a "home" reset button when no website URL is provided
- *
- * NOTE:
- *   - Change target="_blank" to target="_self" below if you want same-tab navigation.
- *   - Remove setLastQuestion("") in the fallback button if you prefer to retain last answer.
- *
- * (Includes earlier ThemeLab live option / wording changes, pricing, meeting scheduling,
- *  form fill, demo/doc browsing, and color variable root mirroring for reliability.)
- */
+import os
+import re
+import time
+import json
+import uuid
+import hmac
+import base64
+import hashlib
+from typing import Any, Dict, List, Optional, Tuple
+from flask import Blueprint, jsonify, request, current_app, g
+from flask_cors import cross_origin
+from supabase import create_client, Client
+from openai import OpenAI
+from urllib.parse import urlparse
+import bcrypt
+from datetime import datetime, timezone, timedelta
 
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import axios from "axios";
-import fallbackLogo from "../assets/logo.png";
+# -----------------------------------------------------------------------------
+# Blueprint & clients
+# -----------------------------------------------------------------------------
 
-import TabsNav from "./TabsNav";
-import Row from "./Row";
-import DocIframe from "./DocIframe";
-import AskInputBar from "./AskInputBar";
-import FormFillCard from "./FormFillCard";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+SESSION_IDLE_TIMEOUT_MINUTES = int(os.getenv("SESSION_IDLE_TIMEOUT_MINUTES", "30"))
+SESSION_SWEEP_SECRET = os.getenv("SESSION_SWEEP_SECRET", "").strip()
 
-// Helper function to sanitize suggested question text
-function sanitizeSuggestedQuestion(text) {
-  if (typeof text !== "string") return "";
-  const trimmed = text.trim();
-  // Limit to 500 characters to prevent excessively long suggestions
-  return trimmed.length > 500 ? trimmed.substring(0, 500) : trimmed;
+demo_hal_bp = Blueprint("demo_hal_bp", __name__)
+
+_SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+_SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_API_KEY") or ""
+if not _SUPABASE_URL or not _SUPABASE_KEY:
+    raise RuntimeError("Supabase config missing")
+
+_sb: Optional[Client] = None
+def sb() -> Client:
+    global _sb
+    if _sb is None:
+        _sb = create_client(_SUPABASE_URL, _SUPABASE_KEY)
+    return _sb
+
+# OpenAI
+_oa = OpenAI()
+EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-ada-002")  # 1536-dim
+CHAT_MODEL  = os.getenv("CHAT_MODEL", "gpt-4o")
+
+# -----------------------------------------------------------------------------
+# Perspective (cached constants)
+# -----------------------------------------------------------------------------
+PERSPECTIVE_PROMPTS: Dict[str, str] = {
+    "general": "Provide a balanced answer that highlights the overall value, combining strategic, operational, financial, technical, and user benefits.",
+    "financial": "Frame your answer in financial terms: emphasize ROI, cost savings, resource allocation efficiency, and overall business value.",
+    "operational": "Frame your answer in operational terms: emphasize workflow efficiency, integration with existing systems, reliability, and uptime.",
+    "executive": "Frame your answer in executive terms: emphasize strategic alignment, business growth, risk mitigation, and innovation potential.",
+    "technical": "Frame your answer in technical terms: emphasize security, compliance, scalability, integration ease, and technical soundness.",
+    "user": "Frame your answer in end-user terms: emphasize ease of use, adoption likelihood, productivity improvements, and support resources.",
+    "sales": "Frame your answer in Sales / Marketing terms: emphasize impact on customer experience, reputation, references, and competitive advantage.",
+    "compliance": "Frame your answer in compliance terms: emphasize legal soundness, regulatory requirements, data governance, and contractual protections.",
 }
-
-// PATCH: Recommended section - show up to 4 demos, then up to 2 docs; if docs are shown, add "Recommended documents" help text.
-
-//
-// Add this helper component at the top level of the file (after imports, before the main component):
-//
-function RecommendedSection({ items, onPick, normalizeAndSelectDemo, apiBase, botId, contentRef, setSelected, setMode }) {
-  // Split items into demos and docs
-  const demos = (items || []).filter(it => (it.action || it.type) === "demo").slice(0, 4);
-  const docs = (items || []).filter(it => (it.action || it.type) === "doc").slice(0, 2);
-
-  if (demos.length === 0 && docs.length === 0) return null;
-
-  // Pick handler
-  const handlePick = async (val) => {
-    if ((val.action || val.type) === "doc") {
-      try {
-        const r = await fetch(
-          `${apiBase}/render-doc-iframe`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              bot_id: botId,
-              doc_id: val.id || "",
-              title: val.title || "",
-              url: val.url || "",
-            }),
-          }
-        );
-        const j = await r.json();
-        setSelected({
-          ...val,
-          _iframe_html: j?.iframe_html || null,
-          action: "doc"
-        });
-        setMode && setMode("docs");
-      } catch {
-        setSelected({ ...val, action: "doc" });
-        setMode && setMode("docs");
-      }
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
-    } else {
-      await normalizeAndSelectDemo(val);
-      setMode && setMode("ask");
-    }
-  };
-
-  return (
-    <div className="flex flex-col gap-1">
-      {demos.length > 0 && (
-        <>
-          <div className="flex items-center justify-between mt-3 mb-2">
-            <p className="italic text-[var(--helper-fg)]">
-              Recommended videos
-            </p>
-          </div>
-          <div className="flex flex-col gap-3">
-            {demos.map((it) =>
-              <Row
-                key={it.id || it.url || it.title}
-                item={it}
-                kind="demo"
-                onPick={handlePick}
-              />
-            )}
-          </div>
-        </>
-      )}
-      {docs.length > 0 && (
-        <>
-          <div className="flex items-center justify-between mt-2 mb-2">
-            <p className="italic text-[var(--helper-fg)]">
-              Recommended documents
-            </p>
-          </div>
-          <div className="flex flex-col gap-3">
-            {docs.map((it) =>
-              <Row
-                key={it.id || it.url || it.title}
-                item={it}
-                kind="doc"
-                onPick={handlePick}
-              />
-            )}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-
-/* ============================================================
- * CONSTANTS / HELPERS
- * ============================================================ */
-const DEFAULT_THEME_VARS = {
-  "--banner-bg": "#000000",
-  "--banner-fg": "#ffffff",
-  "--page-bg": "#e6e6e6",
-  "--card-bg": "#ffffff",
-  "--shadow-elevation":
-    "0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.10)",
-  "--message-fg": "#000000",
-  "--helper-fg": "#4b5563",
-  "--mirror-fg": "#4b5563",
-  "--tab-bg": "#303030",
-  "--tab-fg": "#ffffff",
-  "--tab-active-fg": "#ffffff",
-  "--demo-button-bg": "#3a4554",
-  "--demo-button-fg": "#ffffff",
-  "--doc-button-bg": "#000000",
-  "--doc-button-fg": "#ffffff",
-  "--price-button-bg": "#1a1a1a",
-  "--price-button-fg": "#ffffff",
-  "--send-color": "#000000",
-  "--border-default": "#000000",
-};
-
-const PERSPECTIVE_OPTIONS = [
-  { key: "general", label: "General" },
-  { key: "financial", label: "Financial" },
-  { key: "operational", label: "Operational" },
-  { key: "executive", label: "Owner / Executive" },
-  { key: "technical", label: "Technical / IT" },
-  { key: "user", label: "User / Functional" },
-  { key: "customer", label: "Customer / Market" },
-  { key: "compliance", label: "Governance / Compliance" },
-];
-
-const FIELD_SYNONYMS = { fname: "first_name", lname: "last_name" };
-const CANON_LABELS = { first_name: "First Name", last_name: "Last Name" };
-
-const DEMO_PRUNE_MAX = 4;
-const DEMO_STRONG_THRESHOLD = 2;
-const DEMO_STRONG_RATIO = 2.2;
-const DEMO_SECONDARY_KEEP = 2;
-
-const STOPWORDS = new Set([
-  "the","and","for","with","you","your","has","that","this","also","more","first","fully","without",
-  "across","every","their","they","them","of","in","on","to","as","is","it","at","by","be","or",
-  "from","but","was","are","an","so","can","if","all","we","our","not","will","about","after",
-  "before","which","into","how","when","what","who","where","why","should","could","would","support","supports"
-]);
-
-function tokenize(text) {
-  return ((text || "").toLowerCase().match(/[a-z0-9]{3,}/g) || []).filter(t => !STOPWORDS.has(t));
-}
-
-function scoreDemo(question, demo) {
-  const qTokens = new Set(tokenize(question));
-  const textTokens = tokenize(
-    (demo.title || "") +
-    " " +
-    (demo.description || "") +
-    " " +
-    (demo.functions_text || "")
-  );
-  const dTokens = new Set(textTokens);
-  let overlap = 0;
-  qTokens.forEach((t) => {
-    if (dTokens.has(t)) overlap++;
-  });
-  return overlap;
-}
-
-function pruneDemoButtons(q, buttons) {
-  if (!Array.isArray(buttons) || buttons.length <= 2) return buttons;
-  const scored = buttons
-    .map((b) => ({ b, s: scoreDemo(q, b) }))
-    .sort((a, b) => b.s - a.s);
-  const top = scored[0].s;
-  const second = scored[1]?.s ?? 0;
-  if (top < DEMO_STRONG_THRESHOLD) {
-    return scored
-      .slice(0, Math.min(DEMO_PRUNE_MAX, buttons.length))
-      .map((x) => x.b);
-  }
-  if (second === 0 || top >= second * DEMO_STRONG_RATIO) {
-    return [scored[0].b];
-  }
-  const cap = Math.min(
-    Math.max(DEMO_SECONDARY_KEEP, 2),
-    DEMO_PRUNE_MAX,
-    scored.length
-  );
-  return scored.slice(0, cap).map((x) => x.b);
-}
-
-function inverseBW(hex) {
-  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(
-    String(hex || "").trim()
-  );
-  if (!m) return "#000000";
-  const r = parseInt(m[1], 16),
-    g = parseInt(m[2], 16),
-    b = parseInt(m[3], 16);
-  const L = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return L > 0.5 ? "#000000" : "#ffffff";
-}
-
-function normalizeTopicToString(topic) {
-  // Handle various possible topic formats and always return a string
-  if (!topic) return "";
-  if (typeof topic === "string") return topic.trim();
-  if (typeof topic === "object" && topic && typeof topic.name === "string") {
-    return topic.name.trim();
-  }
-  // Fallback: convert any other format to string
-  return String(topic).trim();
-}
-
-function normalizeOptions(q) {
-  const raw = q?.options ?? q?.choices ?? q?.buttons ?? q?.values ?? [];
-  return (Array.isArray(raw) ? raw : [])
-    .map((o, idx) => {
-      if (o == null) return null;
-      if (typeof o === "string") return { key: o, label: o, id: String(idx) };
-      const key = o.key ?? o.value ?? o.id ?? String(idx);
-      const label = o.label ?? o.title ?? o.name ?? String(key);
-      const tooltip = o.tooltip ?? o.description ?? o.help ?? undefined;
-      return { key, label, tooltip, id: String(o.id ?? key ?? idx) };
-    })
-    .filter(Boolean);
-}
-
-/* ============================================================
- * PRICING SUB-COMPONENTS
- * ============================================================ */
-function OptionButton({ opt, selected, onClick }) {
-  return (
-    <button
-      onClick={() => onClick(opt)}
-      className={[
-        "w-full rounded-[0.75rem] px-4 py-3 transition",
-        "flex flex-col items-center justify-center text-center",
-        "text-[var(--price-button-fg)] bg-[var(--price-button-bg)]",
-        "hover:brightness-110 active:brightness-95",
-        selected ? "ring-2 ring-black/20" : "",
-      ].join(" ")}
-      title={opt.tooltip || ""}
-    >
-      <div className="font-extrabold text-xs sm:text-sm">{opt.label}</div>
-      {opt.tooltip ? (
-        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">
-          {opt.tooltip}
-        </div>
-      ) : null}
-    </button>
-  );
-}
-
-function QuestionBlock({ q, value, onPick }) {
-  const opts = normalizeOptions(q);
-  const type = String(q?.type || "").toLowerCase();
-  const isMulti =
-    type === "multi_choice" || type === "multichoice" || type === "multi";
-  return (
-    <div className="w-full rounded-[0.75rem] px-4 py-3 text-base bg-[var(--card-bg)] border border-[var(--border-default)]">
-      <div className="font-bold text-base">{q.prompt}</div>
-      {q.help_text ? (
-        <div className="text-xs italic mt-1 text-[var(--helper-fg)]">
-          {q.help_text}
-        </div>
-      ) : null}
-      {opts.length > 0 ? (
-        <div className="mt-3 flex flex-col gap-3">
-          {opts.map((opt) => (
-            <OptionButton
-              key={opt.id}
-              opt={opt}
-              selected={
-                isMulti
-                  ? Array.isArray(value) && value.includes(opt.key)
-                  : value === opt.key
-              }
-              onClick={(o) => onPick(q, o)}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="mt-3 text-xs text-[var(--helper-fg)]">
-          No options available.
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PriceMirror({ lines }) {
-  if (!lines?.length) return null;
-  return (
-    <div className="mb-3">
-      {lines.map((ln, i) => (
-        <div
-          key={i}
-          className="text-base italic whitespace-pre-line text-[var(--mirror-fg)]"
-        >
-          {ln}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function EstimateCard({ estimate, outroText }) {
-  if (!estimate) return null;
-  const items = Array.isArray(estimate.line_items)
-    ? estimate.line_items
-    : [];
-  const fmtAmount = (c, v) => `${c} ${Number(v).toLocaleString()}`;
-  const fmtRange = (c, min, max) =>
-    Number(min) === Number(max)
-      ? fmtAmount(c, max)
-      : `${fmtAmount(c, min)} – ${fmtAmount(c, max)}`;
-  const totalText = fmtRange(
-    estimate.currency_code,
-    estimate.total_min,
-    estimate.total_max
-  );
-  return (
-    <div>
-      <div className="rounded-[0.75rem] p-4 bg-white [box-shadow:var(--shadow-elevation)]">
-        <div className="flex items-center justify-between mb-3">
-          <div className="font-bold text-lg">Your Estimate</div>
-          <div className="font-bold text-lg text-right [font-variant-numeric:tabular-nums]">
-            {totalText}
-          </div>
-        </div>
-        <div className="space-y-3">
-          {items.map((li, idx) => {
-            const name = li?.product?.name ?? li?.label ?? "Item";
-            const key = li?.product?.id ?? `${name}-${idx}`;
-            const ccy =
-              li?.currency_code || estimate.currency_code || "";
-            const lineText = fmtRange(
-              ccy,
-              li?.price_min,
-              li?.price_max
-            );
-            return (
-              <div key={key} className="rounded-[0.75rem] p-3 bg-white">
-                <div className="grid grid-cols-[1fr_auto] items-center gap-3">
-                  <div className="font-bold">{name}</div>
-                  <div className="font-bold text-lg text-right [font-variant-numeric:tabular-nums]">
-                    {lineText}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      {outroText ? (
-        <div className="mt-3 text-base font-bold whitespace-pre-line">
-          {outroText}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-/* ============================================================
- * THEME LAB INLINE PANELS
- * ============================================================ */
-function useFloatingPos(frameRef, side = "left", width = 460, gap = 12) {
-  const [pos, setPos] = useState({ left: 16, top: 16, width });
-
-  useEffect(() => {
-    function update() {
-      const mainPanel = document.querySelector(
-        '.max-w-\\[720px\\]'
-      ); // this selects your main panel
-      let left = 16;
-      let top = 16;
-      let w = width;
-
-      // Responsive: match main panel horizontal position
-      if (window.innerWidth >= 640 && mainPanel) { // sm: and up
-        // Centered main panel: calc left edge
-        const mainRect = mainPanel.getBoundingClientRect();
-        if (side === "left") {
-          left = mainRect.left - width - gap;
-        } else {
-          left = mainRect.right + gap;
-        }
-        top = mainRect.top + 8;
-        w = width;
-      } else {
-        // Mobile: left align, nearly full width
-        left = Math.max(8, window.innerWidth * 0.025);
-        w = window.innerWidth * 0.95;
-        top = 8;
-      }
-
-      // Prevent off screen
-      left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
-      setPos({ left, top, width: w });
-    }
-
-    update();
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, { passive: true });
-    return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update);
-    };
-  }, [frameRef, side, width, gap]);
-
-  return pos;
-}
-
-function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
-  const MAP = {
-    "banner.background": "--banner-bg",
-    "banner.foreground": "--banner-fg",
-    "page.background": "--page-bg",
-    "content.area.background": "--card-bg",
-    "message.text.foreground": "--message-fg",
-    "helper.text.foreground": "--helper-fg",
-    "mirror.text.foreground": "--mirror-fg",
-    "tab.background": "--tab-bg",
-    "tab.foreground": "--tab-fg",
-    "demo.button.background": "--demo-button-bg",
-    "demo.button.foreground": "--demo-button-fg",
-    "doc.button.background": "--doc-button-bg",
-    "doc.button.foreground": "--doc-button-fg",
-    "price.button.background": "--price-button-bg",
-    "price.button.foreground": "--price-button-fg",
-    "send.button.background": "--send-color",
-    "border.default": "--border-default",
-  };
-  const ORDER = [
-    { key: "welcome", label: "Welcome" },
-    { key: "bot_response", label: "Bot Response" },
-    { key: "browse_demos", label: "Browse Demos" },
-    { key: "browse_docs", label: "Browse Documents" },
-    { key: "price", label: "Price Estimate" },
-  ];
-  const [rows, setRows] = useState([]);
-  const [values, setValues] = useState({});
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
-  const pos = useFloatingPos(frameRef, "left", 460);
-
-  async function load() {
-    try {
-      const r = await fetch(
-        `${apiBase}/brand/client-tokens?bot_id=${encodeURIComponent(botId)}`,
-        { credentials: "include" }
-      );
-      const j = await r.json();
-      const toks = (j?.ok ? j.tokens : []) || [];
-      setRows(toks);
-      const v = {};
-      toks.forEach((t) => (v[t.token_key] = t.value || "#000000"));
-      setValues(v);
-      const patch = {};
-      toks.forEach((t) => {
-        if (MAP[t.token_key]) patch[MAP[t.token_key]] = v[t.token_key];
-      });
-      onVars && onVars(patch);
-    } catch {}
-  }
-
-  useEffect(() => {
-    if (sharedAuth.state === "ok") load();
-  }, [sharedAuth.state]);
-
-  function updateToken(k, val) {
-    setValues((p) => ({ ...p, [k]: val || "" }));
-    if (MAP[k] && onVars) onVars({ [MAP[k]]: val || "" });
-  }
-
-  async function doSave() {
-    try {
-      setBusy(true);
-      const updates = Object.entries(values).map(([token_key, value]) => ({
-        token_key,
-        value,
-      }));
-      const r = await fetch(`${apiBase}/brand/client-tokens/save`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ bot_id: botId, updates }),
-      });
-      const j = await r.json();
-      if (!j?.ok) throw new Error();
-      setMsg(`Saved ${j.updated} token(s).`);
-      setTimeout(() => setMsg(""), 1600);
-    } catch {
-      setMsg("Save failed.");
-      setTimeout(() => setMsg(""), 1600);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function doReset() {
-    await load();
-    setMsg("Restored.");
-    setTimeout(() => setMsg(""), 1400);
-  }
-
-  const grouped = useMemo(() => {
-    const m = new Map();
-    rows.forEach((r) => {
-      const k = r.screen_key || "welcome";
-      if (!m.has(k)) m.set(k, []);
-      m.get(k).push(r);
-    });
-    ORDER.forEach((o) => {
-      if (m.has(o.key)) {
-        m
-          .get(o.key)
-          .sort((a, b) =>
-            String(a.label || "").localeCompare(String(b.label || ""))
-          );
-      }
-    });
-    return m;
-  }, [rows]);
-
-  return (
-    <div
-      className="fixed z-[60] bg-white border border-black/20 rounded-xl shadow-xl overflow-y-auto
-                 max-h-[92vh] p-2 text-sm
-                 w-[95vw] left-0 top-2
-                 sm:w-[460px] sm:p-4 sm:text-base"
-      style={{
-        left: pos.left,
-        top: pos.top,
-        width: pos.width,
-      }}
-    >
-      <div className="text-base font-bold mb-2">ThemeLab Colors</div>
-      {sharedAuth.state === "ok" ? (
-        <>
-          {ORDER.map((o) => (
-            <div key={o.key} className="mb-2">
-              <div className="text-sm font-semibold mb-1">
-                {o.label}
-              </div>
-              <div className="space-y-1 pl-1">
-                {(grouped.get(o.key) || []).map((t) => (
-                  <div
-                    key={t.token_key}
-                    className="flex items-center justify-between gap-3"
-                  >
-                    <div className="text-xs">{t.label}</div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="color"
-                        value={values[t.token_key] || "#000000"}
-                        onChange={(e) =>
-                          updateToken(t.token_key, e.target.value)
-                        }
-                        style={{
-                          width: 32,
-                          height: 24,
-                          borderRadius: 6,
-                          border: "1px solid rgba(0,0,0,0.2)",
-                        }}
-                      />
-                      <code className="text-[11px] opacity-70">
-                        {values[t.token_key] || ""}
-                      </code>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-          <div className="mt-3 flex items-center justify-between">
-            <div className="text-xs text-gray-600">{msg}</div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={doReset}
-                disabled={busy}
-                className="px-3 py-1 rounded-[12px] border border-black/20 bg-white text-xs"
-              >
-                Reset
-              </button>
-              <button
-                onClick={doSave}
-                disabled={busy}
-                className="px-3 py-1 rounded-[12px] bg-black text-white text-xs"
-              >
-                {busy ? "Saving…" : "Save"}
-              </button>
-            </div>
-          </div>
-        </>
-      ) : sharedAuth.state === "checking" ? (
-        <div className="text-sm text-gray-600">Checking access…</div>
-      ) : sharedAuth.state === "need_password" ? (
-        <div className="text-xs text-gray-600">
-          Enter password (Wording panel).
-        </div>
-      ) : sharedAuth.state === "disabled" ? (
-        <div className="text-xs text-gray-600">ThemeLab disabled.</div>
-      ) : (
-        <div className="text-xs text-red-600">Auth error.</div>
-      )}
-    </div>
-  );
-}
-
-function ThemeLabWordingBox({
-  apiBase,
-  botId,
-  frameRef,
-  sharedAuth,
-  onFormfillChange,
-  onLiveMessages,
-  onOptionsChange,
-}) {
-  const pos = useFloatingPos(frameRef, "right", 460);
-  const [loading, setLoading] = useState(false);
-  const [dirty, setDirty] = useState(false);
-  const [msg, setMsg] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [password, setPassword] = useState("");
-  const [authError, setAuthError] = useState("");
-
-  const [options, setOptions] = useState({
-    show_browse_demos: false,
-    show_browse_docs: false,
-    show_price_estimate: false,
-    show_schedule_meeting: false,
-    show_intro_video: false,
-    show_formfill: false,
-    intro_video_url: "",
-  });
-  const [messages, setMessages] = useState({
-    welcome_message: "",
-    pricing_intro: "",
-    pricing_outro: "",
-    pricing_custom_notice: "",
-    formfill_intro: "",
-  });
-  const [standardFields, setStandardFields] = useState([]);
-  const [editingKey, setEditingKey] = useState("");
-  const [draft, setDraft] = useState("");
-  const messageLabels = {
-    welcome_message: "Welcome",
-    formfill_intro: "Form Fill Intro",
-    pricing_intro: "Pricing Intro",
-    pricing_outro: "Pricing Outro",
-    pricing_custom_notice: "Custom Pricing",
-  };
-  const stashRef = useRef(null);
-
-  function markDirty() {
-    setDirty(true);
-  }
-
-  function propagateFields(fields = standardFields, opt = options) {
-    onFormfillChange &&
-      onFormfillChange({
-        show_formfill: opt.show_formfill,
-        standard_fields: fields.map((f) => ({
-          field_key: f.field_key,
-          is_collected: !!f.is_collected,
-          is_required: !!f.is_required,
-        })),
-      });
-  }
-
-  function propagateOptions(next) {
-    onOptionsChange && onOptionsChange(next);
-  }
-
-  async function load() {
-    setLoading(true);
-    try {
-      const r = await fetch(
-        `${apiBase}/themelab/wording-options?bot_id=${encodeURIComponent(botId)}`,
-        { credentials: "include" }
-      );
-      const j = await r.json();
-      if (!j?.ok) throw new Error();
-      setOptions(j.options || {});
-      setMessages(j.messages || {});
-      const raw = (j.standard_fields || []).map((f) => ({
-        ...f,
-        is_collected: !!f.is_collected,
-        is_required: !!f.is_required,
-      }));
-      setStandardFields(raw);
-      stashRef.current = {
-        options: j.options || {},
-        messages: j.messages || {},
-        standard_fields: raw,
-      };
-      const firstKey = "welcome_message";
-      setEditingKey(firstKey);
-      setDraft(j.messages?.[firstKey] || "");
-      setDirty(false);
-      propagateFields(raw, j.options || {});
-      propagateOptions(j.options || {});
-      onLiveMessages && onLiveMessages(j.messages || {});
-    } catch {
-      setMsg("Load failed.");
-      setTimeout(() => setMsg(""), 2200);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (sharedAuth.state === "ok") load();
-  }, [sharedAuth.state]);
-
-  async function doLogin(e) {
-    e?.preventDefault();
-    try {
-      setAuthError("");
-      const r = await fetch(`${apiBase}/themelab/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ bot_id: botId, password }),
-      });
-      const j = await r.json();
-      if (r.status === 200 && j?.ok) {
-        sharedAuth.set({ state: "ok" });
-        setPassword("");
-        await load();
-      } else if (r.status === 403) {
-        sharedAuth.set({ state: "disabled" });
-      } else {
-        setAuthError("Invalid password.");
-        sharedAuth.set({ state: "need_password" });
-      }
-    } catch {
-      setAuthError("Login failed.");
-      sharedAuth.set({ state: "error" });
-    }
-  }
-
-  function toggleOption(k) {
-    setOptions((p) => {
-      const n = { ...p, [k]: !p[k] };
-      markDirty();
-      if (k === "show_formfill") propagateFields(standardFields, n);
-      propagateOptions(n);
-      return n;
-    });
-  }
-  function toggleCollected(fk) {
-    setStandardFields((p) => {
-      const n = p.map((f) =>
-        f.field_key === fk
-          ? { ...f, is_collected: !f.is_collected }
-          : f
-      );
-      markDirty();
-      propagateFields(n, options);
-      return n;
-    });
-  }
-  function toggleRequired(fk) {
-    setStandardFields((p) => {
-      const n = p.map((f) =>
-        f.field_key === fk
-          ? { ...f, is_required: !f.is_required }
-          : f
-      );
-      markDirty();
-      propagateFields(n, options);
-      return n;
-    });
-  }
-  function beginEdit(k) {
-    setEditingKey(k);
-    setDraft(messages[k] || "");
-  }
-  function applyDraft() {
-    if (!editingKey) return;
-    setMessages((p) => {
-      const u = { ...p, [editingKey]: draft };
-      onLiveMessages && onLiveMessages(u);
-      return u;
-    });
-    markDirty();
-  }
-  function cancelDraft() {
-    if (editingKey) setDraft(messages[editingKey] || "");
-  }
-
-  async function doSave() {
-    try {
-      setSaving(true);
-      const payload = {
-        bot_id: botId,
-        options,
-        messages,
-        standard_fields: standardFields.map((f) => ({
-          field_key: f.field_key,
-          is_collected: !!f.is_collected,
-          is_required: !!f.is_required,
-        })),
-      };
-      const r = await fetch(`${apiBase}/themelab/wording-options/save`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(payload),
-      });
-      const j = await r.json();
-      if (!j?.ok) throw new Error();
-      setMsg("Saved.");
-      setDirty(false);
-      stashRef.current = payload;
-      setTimeout(() => setMsg(""), 1500);
-    } catch {
-      setMsg("Save failed.");
-      setTimeout(() => setMsg(""), 2200);
-    } finally {
-      setSaving(false);
-    }
-  }
-  function doReset() {
-    if (!stashRef.current) {
-      load();
-      return;
-    }
-    const snap = stashRef.current;
-    setOptions(snap.options);
-    setMessages(snap.messages);
-    setStandardFields(snap.standard_fields);
-    const firstKey = "welcome_message";
-    setEditingKey(firstKey);
-    setDraft(snap.messages[firstKey] || "");
-    setDirty(false);
-    propagateFields(snap.standard_fields, snap.options);
-    propagateOptions(snap.options);
-    setMsg("Restored.");
-    setTimeout(() => setMsg(""), 1400);
-    onLiveMessages && onLiveMessages(snap.messages || {});
-  }
-
-  return (
-    <div
-      className="fixed z-[60] bg-white border border-black/20 rounded-xl shadow-xl overflow-y-auto
-                 max-h-[92vh] p-2 text-sm
-                 w-[95vw] left-0 top-2
-                 sm:w-[460px] sm:p-4 sm:text-base"
-      style={{
-        left: pos.left,
-        top: pos.top,
-        width: pos.width,
-      }}
-    >
-      <div className="text-base font-bold mb-2">
-        ThemeLab Wording &amp; Options
-      </div>
-      {sharedAuth.state === "checking" && (
-        <div className="text-sm text-gray-600">
-          Checking access…
-        </div>
-      )}
-      {sharedAuth.state === "disabled" && (
-        <div className="text-sm text-gray-600">
-          ThemeLab is disabled for this bot.
-        </div>
-      )}
-      {sharedAuth.state === "need_password" && (
-        <form
-          onSubmit={doLogin}
-          className="flex items-center gap-2 mb-3"
-        >
-          <input
-            type="password"
-            placeholder="ThemeLab password"
-            className="flex-1 rounded-[12px] border border-black/30 px-3 py-2 text-sm"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          <button
-            type="submit"
-            className="px-3 py-2 rounded-[12px] bg-black text-white text-sm"
-          >
-            Unlock
-          </button>
-          {authError && (
-            <div className="text-xs text-red-600 ml-2">
-              {authError}
-            </div>
-          )}
-        </form>
-      )}
-      {sharedAuth.state === "error" && (
-        <div className="text-sm text-red-600">
-          Unable to verify access.
-        </div>
-      )}
-      {sharedAuth.state === "ok" && (
-        <>
-          {loading && (
-            <div className="text-xs text-gray-500 mb-2">Loading…</div>
-          )}
-          <div className="grid grid-cols-2 gap-6 mb-3">
-            <div>
-              <div className="font-semibold text-sm mb-1">
-                Things to Show
-              </div>
-              <div className="space-y-1">
-                {[
-                  ["show_browse_demos", "Browse Demos Tab"],
-                  ["show_browse_docs", "Browse Docs Tab"],
-                  ["show_price_estimate", "Price Estimate Tab"],
-                  ["show_schedule_meeting", "Schedule Meeting Tab"],
-                  ["show_intro_video", "Introduction Video"],
-                  ["show_formfill", "Show Form Fill"],
-                ].map(([k, label]) => (
-                  <label
-                    key={k}
-                    className="flex items-center justify-between text-xs gap-2 cursor-pointer"
-                  >
-                    <span>{label}</span>
-                    <input
-                      type="checkbox"
-                      checked={!!options[k]}
-                      onChange={() => toggleOption(k)}
-                    />
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div>
-              <div className="font-semibold text-sm mb-1">
-                Form Fill Fields
-              </div>
-              <div className="space-y-1">
-                {standardFields.map((f) => (
-                  <div
-                    key={f.field_key}
-                    className="flex items-center justify-between text-xs gap-2"
-                  >
-                    <span className="flex-1 truncate">
-                      {f.label || f.field_key}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        title="Collect"
-                        checked={!!f.is_collected}
-                        onChange={() => toggleCollected(f.field_key)}
-                      />
-                      <span className="text-[10px] uppercase tracking-wide opacity-70">
-                        reqd
-                      </span>
-                      <input
-                        type="checkbox"
-                        title="Required"
-                        checked={!!f.is_required}
-                        onChange={() => toggleRequired(f.field_key)}
-                      />
-                    </div>
-                  </div>
-                ))}
-                {standardFields.length === 0 && (
-                  <div className="text-[10px] italic text-gray-500">
-                    No fields defined.
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="mb-2 font-semibold text-sm">Messages</div>
-          <div className="space-y-1 mb-3">
-            {Object.entries(messageLabels).map(([k, label]) => {
-              const active = editingKey === k;
-              return (
-                <div
-                  key={k}
-                  className={[
-                    "flex items-center justify-between text-xs px-2 py-1 rounded cursor-pointer group",
-                    active
-                      ? "bg-black text-white"
-                      : "bg-gray-100 hover:bg-gray-200",
-                  ].join(" ")}
-                  onClick={() => beginEdit(k)}
-                >
-                  <span className="flex-1">{label}</span>
-                  <span className="opacity-70 mr-2 truncate max-w-[140px]">
-                    {messages[k]
-                      ? messages[k].slice(0, 24) +
-                        (messages[k].length > 24 ? "…" : "")
-                      : "—"}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      beginEdit(k);
-                    }}
-                    className={[
-                      "p-1 rounded transition",
-                      active
-                        ? "bg-white text-black"
-                        : "bg-gray-200 text-gray-700 group-hover:bg-gray-300",
-                    ].join(" ")}
-                    title="Edit"
-                  >
-                    <svg
-                      className="w-3.5 h-3.5"
-                      viewBox="0 0 20 20"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M3 14.5V17h2.5l9.1-9.1-2.5-2.5L3 14.5z" />
-                      <path d="M12.3 5.4l2.6 2.6 1.3-1.3a1.8 1.8 0 0 0 0-2.6l-.7-.7a1.8 1.8 0 0 0-2.6 0l-1.3 1.3z" />
-                    </svg>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-
-          {editingKey && (
-            <div className="mb-3">
-              <div className="flex items-center justify-between mb-1">
-                <div className="text-xs font-semibold">
-                  Editing: {messageLabels[editingKey]}
-                </div>
-                {dirty && (
-                  <div className="text-[10px] text-orange-600">
-                    Unsaved changes
-                  </div>
-                )}
-              </div>
-              <textarea
-                rows={5}
-                className="w-full border border-black/30 rounded p-2 text-xs"
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder="Edit message text..."
-              />
-              <div className="flex items-center justify-end gap-2 mt-1">
-                <button
-                  onClick={cancelDraft}
-                  className="px-2 py-1 rounded bg-gray-200 text-xs"
-                >
-                  Revert
-                </button>
-                <button
-                  onClick={applyDraft}
-                  className="px-2 py-1 rounded bg-black text-white text-xs"
-                >
-                  Apply
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className="mb-3">
-            <label className="text-xs font-semibold block mb-1">
-              Intro Video URL
-            </label>
-            <input
-              type="text"
-              value={options.intro_video_url || ""}
-              onChange={(e) => {
-                setOptions((p) => {
-                  const n = { ...p, intro_video_url: e.target.value };
-                  markDirty();
-                  propagateOptions(n);
-                  return n;
-                });
-              }}
-              className="w-full text-xs border border-black/30 rounded px-2 py-1"
-              placeholder="https://..."
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="text-xs text-gray-600">
-              {msg || (dirty ? "Unsaved changes" : saving ? "Saving…" : "")}
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={doReset}
-                disabled={saving}
-                className="px-3 py-1 rounded-[12px] border border-black/20 bg-white text-xs"
-              >
-                Reset
-              </button>
-              <button
-                onClick={doSave}
-                disabled={saving || !dirty}
-                className={[
-                  "px-3 py-1 rounded-[12px] text-xs",
-                  dirty
-                    ? "bg-black text-white"
-                    : "bg-gray-300 text-gray-600 cursor-not-allowed",
-                ].join(" ")}
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function ThemeLabPanels({
-  apiBase,
-  botId,
-  frameRef,
-  onVars,
-  onFormfillChange,
-  onLiveMessages,
-  onOptionsChange,
-}) {
-  const [authState, setAuthState] = useState("checking");
-  useEffect(() => {
-    let cancel = false;
-    (async () => {
-      try {
-        setAuthState("checking");
-        const r = await fetch(
-          `${apiBase}/themelab/status?bot_id=${encodeURIComponent(botId)}`,
-          { credentials: "include" }
-        );
-        if (cancel) return;
-        if (r.status === 200) setAuthState("ok");
-        else if (r.status === 401) setAuthState("need_password");
-        else if (r.status === 403) setAuthState("disabled");
-        else setAuthState("error");
-      } catch {
-        if (!cancel) setAuthState("error");
-      }
-    })();
-    return () => {
-      cancel = true;
-    };
-  }, [apiBase, botId]);
-
-  const sharedAuth = {
-    state: authState,
-    set: (s) => setAuthState(s.state),
-  };
-
-  return (
-    <>
-      <ThemeLabColorBox
-        apiBase={apiBase}
-        botId={botId}
-        frameRef={frameRef}
-        onVars={onVars}
-        sharedAuth={sharedAuth}
-      />
-      <ThemeLabWordingBox
-        apiBase={apiBase}
-        botId={botId}
-        frameRef={frameRef}
-        sharedAuth={sharedAuth}
-        onFormfillChange={onFormfillChange}
-        onLiveMessages={onLiveMessages}
-        onOptionsChange={onOptionsChange}
-      />
-    </>
-  );
-}
-
-/* ============================================================
- * MAIN COMPONENT
- * ============================================================ */
-export default function Welcome() {
-  const apiBase =
-    import.meta.env.VITE_API_URL || "https://demohal-app.onrender.com";
-
-    const {
-      alias,
-      botIdFromUrl,
-      themeLabOn,
-      pidParam,
-      agentAlias,
-      urlParams,
-      explainMode: explainModeFromQS,
-    } = useMemo(() => {
-      const qs = new URLSearchParams(window.location.search);
-      return {
-        alias: (qs.get("alias") || qs.get("alais") || "").trim(),
-        botIdFromUrl: (qs.get("bot_id") || "").trim(),
-        themeLabOn: (() => {
-          const v = (qs.get("themelab") || "").toLowerCase();
-          return v === "1" || v === "true";
-        })(),
-        pidParam: (qs.get("pid") || "").trim(),
-        agentAlias: (qs.get("agent") || "").trim(),
-        urlParams: (() => {
-          const o = {};
-          qs.forEach((v, k) => (o[k] = v));
-          return o;
-        })(),
-        explainMode: (() => {
-          const v = (qs.get("explain") || "").toLowerCase();
-          return v === "1" || v === "true";
-        })(),
-      };
-    }, []);
-
- 
-  const defaultAlias = (import.meta.env.VITE_DEFAULT_ALIAS || "").trim();
-
-  /* Core state */
-  const [botId, setBotId] = useState(botIdFromUrl || "");
-  const [fatal, setFatal] = useState("");
-  const [mode, setMode] = useState("ask");
-  const [input, setInput] = useState("");
-  const [lastQuestion, setLastQuestion] = useState("");
-  const [responseText, setResponseText] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [items, setItems] = useState([]);
-  const [browseItems, setBrowseItems] = useState([]);
-  const [browseDocs, setBrowseDocs] = useState([]);
-  const [selected, setSelected] = useState(null);
-  const [agent, setAgent] = useState(null);
-
-  // Topic filtering
-  const [botTopics, setBotTopics] = useState(null);
-  const [selectedDemoTopic, setSelectedDemoTopic] = useState("all");
-  const [selectedDocTopic, setSelectedDocTopic] = useState("all");
-  const [visitorId, setVisitorId] = useState("");
-  const [sessionId, setSessionId] = useState("");
-  const [introVideoUrl, setIntroVideoUrl] = useState("");
-  const [showIntroVideo, setShowIntroVideo] = useState(false);
-  const [promptOverride, setPromptOverride] = useState("");
-  const [lastError, setLastError] = useState(null);
-  const [websiteUrl, setWebsiteUrl] = useState(""); // NEW: captured website URL
-  const [explainMode, setExplainMode] = useState(explainModeFromQS); // PATCH: add this
-  const [bannerUrl, setBannerUrl] = useState(""); // Banner URL from bot settings
-  const [useBannerUrl, setUseBannerUrl] = useState(false); // Whether to use banner URL
-  
-  // Suggested next question feature
-  const [suggestNextQuestion, setSuggestNextQuestion] = useState(false); // From bot settings
-  const [suggestedQuestion, setSuggestedQuestion] = useState(""); // From API response
-  const [isSuggestedQuestion, setIsSuggestedQuestion] = useState(false); // Badge display flag
-
-  /* Theme */
-  const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
-  const derivedTheme = useMemo(
-    () => ({
-      ...themeVars,
-      "--tab-active-fg": inverseBW(themeVars["--tab-fg"] || "#000000"),
-    }),
-    [themeVars]
-  );
-  const [pickerVars, setPickerVars] = useState({});
-  const liveTheme = useMemo(
-    () => ({ ...derivedTheme, ...pickerVars }),
-    [derivedTheme, pickerVars]
-  );
-
-  console.log("Rendering Welcome.jsx - botTopics:", botTopics);
-
-  // Mirror variables to :root (safety)
-  useEffect(() => {
-    const root = document.documentElement;
-    Object.entries(liveTheme || {}).forEach(([k, v]) => {
-      if (k.startsWith("--")) root.style.setProperty(k, v);
-    });
-  }, [liveTheme]);
-
-  const [brandAssets, setBrandAssets] = useState({
-    logo_url: null,
-    logo_light_url: null,
-    logo_dark_url: null,
-  });
-  const initialBrandReady = useMemo(
-    () => !(botIdFromUrl || alias),
-    [botIdFromUrl, alias]
-  );
-  const [brandReady, setBrandReady] = useState(initialBrandReady);
-
-  const [tabsEnabled, setTabsEnabled] = useState({
-    demos: false,
-    docs: false,
-    meeting: false,
-    price: false,
-  });
-
-  /* Form Fill */
-  const [showFormfill, setShowFormfill] = useState(true);
-  const [formFields, setFormFields] = useState([]);
-  const [visitorDefaults, setVisitorDefaults] = useState({});
-  const [formFillIntro, setFormFillIntro] = useState("");
-  const [formShown, setFormShown] = useState(false);
-  const [formCompleted, setFormCompleted] = useState(false);
-  const [pending, setPending] = useState(null);
-  const FORM_KEY = useMemo(
-    () => `formfill_completed:${botId || alias || "_"}`,
-    [botId, alias]
-  );
-  useEffect(() => {
-    try {
-      if (sessionStorage.getItem(FORM_KEY) === "1")
-        setFormCompleted(true);
-    } catch {}
-  }, [FORM_KEY]);
-
-  /* Pricing */
-  const [pricingCopy, setPricingCopy] = useState({
-    intro: "",
-    outro: "",
-    custom_notice: "",
-  });
-  const [priceQuestions, setPriceQuestions] = useState([]);
-  const [priceAnswers, setPriceAnswers] = useState({});
-  const [priceEstimate, setPriceEstimate] = useState(null);
-  const [priceBusy, setPriceBusy] = useState(false);
-  const [priceErr, setPriceErr] = useState("");
-
-  const contentRef = useRef(null);
-  const inputRef = useRef(null);
-  const embedDomain =
-    typeof window !== "undefined" ? window.location.hostname : "";
-
-  /* Session helper utilities */
-  const withIdsHeaders = () => ({
-    ...(sessionId ? { "X-Session-Id": sessionId } : {}),
-    ...(visitorId ? { "X-Visitor-Id": visitorId } : {}),
-  });
-  const withIdsBody = (obj) => ({
-    ...obj,
-    ...(sessionId ? { session_id: sessionId } : {}),
-    ...(visitorId ? { visitor_id: visitorId } : {}),
-  });
-  const withIdsQS = (url) => {
-    const u = new URL(url, window.location.origin);
-    if (sessionId) u.searchParams.set("session_id", sessionId);
-    if (visitorId) u.searchParams.set("visitor_id", visitorId);
-    if (pidParam) u.searchParams.set("pid", pidParam);
-    return u.toString();
-  };
-
-  function updateLocalVisitorValues(vals) {
-    if (!vals || typeof vals !== "object") return;
-    setVisitorDefaults((prev) => {
-      const m = { ...(prev || {}) };
-      Object.entries(vals).forEach(([k, v]) => {
-        if (k === "perspective") {
-          if (typeof v === "string" && v.trim()) {
-            m.perspective = v.toLowerCase();
-          } else if (v == null || v === "") {
-            m.perspective = null;
-          }
-        } else if (typeof v === "string") {
-          m[k] = v;
-        }
-      });
-      return m;
-    });
-  }
-
-  async function refetchVisitorValues() {
-    if (!visitorId) return;
-    try {
-      const r = await fetch(
-        `${apiBase}/visitor-formfill?visitor_id=${encodeURIComponent(
-          visitorId
-        )}`
-      );
-      if (!r.ok) return;
-      const j = await r.json();
-      if (j?.ok && j.values) updateLocalVisitorValues(j.values);
-    } catch {}
-  }
-
-  function maybePrefillFirstQuestion(q) {
-    if (!q) return;
-    setInput((curr) => {
-      if (curr.trim().length === 0) return q;
-      return curr;
-    });
-  }
-
-  /* Bot / alias resolution */
-  useEffect(() => {
-    if (botId || !alias) return;
-    let cancel = false;
-    (async () => {
-      try {
-        const r = await fetch(
-          withIdsQS(
-            `${apiBase}/bot-settings?alias=${encodeURIComponent(alias)}`
-          )
-        );
-        const j = await r.json();
-        if (cancel) return;
-        const id = j?.ok ? j?.bot?.id : null;
-        if (j?.ok) {
-          setVisitorId(j.visitor_id || "");
-          setSessionId(j.session_id || "");
-          applyBotSettings(j.bot);
-        } else setFatal("Invalid or inactive alias.");
-        if (id) setBotId(id);
-      } catch {
-        if (!cancel) setFatal("Invalid or inactive alias.");
-      }
-    })();
-    return () => {
-      cancel = true;
-    };
-  }, [alias, apiBase, botId]);
-
-  useEffect(() => {
-    if (botId || alias || !defaultAlias) return;
-    let cancel = false;
-    (async () => {
-      try {
-        const r = await fetch(
-          withIdsQS(
-            `${apiBase}/bot-settings?alias=${encodeURIComponent(
-              defaultAlias
-            )}`
-          )
-        );
-        const j = await r.json();
-        if (cancel) return;
-        if (j?.ok) {
-          setVisitorId(j.visitor_id || "");
-          setSessionId(j.session_id || "");
-          applyBotSettings(j.bot);
-          setBotId(j.bot.id);
-        }
-      } catch {}
-    })();
-    return () => {
-      cancel = true;
-    };
-  }, [botId, alias, defaultAlias, apiBase]);
-
-  function applyBotSettings(bot) {
-    if (!bot) return;
-    setPromptOverride(bot.prompt_override || "");
-    setResponseText(bot.welcome_message || "");
-    maybePrefillFirstQuestion(bot.first_question || "");
-    setIntroVideoUrl(bot.intro_video_url || "");
-    setShowIntroVideo(!!bot.show_intro_video);
-    setFormFillIntro(bot.formfill_intro || "");
-    setTabsEnabled({
-      demos: !!bot.show_browse_demos,
-      docs: !!bot.show_browse_docs,
-      meeting: !!bot.show_schedule_meeting,
-      price: !!bot.show_price_estimate,
-    });
-    setPricingCopy({
-      intro: bot.pricing_intro || "",
-      outro: bot.pricing_outro || "",
-      custom_notice: bot.pricing_custom_notice || "",
-    });
-    // Capture website URL from various possible fields
-    setWebsiteUrl(
-      bot.website || bot.site_url || bot.url || ""
-    );
-    // Capture banner URL and use_banner_url settings
-    setBannerUrl(bot.banner_url || "");
-    // Check both bot settings and URL params for use_banner_url
-    const useBannerFromUrl = urlParams.use_banner_url === "true" || urlParams.use_banner_url === "1";
-    setUseBannerUrl(!!bot.use_banner_url || useBannerFromUrl);
-    // TOPICS from bot settings
-    setBotTopics(bot.topics || null);
-    console.log("Loaded bot topics:", bot.topics);
-    // Suggested next question feature from bot settings
-    setSuggestNextQuestion(!!bot.suggest_next_question);
-  }
-
-  useEffect(() => {
-    if (!botId && !alias && !brandReady) setBrandReady(true);
-  }, [botId, alias, brandReady]);
-
-  useEffect(() => {
-    if (!botId) return;
-    let cancel = false;
-    (async () => {
-      try {
-        const r = await fetch(
-          `${apiBase}/brand?bot_id=${encodeURIComponent(botId)}`
-        );
-        const j = await r.json();
-        if (cancel) return;
-        if (j?.ok && j?.css_vars)
-          setThemeVars((p) => ({ ...p, ...j.css_vars }));
-        if (j?.ok && j?.assets) {
-          setBrandAssets({
-            logo_url: j.assets.logo_url || null,
-            logo_light_url: j.assets.logo_light_url || null,
-            logo_dark_url: j.assets.logo_dark_url || null,
-          });
-        }
-      } catch {
-      } finally {
-        if (!cancel) setBrandReady(true);
-      }
-    })();
-    return () => (cancel = true);
-  }, [botId, apiBase]);
-
-  /* Form fill config + visitors */
-  function patchCanonicalFields(rawFields) {
-    const map = new Map();
-    (rawFields || []).forEach((f) => {
-      if (!f?.field_key) return;
-      const canonical = FIELD_SYNONYMS[f.field_key] || f.field_key;
-      const base = {
-        ...f,
-        field_key: canonical,
-        label:
-          CANON_LABELS[canonical] ||
-          f.label ||
-          canonical
-            .replace(/_/g, " ")
-            .replace(/\b\w/g, (c) => c.toUpperCase()),
-      };
-      const existing = map.get(canonical);
-      if (!existing) {
-        map.set(canonical, base);
-      } else {
-        existing.is_collected =
-          existing.is_collected || base.is_collected;
-        existing.is_required =
-          existing.is_required || base.is_required;
-        if (!existing.tooltip && base.tooltip) existing.tooltip = base.tooltip;
-        if (!existing.placeholder && base.placeholder)
-          existing.placeholder = base.placeholder;
-        if (!existing.field_type && base.field_type)
-          existing.field_type = base.field_type;
-        if (!existing.options && base.options)
-          existing.options = base.options;
-      }
-    });
-    return [...map.values()];
-  }
-
-  async function fetchFormfillConfig(botIdArg, aliasArg) {
-    try {
-      const params = new URLSearchParams();
-      if (botIdArg) params.set("bot_id", botIdArg);
-      else if (aliasArg) params.set("alias", aliasArg);
-      if (visitorId) params.set("visitor_id", visitorId);
-      if (!params.toString()) return;
-      const r = await fetch(
-        `${apiBase}/formfill-config?${params.toString()}`
-      );
-      const j = await r.json();
-      if (j?.ok) {
-        const raw = Array.isArray(j.fields) ? j.fields : [];
-        const visitorVals =
-          (j.visitor_values &&
-            typeof j.visitor_values === "object" &&
-            j.visitor_values) ||
-          {};
-        if (visitorVals.perspective === "general")
-          visitorVals.perspective = null;
-        const patched = patchCanonicalFields(raw);
-        setShowFormfill(!!j.show_formfill);
-        setFormFields(
-          patched.map((f) =>
-            f.field_key === "perspective"
-              ? {
-                  ...f,
-                  field_type: "single_select",
-                  options:
-                    f.options && f.options.length
-                      ? f.options
-                      : PERSPECTIVE_OPTIONS,
-                }
-              : f
-          )
-        );
-        setVisitorDefaults(visitorVals);
-      }
-    } catch {}
-  }
-
-  useEffect(() => {
-    if (botId) fetchFormfillConfig(botId, null);
-  }, [botId]);
-  useEffect(() => {
-    if (!botId && alias) fetchFormfillConfig(null, alias);
-  }, [alias, botId]);
-  useEffect(() => {
-    if (botId && visitorId) fetchFormfillConfig(botId, null);
-  }, [visitorId, botId]);
-  useEffect(() => {
-    if (
-      (mode === "formfill" || mode === "personalize") &&
-      visitorId &&
-      botId
-    )
-      refetchVisitorValues();
-  }, [mode, visitorId, botId]);
-
-  const activeFormFields = useMemo(
-    () =>
-      (formFields || []).map((f) =>
-        f.field_key === "perspective"
-          ? {
-              ...f,
-              field_type: "single_select",
-              options:
-                f.options && f.options.length
-                  ? f.options
-                  : PERSPECTIVE_OPTIONS,
-            }
-          : f
-      ),
-    [formFields]
-  );
-
-  const formDefaults = useMemo(() => {
-    const o = { ...(visitorDefaults || {}) };
-    activeFormFields.forEach((f) => {
-      const k = f.field_key;
-      const urlVal = urlParams[k];
-      if (typeof urlVal === "string" && urlVal.length) {
-        o[k] = urlVal;
-      }
-    });
-    if (o.perspective === undefined) o.perspective = null;
-    if (typeof o.perspective === "string")
-      o.perspective = o.perspective.toLowerCase();
-    return o;
-  }, [activeFormFields, visitorDefaults, urlParams]);
-
-  /* Ask flow */
-  async function doSend(outgoing, useSuggestedQuestion = false) {
-    if (!outgoing || !botId) return;
-    setMode("ask");
-    setLastQuestion(outgoing);
-    setInput("");
-    setSelected(null);
-    setResponseText("");
-    setItems([]);
-    setLoading(true);
-    setLastError(null);
-    
-    // Clear suggested question state when sending a new question
-    setSuggestedQuestion("");
-    setIsSuggestedQuestion(false);
-
-    const perspectiveForCall = visitorDefaults.perspective
-      ? visitorDefaults.perspective.toLowerCase()
-      : "general";
-
-    const payload = withIdsBody({
-      bot_id: botId,
-      user_question: outgoing,
-      scope: "standard",
-      debug: true,
-      perspective: perspectiveForCall,
-      prompt_override: promptOverride || "",
-      ...(explainMode ? { explain: 1 } : {}), // PATCH: add this line
-      ...(useSuggestedQuestion ? { use_suggested_question: true } : {}), // Add flag if using suggested question
-    });
-
-    try {
-      const res = await axios.post(
-        `${apiBase}/demo-hal`,
-        payload,
-        {
-          timeout: 30000,
-          headers: {
-            "Content-Type": "application/json",
-            ...withIdsHeaders(),
-          },
-          validateStatus: () => true,
-        }
-      );
-      const status = res.status;
-      const data = res.data || {};
-      // --- PATCH: Handle explain mode response ---
-      if (explainMode && typeof data.report_markdown === "string") {
-        setResponseText(data.report_markdown);
-        setItems([]);
-        setLoading(false);
-        setLastError(null);
-        return;
-      }
-      const ok =
-        data.ok !== false &&
-        status >= 200 &&
-        status < 300 &&
-        typeof data.response_text === "string";
-      if (!ok) {
-        const msg =
-          data.response_text ||
-          data.message ||
-          (status === 500
-            ? "Internal server error"
-            : `Request failed (${status})`);
-        setResponseText(msg || "Sorry—something went wrong.");
-        setLoading(false);
-        setLastError({ status, data, payloadSent: payload });
-        return;
-      }
-      const text = data.response_text || "";
-
-      const demoBtns = Array.isArray(data.demo_buttons) ? data.demo_buttons : [];
-      const docBtns = Array.isArray(data.doc_buttons) ? data.doc_buttons : [];
-
-      const legacyItems = Array.isArray(data.items) ? data.items : [];
-      const legacyButtons = Array.isArray(data.buttons)
-        ? data.buttons
-        : [];
-
-      // Instead of filtering out docs, combine both demos and docs
-      const combinedRaw =
-        Array.isArray(data.items) && data.items.length > 0
-          ? data.items
-          : Array.isArray(data.buttons) && data.buttons.length > 0
-          ? data.buttons
-          : [...demoBtns, ...docBtns]; // combine both demo and doc buttons if legacy arrays are empty
-      
-      const combined = combinedRaw;
-
-      let mapped = combined.map((it, idx) => ({
-        id:
-          it.id ??
-          it.value ??
-          it.url ??
-          it.button_value ??
-          it.button_id ??
-          it.title ??
-          String(idx),
-        title:
-          it.title ??
-          it.button_title ??
-          (typeof it.label === "string"
-            ? it.label.replace(/^Watch the "(.+)" demo$/, "$1")
-            : it.label) ??
-          "",
-        url:
-          it.url ??
-          it.value ??
-          it.button_value ??
-          "",
-        description:
-          it.description ??
-          it.summary ??
-          it.functions_text ??
-          "",
-        functions_text:
-          it.functions_text ??
-          it.description ??
-          it.summary ??
-          "",
-        action: it.action ?? it.button_action ?? "demo",
-      }));
-
-      // Split into demos and docs
-      const mappedDemos = mapped.filter(it => (it.action || it.type) === "demo");
-      const mappedDocs = mapped.filter(it => (it.action || it.type) === "doc");
-
-      // Prune demos by scoring, limit to 4
-      const prunedDemos = pruneDemoButtons(outgoing, mappedDemos).slice(0, 4);
-      // Limit docs to 2 (no scoring applied)
-      const prunedDocs = mappedDocs.slice(0, 2);
-
-      // Combine for recommended section
-      const recommendedItems = [...prunedDemos, ...prunedDocs];
-
-if (typeof data.perspective === "string" && data.perspective) {
-  if (
-    visitorDefaults.perspective !== null &&
-    visitorDefaults.perspective !== undefined
-  ) {
-    updateLocalVisitorValues({
-      perspective: data.perspective.toLowerCase(),
-    });
-  }
-}
-
-setItems(recommendedItems);
-
-      if (typeof data.perspective === "string" && data.perspective) {
-        if (
-          visitorDefaults.perspective !== null &&
-          visitorDefaults.perspective !== undefined
-        ) {
-          updateLocalVisitorValues({
-            perspective: data.perspective.toLowerCase(),
-          });
-        }
-      }
-
-      setItems(mapped);
-      setResponseText(text);
-      
-      // Capture and sanitize suggested_question from API response
-      const sanitized = sanitizeSuggestedQuestion(data.suggested_question);
-      setSuggestedQuestion(sanitized);
-      
-      // Capture is_suggested_question flag for badge display
-      setIsSuggestedQuestion(data.is_suggested_question === true);
-      
-      setLoading(false);
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
-    } catch (err) {
-      const status = err.response?.status;
-      const data = err.response?.data;
-      const fallback =
-        data?.response_text ||
-        data?.message ||
-        (status
-          ? `Request failed (HTTP ${status})`
-          : "Network error");
-      setResponseText(
-        fallback.startsWith("Request failed")
-          ? "Sorry—something went wrong."
-          : fallback
-      );
-      setLastError({
-        status,
-        data,
-        message: err.message,
-        stack: err.stack,
-        payloadSent: payload,
-      });
-      setItems([]);
-      setLoading(false);
-    }
-  }
-
-  function maybeOpenForm(next) {
-    if (!showFormfill || activeFormFields.length === 0) return false;
-    try {
-      if (sessionStorage.getItem(FORM_KEY) === "1") {
-        if (!formCompleted) setFormCompleted(true);
-        return false;
-      }
-    } catch {}
-    if (!formCompleted && !formShown) {
-      setFormShown(true);
-      setPending(next);
-      setMode("formfill");
-      return true;
-    }
-    return false;
-  }
-
-  async function onSendClick() {
-    const outgoing = input.trim();
-    if (!outgoing || !botId) return;
-    if (maybeOpenForm({ type: "ask", payload: { text: outgoing } }))
-      return;
-    await doSend(outgoing);
-  }
-  
-  // Handler for "Yes" button click to accept suggested question
-  async function onAcceptSuggestedQuestion() {
-    if (!suggestedQuestion || !botId) return;
-    if (maybeOpenForm({ type: "ask", payload: { text: suggestedQuestion } }))
-      return;
-    await doSend(suggestedQuestion, true); // Pass true to indicate use_suggested_question
-  }
-
-  function openPersonalize() {
-    refetchVisitorValues();
-    setPending(null);
-    setMode("formfill");
-    setFormShown(true);
-  }
-
-  async function normalizeAndSelectDemo(item) {
-    try {
-      const r = await fetch(`${apiBase}/render-video-iframe`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...withIdsHeaders(),
-        },
-        body: JSON.stringify(
-          withIdsBody({
-            bot_id: botId,
-            demo_id: item.id || "",
-            title: item.title || "",
-            video_url: item.url || "",
-          })
-        ),
-      });
-      const j = await r.json();
-      const embed = j?.video_url || item.url;
-      setSelected({ ...item, url: embed });
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
-    } catch {
-      setSelected(item);
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
-    }
-  }
-
-  async function _openBrowse() {
-    if (!botId) return;
-    setMode("browse");
-    setSelected(null);
-    setSelectedDemoTopic("all"); // Reset topic filter
-    try {
-      const url = withIdsQS(
-        `${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`
-      );
-      const r = await fetch(url, { headers: withIdsHeaders() });
-      const j = await r.json();
-      const src = Array.isArray(j?.items) ? j.items : [];
-      setBrowseItems(
-        src.map((it) => ({
-          id: it.id ?? it.value ?? it.url ?? it.title,
-          title:
-            it.title ??
-            it.button_title ??
-            it.label ??
-            "",
-          url: it.url ?? it.value ?? it.button_value ?? "",
-          description:
-            it.description ??
-            it.summary ??
-            it.functions_text ??
-            "",
-          functions_text:
-            it.functions_text ??
-            it.description ??
-            it.summary ??
-            "",
-          topic: normalizeTopicToString(it.topic),
-        }))
-      );
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
-    } catch {
-      setBrowseItems([]);
-    }
-  }
-
-  async function openBrowse() {
-    if (maybeOpenForm({ type: "demos" })) return;
-    await _openBrowse();
-  }
-
-  async function _openBrowseDocs() {
-    if (!botId) return;
-    setMode("docs");
-    setSelected(null);
-    setSelectedDocTopic("all"); // Reset topic filter
-    try {
-      const url = withIdsQS(
-        `${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`
-      );
-      const r = await fetch(url, { headers: withIdsHeaders() });
-      const j = await r.json();
-      const src = Array.isArray(j?.items) ? j.items : [];
-      setBrowseDocs(
-        src.map((it) => ({
-          id: it.id ?? it.value ?? it.url ?? it.title,
-          title:
-            it.title ??
-            it.button_title ??
-            it.label ??
-            "",
-          url: it.url ?? it.value ?? it.button_value ?? "",
-          description:
-            it.description ??
-            it.summary ??
-            it.functions_text ??
-            "",
-          functions_text:
-            it.functions_text ??
-            it.description ??
-            it.summary ??
-            "",
-          topic: normalizeTopicToString(it.topic),
-        }))
-      );
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
-    } catch {
-      setBrowseDocs([]);
-    }
-  }
-
-  async function openBrowseDocs() {
-    if (maybeOpenForm({ type: "docs" })) return;
-    await _openBrowseDocs();
-  }
-
-  async function _openMeeting() {
-    if (!botId) return;
-    setMode("meeting");
-    try {
-      const url =
-        `${apiBase}/agent?bot_id=${encodeURIComponent(botId)}` +
-        (agentAlias
-          ? `&agent=${encodeURIComponent(agentAlias)}`
-          : "");
-      const r = await fetch(url);
-      const j = await r.json();
-      const ag = j?.ok ? j.agent : null;
-      setAgent(ag);
-      if (
-        ag &&
-        ag.calendar_link_type &&
-        String(ag.calendar_link_type).toLowerCase() === "external" &&
-        ag.calendar_link
-      ) {
-        try {
-          const base = ag.calendar_link || "";
-          const withQS =
-            `${base}${base.includes("?") ? "&" : "?"}session_id=${encodeURIComponent(
-              sessionId || ""
-            )}&visitor_id=${encodeURIComponent(
-              visitorId || ""
-            )}&bot_id=${encodeURIComponent(botId || "")}`;
-          window.open(withQS, "_blank", "noopener,noreferrer");
-        } catch {}
-      }
-      requestAnimationFrame(() =>
-        contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-      );
-    } catch {
-      setAgent(null);
-    }
-  }
-
-  async function openMeeting() {
-    if (maybeOpenForm({ type: "meeting" })) return;
-    await _openMeeting();
-  }
-
-  function _openPrice() {
-    if (!botId) return;
-    setMode("price");
-    setSelected(null);
-  }
-  function openPrice() {
-    if (maybeOpenForm({ type: "price" })) return;
-    _openPrice();
-  }
-
-  useEffect(() => {
-    if (mode !== "meeting" || !botId || !sessionId || !visitorId)
-      return;
-    function onCalendlyMessage(e) {
-      try {
-        const m = e?.data;
-        if (!m || typeof m !== "object") return;
-        if (
-          m.event !== "calendly.event_scheduled" &&
-          m.event !== "calendly.event_canceled"
+ALLOWED_PERSPECTIVES = set(PERSPECTIVE_PROMPTS.keys())
+
+PERSPECTIVE_OPTIONS = [
+    {"key": "general",     "label": "General"},
+    {"key": "financial",   "label": "Financial"},
+    {"key": "operational", "label": "Operational"},
+    {"key": "executive",   "label": "Owner / Executive"},
+    {"key": "technical",   "label": "Technical / IT"},
+    {"key": "user",        "label": "User / Functional"},
+    {"key": "sales",       "label": "Sales / Marketing"},
+    {"key": "compliance",  "label": "Governance / Compliance"},
+]
+
+def _infer_perspective(bot_id: str, session_id: str, visitor_id: str, body: dict) -> str:
+    """
+    Precedence:
+      1. Request body
+      2. Visitor form fill (most up to date)
+      3. Session context
+      4. Default 'general'
+    Rationale: a mid-session form fill change should immediately take effect
+               without needing a new request param.
+    """
+    # 1. Request body override
+    p = (body.get("perspective") or "").strip().lower()
+    if p in ALLOWED_PERSPECTIVES:
+        return p
+
+    # 2. Visitor stored value
+    try:
+        if visitor_id:
+            vr = (
+                sb().table("visitors_v2")
+                .select("formfill_fields")
+                .eq("id", visitor_id)
+                .limit(1).execute()
+            )
+            row = (vr.data or [None])[0]
+            if row and isinstance(row.get("formfill_fields"), list):
+                for f in row["formfill_fields"]:
+                    if isinstance(f, dict) and f.get("field_key") == "perspective":
+                        vp = (f.get("field_value") or "").lower()
+                        if vp in ALLOWED_PERSPECTIVES:
+                            return vp
+    except Exception:
+        pass
+
+    # 3. Session context fallback
+    try:
+        if session_id:
+            sr = (
+                sb().table("activity_sessions_v2")
+                .select("context")
+                .eq("id", session_id)
+                .limit(1).execute()
+            )
+            srow = (sr.data or [None])[0]
+            if srow and isinstance(srow.get("context"), dict):
+                ctxp = (srow["context"].get("perspective") or "").lower()
+                if ctxp in ALLOWED_PERSPECTIVES:
+                    return ctxp
+    except Exception:
+        pass
+
+    return "general"
+
+
+def _persist_session_perspective(session_id: str, perspective: str):
+    """Idempotently store perspective in session context."""
+    if not session_id or perspective not in ALLOWED_PERSPECTIVES:
+        return
+    try:
+        sr = (
+            sb().table("activity_sessions_v2")
+            .select("context")
+            .eq("id", session_id)
+            .limit(1).execute()
         )
-          return;
-        const p = m.payload || {};
-        const payloadOut = {
-          event: m.event,
-          scheduled_event: p.event || p.scheduled_event || null,
-          invitee: {
-            uri: p.invitee?.uri ?? null,
-            email: p.invitee?.email ?? null,
-            name:
-              p.invitee?.full_name ??
-              p.invitee?.name ??
-              null,
-          },
-          questions_and_answers:
-            p.questions_and_answers ??
-            p.invitee?.questions_and_answers ??
-            [],
-          tracking: p.tracking || {},
-        };
-        fetch(`${apiBase}/calendly/js-event`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            bot_id: botId,
-            session_id: sessionId,
-            visitor_id: visitorId,
-            payload: payloadOut,
-          }),
-        }).catch(() => {});
-      } catch {}
+        row = (sr.data or [None])[0]
+        ctx = {}
+        if row and isinstance(row.get("context"), dict):
+            ctx = dict(row["context"])
+        if ctx.get("perspective") == perspective:
+            return
+        ctx["perspective"] = perspective
+        ctx["updated_at"] = time.time()
+        sb().table("activity_sessions_v2").update({"context": ctx}).eq("id", session_id).execute()
+    except Exception as e:
+        _log(f"[persist_session_perspective] {e}")
+
+def _keyword_fallback(bot_id: str, question: str, limit: int = 10) -> List[Dict[str, Any]]:
+    """
+    Lexical fallback: simple token (>=3 chars) scan over content.
+    Scores by repeated hits; returns synthetic similarity (sim) for ordering.
+    """
+    try:
+        tokens = set(re.findall(r"[a-zA-Z0-9]{3,}", (question or "").lower()))
+        if not tokens:
+            return []
+        tokens = list(tokens)[:10]  # cap
+        results: Dict[str, Dict[str, Any]] = {}
+        for tk in tokens:
+            pattern = f"%{tk}%"
+            try:
+                r = (
+                    sb().table("knowledge_v2")
+                    .select("id,title,content")
+                    .eq("bot_id", bot_id)
+                    .eq("active", True)
+                    .ilike("content", pattern)
+                    .limit(limit)
+                    .execute()
+                )
+                for row in (r.data or []):
+                    rid = str(row.get("id"))
+                    if rid not in results:
+                        results[rid] = {
+                            "id": rid,
+                            "title": row.get("title"),
+                            "content": row.get("content"),
+                            "hits": 1,
+                        }
+                    else:
+                        results[rid]["hits"] += 1
+            except Exception as e:
+                _log(f"[keyword_fallback:{tk}] {e}")
+        ranked = sorted(results.values(), key=lambda x: x["hits"], reverse=True)
+        out = []
+        for r in ranked[:limit]:
+            sim = min(0.55, 0.30 + 0.05 * r["hits"])  # bounded synthetic similarity
+            out.append({"id": r["id"], "title": r["title"], "content": r["content"], "sim": sim})
+        return out
+    except Exception as e:
+        _log(f"[keyword_fallback] {e}")
+        return []
+
+
+def _expand_if_low_coverage(bot_id: str, current_hits: List[Dict[str, Any]], question: str, target: int) -> List[Dict[str, Any]]:
+    """
+    If we have some semantic hits but too few, add lexical expansions up to target.
+    """
+    if not current_hits or len(current_hits) >= target:
+        return []
+    existing = {h["id"] for h in current_hits if h.get("id")}
+    lexical = _keyword_fallback(bot_id, question, limit=target * 2)
+    out = []
+    for h in lexical:
+        if h["id"] not in existing:
+            out.append(h)
+            existing.add(h["id"])
+        if len(current_hits) + len(out) >= target:
+            break
+    return out
+
+# -----------------------------------------------------------------------------
+# Logging & small utils
+# -----------------------------------------------------------------------------
+def _log(msg: str):
+    try:
+        current_app.logger.warning(msg)
+    except Exception:
+        print(msg)
+
+def _now() -> str:
+    return f"{time.time():.3f}"
+
+def _short(text: str, n: int) -> str:
+    if not text:
+        return ""
+    s = re.sub(r"\s+", " ", str(text)).strip()
+    return s if len(s) <= n else s[: n - 3] + "..."
+
+def _parse_iso_dt(s: Optional[str]) -> Optional[datetime]:
+    if not s or not isinstance(s, str):
+        return None
+    try:
+        # Normalize potential 'Z'
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+# -----------------------------------------------------------------------------
+# Force-bot configuration (domain-aware)
+# -----------------------------------------------------------------------------
+FORCE_BOT_DOMAIN = os.getenv("FORCE_BOT_DOMAIN", "demohal.bot").strip().lower()
+FORCE_BOT_ID     = os.getenv("FORCE_BOT_ID", "").strip()
+
+def _detect_caller_domain(req) -> str:
+    try:
+        origin = (req.headers.get("Origin") or "").strip()
+        if origin:
+            return (urlparse(origin).netloc or "").lower()
+    except Exception:
+        pass
+    try:
+        ref = (req.headers.get("Referer") or "").strip()
+        if ref:
+            return (urlparse(ref).netloc or "").lower()
+    except Exception:
+        pass
+    xfwd = (req.headers.get("X-Forwarded-Host") or "").strip().lower()
+    if xfwd:
+        return xfwd
+    host = (request.headers.get("Host") or "").strip().lower()
+    return host
+
+@demo_hal_bp.before_app_request
+def _apply_force_bot_if_applicable():
+    try:
+        g.caller_domain = _detect_caller_domain(request)
+        g.forced_bot_id = FORCE_BOT_ID if g.caller_domain == FORCE_BOT_DOMAIN and FORCE_BOT_ID else ""
+    except Exception:
+        g.caller_domain = ""
+        g.forced_bot_id = ""
+
+@demo_hal_bp.after_app_request
+def _annotate_response(resp):
+    try:
+        if getattr(g, "caller_domain", None):
+            resp.headers["X-DemoHAL-Domain"] = g.caller_domain
+        if getattr(g, "forced_bot_id", ""):
+            resp.headers["X-DemoHAL-Forced-Bot"] = g.forced_bot_id
+    except Exception:
+        pass
+    return resp
+
+# -----------------------------------------------------------------------------
+# CORS helper
+# -----------------------------------------------------------------------------
+def _corsify(resp):
+    try:
+        origin = request.headers.get("Origin")
+        hdrs = resp.headers
+        if origin:
+            hdrs["Access-Control-Allow-Origin"] = origin
+            hdrs["Vary"] = "Origin"
+        else:
+            hdrs["Access-Control-Allow-Origin"] = "*"
+        hdrs["Access-Control-Allow-Headers"] = (
+            "Content-Type, Authorization, X-Requested-With, X-Session-Id, X-Visitor-Id"
+        )
+        hdrs["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        hdrs["Access-Control-Allow-Credentials"] = "true"
+        hdrs["Access-Control-Max-Age"] = "86400"
+        hdrs["Access-Control-Expose-Headers"] = "X-DemoHAL-Domain, X-DemoHAL-Forced-Bot"
+    except Exception as e:
+        _log(f"[corsify] {e}")
+    return resp
+
+# -----------------------------------------------------------------------------
+# Existing selectors & small helpers
+# -----------------------------------------------------------------------------
+AGENT_SELECT_FIELDS = (
+    "id, name, email, calendar_link, calendar_link_type, schedule_header, active, alias, created_at"
+)
+
+def _fetch_all_demos(bot_id: str) -> List[Dict[str, Any]]:
+    FIELDS = "id, title, description, url, active, topic"
+    try:
+        res = (
+            sb().table("demos_v2").select(FIELDS)
+            .eq("bot_id", bot_id).eq("active", True).order("title")
+            .execute()
+        )
+        return res.data or []
+    except Exception as e:
+        _log(f"[_fetch_all_demos] {e}")
+        return []
+
+def _fetch_all_documents(bot_id: str) -> List[Dict[str, Any]]:
+    FIELDS = "id, title, description, url, active, topic"
+    try:
+        res = (
+            sb().table("documents_v2").select(FIELDS)
+            .eq("bot_id", bot_id).eq("active", True).order("title")
+            .execute()
+        )
+        return res.data or []
+    except Exception as e:
+        _log(f"[_fetch_all_documents] {e}")
+        return []
+
+# --- PATCH: helpers for formfill array↔map conversions ---
+def _ff_arr_to_map(arr):
+    """Convert visitors_v2.formfill_fields array → flat map { key: value }."""
+    out = {}
+    try:
+        if isinstance(arr, list):
+            for x in arr:
+                if isinstance(x, dict) and x.get("field_key"):
+                    out[x["field_key"]] = x.get("field_value") or ""
+    except Exception as e:
+        _log(f"[_ff_arr_to_map] {e}")
+    return out
+
+def _ff_merge_map_into_arr(base_arr, new_map):
+    """Merge a flat map into an array-of-objects by field_key; return array.
+    Deterministic order by field_key for stable diffs.
+    """
+    by_key = {}
+    try:
+        if isinstance(base_arr, list):
+            for x in base_arr:
+                if isinstance(x, dict) and x.get("field_key"):
+                    by_key[x["field_key"]] = {
+                        "field_key": x["field_key"],
+                        "field_value": x.get("field_value") or "",
+                    }
+        for k, v in (new_map or {}).items():
+            if not k:
+                continue
+            by_key[k] = {"field_key": k, "field_value": (v if v is not None else "")}
+        return [by_key[k] for k in sorted(by_key.keys())]
+    except Exception as e:
+        _log(f"[_ff_merge_map_into_arr] {e}")
+        # fallback to minimal encoding
+        return [{"field_key": k, "field_value": (v if v is not None else "")} for k, v in sorted((new_map or {}).items())]
+# --- END PATCH ---
+
+# -----------------------------------------------------------------------------
+# Client name (used in system prompt)
+# -----------------------------------------------------------------------------
+def _fetch_client_name_for_bot(bot_id: str) -> str:
+    """bots_v2 -> client_id -> clients_v2.name"""
+    try:
+        br = sb().table("bots_v2").select("client_id").eq("id", bot_id).limit(1).execute()
+        row = (br.data or [{}])[0]
+        cid = row.get("client_id")
+        if not cid:
+            return "Your Company"
+        cr = sb().table("clients_v2").select("name").eq("id", cid).limit(1).execute()
+        crow = (cr.data or [{}])[0]
+        return (crow.get("name") or "Your Company").strip()
+    except Exception as e:
+        _log(f"[_fetch_client_name_for_bot] {e}")
+        return "Your Company"
+
+# -----------------------------------------------------------------------------
+# Embedding & KB retrieval
+# -----------------------------------------------------------------------------
+def _embed(text: str) -> List[float]:
+    """OpenAI embedding using text-embedding-ada-002 (1536-d)."""
+    try:
+        resp = _oa.embeddings.create(model=EMBED_MODEL, input=text)
+        return resp.data[0].embedding
+    except Exception as e:
+        _log(f"[embed] {e}")
+        return [0.0] * 1536
+
+def _kb_retrieve(bot_id: str, q_vec: List[float], top_k: int, min_score: float) -> List[Dict[str, Any]]:
+    """
+    Retrieve from knowledge_v2 via RPC `match_knowledge_v2`.
+    Accepts either:
+      - distance in `score` or `distance`  -> sim = 1 - distance
+      - similarity in `similarity` or `sim` -> sim = similarity
+    """
+    try:
+        res = sb().rpc(
+            "match_knowledge_v2",
+            {
+                "p_bot_id": bot_id,
+                "query_embedding": q_vec,
+                "match_count": int(max(1, top_k * 3)),
+            },
+        ).execute()
+        rows = res.data or []
+        out: List[Dict[str, Any]] = []
+        for r in rows:
+            sim = None
+            if "similarity" in r and r["similarity"] is not None:
+                sim = float(r["similarity"])
+            elif "sim" in r and r["sim"] is not None:
+                sim = float(r["sim"])
+            else:
+                dist = r.get("score", r.get("distance", r.get("cosine_distance")))
+                if dist is not None:
+                    sim = 1.0 - float(dist)
+            if sim is None:
+                continue
+            if sim > 1.0:
+                sim = 1.0
+            if sim < -1.0:
+                sim = -1.0
+            if sim >= float(min_score):
+                out.append({
+                    "id": r.get("id"),
+                    "title": r.get("title"),
+                    "content": r.get("content"),
+                    "sim": sim
+                })
+        out.sort(key=lambda x: x["sim"], reverse=True)
+        return out[:top_k]
+    except Exception as e:
+        _log(f"[_kb_retrieve:rpc_fallback] {e}")
+
+    # Fallback
+    try:
+        r = (
+            sb().table("knowledge_v2")
+            .select("id,title,content")
+            .eq("bot_id", bot_id).eq("active", True)
+            .limit(top_k)
+            .execute()
+        )
+        rows = r.data or []
+        return [{"id": rr["id"], "title": rr.get("title") or "", "content": rr.get("content") or "", "sim": 0.5} for rr in rows]
+    except Exception as e:
+        _log(f"[_kb_retrieve:fallback_error] {e}")
+        return []
+
+# --- Recommendation selection (word overlap) ---
+STOPWORDS = set([
+    "the","and","for","with","you","your","has","that","this","also","more","first","fully","without",
+    "across","every","their","they","them","of","in","on","to","as","is","it","at","by","be","or",
+    "from","but","was","are","an","so","can","if","all","we","our","not","will","about","after",
+    "before","which","into","how","when","what","who","where","why","should","could","would",
+    "support","supports"
+])
+
+# Replace this function:
+def _select_recommendations(
+    demos,
+    docs,
+    kb_hits,
+    limit: int = 6,
+):
+    """Rank demos/docs by word-overlap tokens derived from KB hits or question tokens, ignoring stopwords."""
+    def _tokenize(s: str):
+        s = (s or "").lower()
+        out = []
+        buf = []
+        for ch in s:
+            if ch.isalnum():
+                buf.append(ch)
+            else:
+                if len(buf) >= 3:
+                    word = "".join(buf)
+                    if word not in STOPWORDS:
+                        out.append(word)
+                buf = []
+        if len(buf) >= 3:
+            word = "".join(buf)
+            if word not in STOPWORDS:
+                out.append(word)
+        return set(out)
+
+    key_terms = set()
+    for h in (kb_hits or []):
+        key_terms |= _tokenize(f"{h.get('title','')} {h.get('content','')}")
+    if not key_terms:
+        try:
+            body = request.get_json(silent=True) or {}
+            q = body.get("user_question") or body.get("question") or ""
+        except Exception:
+            q = ""
+        if q:
+            key_terms = _tokenize(q)
+
+    def _score_item(title: str, desc: str = "") -> int:
+        return len(_tokenize(f"{title} {desc}") & key_terms)
+
+    demos_scored = sorted(
+        ({"row": d, "s": _score_item(d.get("title", ""), d.get("description", ""))} for d in (demos or [])),
+        key=lambda x: x["s"],
+        reverse=True,
+    )
+    docs_scored = sorted(
+        ({"row": d, "s": _score_item(d.get("title", ""), d.get("description", ""))} for d in (docs or [])),
+        key=lambda x: x["s"],
+        reverse=True,
+    )
+    demo_recs = [x["row"] for x in demos_scored if x["s"] > 0][:4]
+    doc_recs  = [x["row"] for x in docs_scored if x["s"] > 0][:2]
+    return demo_recs, doc_recs
+
+_knowledge_cache: Dict[str, List[Dict[str, Any]]] = {}
+def _preload_knowledge(bot_id: str):
+    try:
+        res = (
+            sb().table("knowledge_v2").select("id, content, active")
+            .eq("bot_id", bot_id).eq("active", True).limit(50).execute()
+        )
+        _knowledge_cache[bot_id] = res.data or []
+    except Exception as e:
+        _log(f"[preload_knowledge] {e}")
+        _knowledge_cache[bot_id] = []
+
+def _rank_demos_by_question(demos: List[Dict[str, Any]], question: str, k: int = 24) -> List[Dict[str, Any]]:
+    if not demos:
+        return []
+    q_words = set(re.findall(r"[a-z0-9]+", (question or "").lower()))
+    def score(d: Dict[str, Any]) -> int:
+        text = f"{d.get('title','')} {d.get('description','')}".lower()
+        words = set(re.findall(r"[a-z0-9]+", text))
+        return len(q_words & words)
+    return sorted(demos, key=score, reverse=True)[:k]
+
+def _to_demo_item(d: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": d.get("id"),
+        "title": d.get("title") or "",
+        "url": d.get("url") or "",
+        "description": d.get("description") or "",
+        "active": d.get("active", True),
+        "topic": d.get("topic") or "",
     }
-    window.addEventListener("message", onCalendlyMessage);
-    return () =>
-      window.removeEventListener("message", onCalendlyMessage);
-  }, [mode, botId, sessionId, visitorId, apiBase]);
 
-  useEffect(() => {
-    const el = inputRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [input]);
-
-  /* Pricing estimator */
-  useEffect(() => {
-    if (mode !== "price" || !botId) return;
-    let cancel = false;
-    (async () => {
-      try {
-        setPriceErr("");
-        setPriceEstimate(null);
-        setPriceAnswers({});
-        const r = await fetch(
-          `${apiBase}/pricing/questions?bot_id=${encodeURIComponent(
-            botId
-          )}`
-        );
-        const j = await r.json();
-        if (cancel) return;
-        if (!j?.ok) throw new Error();
-        setPriceQuestions(
-          Array.isArray(j.questions) ? j.questions : []
-        );
-        requestAnimationFrame(() =>
-          contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-        );
-        setPricingCopy((prev) => ({
-          intro: j.pricing_intro || prev.intro,
-          outro: j.pricing_outro || prev.outro,
-          custom_notice:
-            j.pricing_custom_notice || prev.custom_notice,
-        }));
-      } catch {
-        if (!cancel) setPriceErr("Unable to load price estimator.");
-      }
-    })();
-    return () => (cancel = true);
-  }, [mode, botId, apiBase]);
-
-  const nextPriceQuestion = useMemo(() => {
-    if (!priceQuestions.length) return null;
-    for (const q of priceQuestions) {
-      if (
-        (q.group ?? "estimation") !== "estimation" ||
-        q.required === false
-      )
-        continue;
-      const v = priceAnswers[q.q_key];
-      const isMulti = String(q.type)
-        .toLowerCase()
-        .includes("multi");
-      const empty = isMulti
-        ? !(Array.isArray(v) && v.length > 0)
-        : v === undefined || v === null || v === "";
-      if (empty) return q;
-    }
-    return null;
-  }, [priceQuestions, priceAnswers]);
-
-  useEffect(() => {
-    if (mode !== "price" || !botId || nextPriceQuestion) {
-      setPriceEstimate((prev) =>
-        nextPriceQuestion ? null : prev
-      );
-      return;
-    }
-    let cancel = false;
-    (async () => {
-      try {
-        setPriceBusy(true);
-        setPriceErr("");
-        const body = {
-          bot_id: botId,
-          answers: {
-            product_id:
-              priceAnswers?.product ||
-              priceAnswers?.edition ||
-              priceAnswers?.product_id ||
-              "",
-            tier_id:
-              priceAnswers?.tier ||
-              priceAnswers?.transactions ||
-              priceAnswers?.tier_id ||
-              "",
-          },
-          session_id: sessionId || undefined,
-          visitor_id: visitorId || undefined,
-        };
-        const r = await fetch(`${apiBase}/pricing/estimate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const j = await r.json();
-        if (cancel) return;
-        if (!j?.ok) throw new Error();
-        setPriceEstimate(j);
-      } catch {
-        if (!cancel) setPriceErr("Unable to compute estimate.");
-      } finally {
-        if (!cancel) setPriceBusy(false);
-      }
-    })();
-    return () => (cancel = true);
-  }, [
-    mode,
-    botId,
-    apiBase,
-    priceQuestions,
-    priceAnswers,
-    nextPriceQuestion,
-    sessionId,
-    visitorId,
-  ]);
-
-  function handlePickPriceOption(q, opt) {
-    const isMulti = String(q?.type || "")
-      .toLowerCase()
-      .includes("multi");
-    setPriceAnswers((prev) => {
-      if (isMulti) {
-        const curr = Array.isArray(prev[q.q_key])
-          ? prev[q.q_key]
-          : [];
-        const exists = curr.includes(opt.key);
-        const next = exists
-          ? curr.filter((k) => k !== opt.key)
-          : [...curr, opt.key];
-        return { ...prev, [q.q_key]: next };
-      }
-      return { ...prev, [q.q_key]: opt.key };
-    });
-  }
-
-  const mirrorLines = useMemo(() => {
-    const labelFor = (q_key) => {
-      const q = priceQuestions.find((qq) => qq.q_key === q_key);
-      if (!q) return "";
-      const ans = priceAnswers[q.q_key];
-      if (
-        ans == null ||
-        ans === "" ||
-        (Array.isArray(ans) && ans.length === 0)
-      )
-        return "";
-      const opts = normalizeOptions(q);
-      if (String(q.type).toLowerCase().includes("multi")) {
-        const picked = Array.isArray(ans) ? ans : [];
-        return opts
-          .filter((o) => picked.includes(o.key))
-          .map((o) => o.label)
-          .join(", ");
-      }
-      const o = opts.find((o) => o.key === ans);
-      return o?.label || String(ans);
-    };
-    if (typeof priceEstimate?.mirror_text === "string") {
-      const t = priceEstimate.mirror_text.trim();
-      if (t) return [t];
-    }
-    if (Array.isArray(priceEstimate?.mirror_text)) {
-      const out = [];
-      for (const m of priceEstimate.mirror_text) {
-        const raw = String(m?.text || "").trim();
-        if (!raw) continue;
-        const lbl = labelFor(m?.q_key);
-        const rep = raw
-          .replace(/\{\{\s*answer_label_lower\s*\}\}/gi, lbl.toLowerCase())
-          .replace(/\{\{\s*answer_label\s*\}\}/gi, lbl);
-        out.push(rep);
-      }
-      return out.filter(Boolean);
-    }
-    if (!priceQuestions.length) return [];
-    const lines = [];
-    for (const q of priceQuestions) {
-      const ans = priceAnswers[q.q_key];
-      if (
-        ans === undefined ||
-        ans === null ||
-        ans === "" ||
-        (Array.isArray(ans) && ans.length === 0)
-      )
-        continue;
-      const opts = normalizeOptions(q);
-      let label = "";
-      if (String(q.type).toLowerCase().includes("multi")) {
-        const picked = Array.isArray(ans) ? ans : [];
-        label = opts
-          .filter((o) => picked.includes(o.key))
-          .map((o) => o.label)
-          .join(", ");
-      } else {
-        const o = opts.find((o) => o.key === ans);
-        label = o?.label || String(ans);
-      }
-      if (!label) continue;
-      const tmpl = q.mirror_template;
-      if (tmpl && typeof tmpl === "string") {
-        const rep = tmpl
-          .replace(/\{\{\s*answer_label_lower\s*\}\}/gi, label.toLowerCase())
-          .replace(/\{\{\s*answer_label\s*\}\}/gi, label);
-        lines.push(rep);
-      } else lines.push(label);
-    }
-    return lines;
-  }, [priceEstimate, priceQuestions, priceAnswers]);
-
-  /* Session end beacon */
-  useEffect(() => {
-    if (!sessionId) return;
-    function sendEnd(reason = "unload") {
-      try {
-        const url = `${apiBase}/session/end`;
-        const body = JSON.stringify({ session_id: sessionId, reason });
-        if (navigator.sendBeacon) {
-          const blob = new Blob([body], { type: "application/json" });
-            navigator.sendBeacon(url, blob);
-        } else {
-          fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body,
-          });
-        }
-      } catch {}
-    }
-    function onPageHide() {
-      sendEnd("pagehide");
-    }
-    function onVisibility() {
-      if (document.visibilityState === "hidden") sendEnd("hidden");
-    }
-    window.addEventListener("pagehide", onPageHide);
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      window.removeEventListener("pagehide", onPageHide);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, [sessionId, apiBase]);
-
-    // ✅ Session heartbeat + hard-end safety
-  useEffect(() => {
-    if (!sessionId) return;
-
-    const HEARTBEAT_MS = 2 * 60 * 1000; // every 2 minutes
-    let timer;
-
-    async function sendHeartbeat() {
-      try {
-        await fetch(`${apiBase}/session/heartbeat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: sessionId, visitor_id: visitorId }),
-        });
-      } catch {}
+def _to_demo_button(item: Dict[str, Any]) -> Dict[str, Any]:
+    title = item.get("title") or ""
+    url   = item.get("url") or ""
+    desc  = item.get("description") or ""
+    label = f'Watch the "{title}" demo'
+    return {
+        "label": label,
+        "action": "demo",
+        "value": url,
+        "title": title,
+        "description": desc,
+        "button_label": label,
+        "button_action": "demo",
+        "button_value": url,
+        "button_title": title,
+        "summary": desc,
+        "id": item.get("id"),
+        "topic": item.get("topic") or "",
     }
 
-    // initial + repeat
-    sendHeartbeat();
-    timer = setInterval(sendHeartbeat, HEARTBEAT_MS);
-
-    // hard exit on tab close
-    const handleUnload = () => {
-      try {
-        fetch(`${apiBase}/session/end`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: sessionId, reason: "force-unload" }),
-          keepalive: true,
-        });
-      } catch {}
-    };
-    window.addEventListener("beforeunload", handleUnload);
-
-    return () => {
-      clearInterval(timer);
-      window.removeEventListener("beforeunload", handleUnload);
-    };
-  }, [sessionId, visitorId, apiBase]);
-
-  
-  const tabs = useMemo(() => {
-    const out = [];
-    out.push({
-      key: "personalize",
-      label: "Personalize",
-      onClick: openPersonalize,
-    });
-    if (tabsEnabled.demos)
-      out.push({
-        key: "demos",
-        label: "Browse Demos",
-        onClick: openBrowse,
-      });
-    if (tabsEnabled.docs)
-      out.push({
-        key: "docs",
-        label: "Browse Documents",
-        onClick: openBrowseDocs,
-      });
-    if (tabsEnabled.price)
-      out.push({
-        key: "price",
-        label: "Price Estimate",
-        onClick: openPrice,
-      });
-    if (tabsEnabled.meeting)
-      out.push({
-        key: "meeting",
-        label: "Schedule Meeting",
-        onClick: openMeeting,
-      });
-    return out;
-  }, [tabsEnabled]);
-
-  const logoSrc =
-    brandAssets.logo_url ||
-    brandAssets.logo_light_url ||
-    brandAssets.logo_dark_url ||
-    fallbackLogo;
-
-  const listSource = mode === "browse" ? browseItems : items;
-  const visibleUnderVideo = selected
-    ? mode === "ask"
-      ? items
-      : []
-    : listSource;
-  const showAskBottom = mode !== "formfill";
-
-  function handleThemeLabFormfillChange({ show_formfill, standard_fields }) {
-    setShowFormfill(!!show_formfill);
-    if (Array.isArray(standard_fields)) {
-      setFormFields((prev) => {
-        const byKey = {};
-        prev.forEach((f) => f?.field_key && (byKey[f.field_key] = { ...f }));
-        standard_fields.forEach((sf) => {
-          if (!sf.field_key) return;
-          const canonical = sf.field_key;
-          if (!byKey[canonical]) {
-            byKey[canonical] = {
-              field_key: canonical,
-              label: canonical
-                .replace(/_/g, " ")
-                .replace(/\b\w/g, (c) => c.toUpperCase()),
-              field_type:
-                canonical === "email"
-                  ? "email"
-                  : canonical === "perspective"
-                  ? "single_select"
-                  : "text",
-              options:
-                canonical === "perspective"
-                  ? PERSPECTIVE_OPTIONS
-                  : undefined,
-            };
-          }
-          byKey[canonical].is_collected = !!sf.is_collected;
-          byKey[canonical].is_required = !!sf.is_required;
-        });
-        return Object.values(byKey);
-      });
+def _to_doc_item(d: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": d.get("id"),
+        "title": d.get("title") or "",
+        "url": d.get("url") or "",
+        "description": d.get("description") or "",
+        "active": d.get("active", True),
+        "topic": d.get("topic") or "",
     }
-  }
 
-  function handleThemeLabOptionsChange(nextOptions) {
-    setTabsEnabled({
-      demos: !!nextOptions.show_browse_demos,
-      docs: !!nextOptions.show_browse_docs,
-      meeting: !!nextOptions.show_schedule_meeting,
-      price: !!nextOptions.show_price_estimate,
-    });
-    setShowIntroVideo(!!nextOptions.show_intro_video);
-    setIntroVideoUrl(nextOptions.intro_video_url || "");
-    setShowFormfill(!!nextOptions.show_formfill);
-  }
+def _to_doc_button(item: Dict[str, Any]) -> Dict[str, Any]:
+    title = item.get("title") or ""
+    url   = item.get("url") or ""
+    return {
+        "button_label": f'Read "{title}"',
+        "button_value": url,
+        "button_title": title,
+        "button_action": "document",
+        "topic": item.get("topic") or "",
+    }
 
-  if (fatal) {
-    return (
-      <div className="w-screen min-h-[100dvh] flex items-center justify-center bg-gray-100 p-4">
-        <div className="text-red-600 font-semibold">{fatal}</div>
-      </div>
-    );
-  }
+# -----------------------------------------------------------------------------
+# Canonical bot resolver & brand
+# -----------------------------------------------------------------------------
+@demo_hal_bp.get("/bot-settings")
+def bot_settings():
+    """
+    Include formfill_intro so the FE can display personalized form fill intro text.
+    """
+    try:
+        alias  = (request.args.get("alias")  or "").strip()
+        bot_id = (request.args.get("bot_id") or "").strip()
 
-  if (!botId) {
-    return (
-      <div
-        className={[
-          "w-screen min-h-[100dvh] flex items-center justify-center bg-[var(--page-bg)] p-4 transition-opacity duration-200",
-          brandReady ? "opacity-100" : "opacity-0",
-        ].join(" ")}
-        style={liveTheme}
-      >
-        <div className="text-gray-800 text-center space-y-2">
-          <div className="text-lg font-semibold">No bot selected</div>
-          {alias ? (
-            <div className="text-sm text-gray-600">
-              Resolving alias “{alias}”…
-            </div>
-          ) : (
-            <div className="text-sm text-gray-600">
-              Provide a <code>?bot_id=…</code> or <code>?alias=…</code>
-              {defaultAlias ? (
-                <> (trying default alias “{defaultAlias}”)</>
-              ) : null}
-              .
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
+        SELECT_FIELDS = (
+            "id,client_id,alias,company_name,description,active,created_at,"
+            "prompt_override,has_demos,has_docs,"
+            "show_browse_demos,show_browse_docs,show_schedule_meeting,show_price_estimate,"
+            "welcome_message,intro_video_url,show_intro_video,"
+            "pricing_intro,pricing_outro,pricing_custom_notice,"
+            "logo_url,first_question,formfill_intro,website,topics,"
+            "banner_url,use_banner_url"
+        )
 
-  const formFieldsForCard = activeFormFields.map((f) => {
-    const ph =
-      typeof f.tooltip === "string" && f.tooltip.trim()
-        ? f.tooltip.trim()
-        : f.placeholder || "";
-    return { ...f, placeholder: ph };
-  });
+        bot_row = None
+        if bot_id:
+            r = (
+                sb().table("bots_v2")
+                .select(SELECT_FIELDS)
+                .eq("id", bot_id)
+                .eq("active", True)
+                .limit(1)
+                .execute()
+            )
+            rows = r.data or []
+            bot_row = rows[0] if rows else None
+        elif alias:
+            r = (
+                sb().table("bots_v2")
+                .select(SELECT_FIELDS)
+                .eq("alias", alias)
+                .eq("active", True)
+                .limit(1)
+                .execute()
+            )
+            rows = r.data or []
+            bot_row = rows[0] if rows else None
 
-  return (
-    <div
-      className={[
-        "w-screen min-h-[100dvh] h-[100dvh] bg-[var(--page-bg)] p-0 md:p-2 md:flex md:items-center md:justify-center transition-opacity duration-200",
-        brandReady ? "opacity-100" : "opacity-0",
-      ].join(" ")}
-      style={liveTheme}
-    >
-      <div className="w-full h-[100dvh] md:h-[90vh] md:max-h-none bg-[var(--card-bg)] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)] flex flex-col overflow-hidden transition-all max-w-[720px]">
-        {/* Header */}
-        <div className={[
-          "bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)] flex flex-col",
-          useBannerUrl ? "items-center" : ""
-        ].join(" ")}>
-          {useBannerUrl && bannerUrl && bannerUrl.trim() ? (
-            // When use_banner_url is TRUE: Show banner image at 720px × 150px with tabs inside at bottom
-            <div className="relative w-full max-w-[720px]" style={{ height: '160px', borderBottom: '1px solid black' }}>
-              <img
-                src={bannerUrl}
-                alt="Banner"
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  // Fallback: hide the image and show traditional layout
-                  console.warn("Banner image failed to load:", bannerUrl);
-                  setUseBannerUrl(false);
-                }}
-              />
-              {/* Tabs anchored at bottom inside the banner card */}
-              <div className="absolute bottom-0 left-0 right-0 px-4 sm:px-6">
-                <TabsNav
-                  mode={mode === "formfill" ? "personalize" : mode}
-                  tabs={tabs}
-                />
-              </div>
-            </div>
-          ) : (
-            // When use_banner_url is FALSE/null: Show logo and title as before
-            <>
-              <div className="px-4 sm:px-6">
-                <div className="flex items-center justify-between w-full py-3">
-                  <div className="flex items-center gap-3">
-                    {/* TOP BANNER LOGO AREA: link if websiteUrl exists */}
-                    {websiteUrl ? (
-                      <a
-                        href={websiteUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-block focus-visible:ring-2 focus-visible:ring-white/60 rounded outline-none"
-                        title="Visit website"
-                        aria-label="Visit website"
-                      >
-                        <img
-                          src={logoSrc}
-                          alt="Brand logo"
-                          className="h-10 object-contain pointer-events-none select-none"
-                          draggable="false"
-                        />
-                      </a>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMode("ask");
-                          setSelected(null);
-                          setLastQuestion("");
-                          requestAnimationFrame(() =>
-                            contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
-                          );
-                        }}
-                        className="p-0 m-0 border-0 bg-transparent cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-white/60 rounded"
-                        title="Home"
-                        aria-label="Home"
-                      >
-                        <img
-                          src={logoSrc}
-                          alt="Brand logo"
-                          className="h-10 object-contain pointer-events-none select-none"
-                          draggable="false"
-                        />
-                      </button>
-                    )}
-                  </div>
-                  <div className="text-lg sm:text-xl font-semibold truncate max-w-[60%] text-right">
-                    {selected
-                      ? selected.title
-                      : mode === "personalize" || mode === "formfill"
-                      ? "Personalize"
-                      : mode === "browse"
-                      ? "Browse Demos"
-                      : mode === "docs"
-                      ? "Browse Documents"
-                      : mode === "meeting"
-                      ? "Schedule Meeting"
-                      : mode === "price"
-                      ? "Price Estimate"
-                      : "Ask the Assistant"}
-                  </div>
-                </div>
-              </div>
-              <div className="px-4 sm:px-6">
-                <TabsNav
-                  mode={mode === "formfill" ? "personalize" : mode}
-                  tabs={tabs}
-                />
-              </div>
-            </>
-          )}
-        </div>
+        if not bot_row:
+            return _corsify(jsonify({"ok": False, "error": "bot_not_found"})), 404
 
-        {/* Main Content */}
-        <div
-          ref={contentRef}
-          className="px-6 pt-3 pb-6 flex-1 flex flex-col space-y-4 overflow-y-auto"
-        >
-          {mode === "formfill" || mode === "personalize" ? (
-            <div className="space-y-4">
-              {formFillIntro ? (
-                <div className="text-base font-semibold whitespace-pre-line">
-                  {formFillIntro}
-                </div>
-              ) : (
-                <div className="text-base font-semibold">
-                  Update your information below.
-                </div>
-              )}
-              <FormFillCard
-                fields={formFieldsForCard}
-                defaults={formDefaults}
-                onSubmit={async (vals) => {
-                  if (!visitorId) {
-                    setMode("ask");
-                    return;
-                  }
-                  if (typeof vals.perspective === "string")
-                    vals.perspective = vals.perspective.toLowerCase();
-                  updateLocalVisitorValues(vals);
-                  let postOk = false;
-                  try {
-                    const resp = await fetch(`${apiBase}/visitor-formfill`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        visitor_id: visitorId,
-                        values: vals,
-                        bot_id: botId || undefined,
-                      }),
-                    });
-                    postOk = resp.ok;
-                  } catch {}
-                  try {
-                    sessionStorage.setItem(FORM_KEY, "1");
-                  } catch {}
-                  setFormCompleted(true);
-                  const p = pending;
-                  setPending(null);
-                  if (p?.type === "ask" && p.payload?.text)
-                    await doSend(p.payload.text);
-                  else if (p?.type === "demos") await _openBrowse();
-                  else if (p?.type === "docs") await _openBrowseDocs();
-                  else if (p?.type === "meeting") await _openMeeting();
-                  else if (p?.type === "price") _openPrice();
-                  else setMode("ask");
-                  if (!postOk) refetchVisitorValues();
-                }}
-              />
-            </div>
-          ) : mode === "price" ? (
-            <div className="flex-1 flex flex-col">
-              <div className="pt-0 pb-0">
-                <PriceMirror
-                  lines={mirrorLines.length ? mirrorLines : [""]}
-                />
-                {!mirrorLines.length && (
-                  <div className="text-base font-bold whitespace-pre-line">
-                    {pricingCopy.intro ||
-                      "This tool provides a quick estimate based on your selections. Final pricing may vary."}
-                  </div>
-                )}
-              </div>
-              <div className="mt-2 space-y-4">
-                {!priceQuestions.length ? (
-                  <div className="text-sm text-[var(--helper-fg)]">
-                    Loading questions…
-                  </div>
-                ) : nextPriceQuestion ? (
-                  <QuestionBlock
-                    q={nextPriceQuestion}
-                    value={priceAnswers[nextPriceQuestion.q_key]}
-                    onPick={handlePickPriceOption}
-                  />
-                ) : priceEstimate && priceEstimate.custom ? (
-                  <div className="text-base font-bold whitespace-pre-line">
-                    {pricingCopy.custom_notice ||
-                      "We’ll follow up with a custom quote tailored to your selection."}
-                  </div>
-                ) : (
-                  <EstimateCard
-                    estimate={priceEstimate}
-                    outroText={pricingCopy.outro || ""}
-                  />
-                )}
-                {!nextPriceQuestion && priceBusy && (
-                  <div className="text-sm text-[var(--helper-fg)]">
-                    Calculating…
-                  </div>
-                )}
-                {priceErr && (
-                  <div className="text-sm text-red-600">{priceErr}</div>
-                )}
-              </div>
-            </div>
-          ) : mode === "meeting" ? (
-            <div className="w-full flex-1 flex flex-col">
-              {agent?.schedule_header && (
-                <div className="text-sm italic text-[var(--helper-fg)] mb-3 whitespace-pre-line">
-                  {agent.schedule_header}
-                </div>
-              )}
-              {!agent ? (
-                <div className="text-sm text-[var(--helper-fg)]">
-                  Loading scheduling…
-                </div>
-              ) : agent.calendar_link_type &&
-                String(agent.calendar_link_type).toLowerCase() ===
-                  "embed" &&
-                agent.calendar_link ? (
-                <iframe
-                  title="Schedule a Meeting"
-                  src={`${agent.calendar_link}${
-                    agent.calendar_link.includes("?") ? "&" : "?"
-                  }embed_domain=${embedDomain}&embed_type=Inline&session_id=${encodeURIComponent(
-                    sessionId || ""
-                  )}&visitor_id=${encodeURIComponent(
-                    visitorId || ""
-                  )}&bot_id=${encodeURIComponent(
-                    botId || ""
-                  )}`}
-                  style={{
-                    width: "100%",
-                    height: "60vh",
-                    maxHeight: "640px",
-                    background: "var(--card-bg)",
-                  }}
-                  className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
-                />
-              ) : agent.calendar_link_type &&
-                String(agent.calendar_link_type).toLowerCase() ===
-                  "external" &&
-                agent.calendar_link ? (
-                <div className="text-sm text-gray-700">
-                  We opened the scheduling page in a new tab. If it
-                  didn’t open,&nbsp;
-                  <a
-                    href={agent.calendar_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 underline"
-                  >
-                    click here to open it
-                  </a>
-                  .
-                </div>
-              ) : (
-                <div className="text-sm text-[var(--helper-fg)]">
-                  No scheduling link is configured.
-                </div>
-              )}
-            </div>
-          ) : selected ? (
-            <div className="w-full flex-1 flex flex-col">
-              {mode === "docs" ? (
-                <DocIframe doc={selected} />
-              ) : (
-                <div className="bg-[var(--card-bg)] pt-2 pb-2">
-                  <iframe
-                    style={{ width: "100%", aspectRatio: "471 / 272" }}
-                    src={selected.url}
-                    title={selected.title}
-                    className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
-                </div>
-              )}
-              {mode === "ask" && (visibleUnderVideo || []).length > 0 && (
-                <RecommendedSection
-                  items={visibleUnderVideo}
-                  normalizeAndSelectDemo={normalizeAndSelectDemo}
-                  apiBase={apiBase}
-                  botId={botId}
-                  contentRef={contentRef}
-                  setSelected={setSelected}
-                  setMode={setMode}
-                />
-              )}
-            </div>
-          ) : mode === "browse" ? (
-            <div className="w-full flex-1 flex flex-col">
-              {(browseItems || []).length > 0 && (() => {
-                // Get demo topics
-                const demoTopics = Array.isArray(botTopics?.topics)
-                  ? botTopics.topics.filter(t => t.for_demos).map(t => ({ name: t.name, value: t.name }))
-                  : [];
-                console.log("Demo topics array:", demoTopics);
-                // Filter items by selected topic
-                const filteredItems = selectedDemoTopic === "all" 
-                  ? browseItems 
-                  : browseItems.filter(it => {
-                      console.log("Filtering: item.topic =", it.topic, "selectedDemoTopic =", selectedDemoTopic);
-                      return it.topic === selectedDemoTopic;
-                    });
-                
+        bot_id = str(bot_row["id"])
+        visitor = get_or_create_visitor(bot_id)
+        session = None
 
-                return (
-                  <>
-                    {demoTopics.length > 0 && (
-                      <div className="mb-3">
-                        <select
-                          value={selectedDemoTopic}
-                          onChange={(e) => setSelectedDemoTopic(e.target.value)}
-                          className="w-full px-3 py-2 border border-[var(--border-default,#9ca3af)] rounded-md bg-[var(--card-bg)] text-[var(--message-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--send-color,#22c55e)]"
-                        >
-                          <option value="all">Show All</option>
-                          {demoTopics.map((topic) => (
-                            <option key={topic.value} value={topic.value}>
-                              {topic.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between mt-2 mb-3">
-                      <p className="italic text-[var(--helper-fg)]">
-                        Select a demo to view it
-                      </p>
-                    </div>
-                    <div className="flex flex-col gap-3">
-                      {filteredItems.map((it) => (
-                        <Row
-                          key={it.id || it.url || it.title}
-                          item={it}
-                          onPick={(val) => normalizeAndSelectDemo(val)}
-                        />
-                    ))}
-                  </div>
-                </>
-                );
-              })()}
-            </div>
-          ) : mode === "docs" ? (
-            <div className="w-full flex-1 flex flex-col">
-              {(browseDocs || []).length > 0 && (() => {
-                // Get doc topics
-                const docTopics = Array.isArray(botTopics?.topics)
-                  ? botTopics.topics.filter(t => t.for_docs).map(t => ({ name: t.name, value: t.name }))
-                  : [];
-                console.log("Doc topics array:", docTopics);
-                // Filter items by selected topic
-                const filteredItems = selectedDocTopic === "all" 
-                  ? browseDocs 
-                  : browseDocs.filter(it => {
-                      console.log("Filtering: item.topic =", it.topic, "selectedDocTopic =", selectedDocTopic);
-                      return it.topic === selectedDocTopic;
-                    });
-               
-                return (
-                  <>
-                    {docTopics.length > 0 && (
-                      <div className="mb-3">
-                        <select
-                          value={selectedDocTopic}
-                          onChange={(e) => setSelectedDocTopic(e.target.value)}
-                          className="w-full px-3 py-2 border border-[var(--border-default,#9ca3af)] rounded-md bg-[var(--card-bg)] text-[var(--message-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--send-color,#22c55e)]"
-                        >
-                          <option value="all">Show All</option>
-                          {docTopics.map((topic) => (
-                            <option key={topic.value} value={topic.value}>
-                              {topic.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between mt-2 mb-3">
-                      <p className="italic text-[var(--helper-fg)]">
-                        Select a document to view it
-                      </p>
-                    </div>
-                    <div className="flex flex-col gap-3">
-                      {filteredItems.map((it) => (
-                        <Row
-                          key={it.id || it.url || it.title}
-                          item={it}
-                          kind="doc"
-                          onPick={async (val) => {
-                            try {
-                              const r = await fetch(
-                                `${apiBase}/render-doc-iframe`,
-                                {
-                                  method: "POST",
-                                  headers: {
-                                    "Content-Type": "application/json",
-                                  },
-                                  body: JSON.stringify(
-                                    withIdsBody({
-                                      bot_id: botId,
-                                      doc_id: val.id || "",
-                                      title: val.title || "",
-                                      url: val.url || "",
-                                    })
-                                  ),
-                                }
-                              );
-                              const j = await r.json();
-                              setSelected({
-                                ...val,
-                                _iframe_html: j?.iframe_html || null,
-                              });
-                            } catch {
-                              setSelected(val);
-                            }
-                            requestAnimationFrame(() =>
-                              contentRef.current?.scrollTo({
-                                top: 0,
-                                behavior: "auto",
-                              })
-                            );
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </>
-                  );
-                })()}
-              </div>
-          ) : (
-            <div className="w-full flex-1 flex flex-col">
-              {!lastQuestion && !loading && (
-                <div className="space-y-3">
-                  <div className="text-base font-bold whitespace-pre-line">
-                    {responseText}
-                  </div>
-                  {showIntroVideo && introVideoUrl && (
-                    <div style={{ position: "relative", paddingTop: "56.25%" }}>
-                      <iframe
-                        src={introVideoUrl}
-                        title="Intro Video"
-                        frameBorder="0"
-                        allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media; web-share"
-                        referrerPolicy="strict-origin-when-cross-origin"
-                        style={{
-                          position: "absolute",
-                          top: 0,
-                          left: 0,
-                          width: "100%",
-                          height: "100%",
-                        }}
-                        className="rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-              {lastQuestion && (
-                <p className="text-base italic text-center mb-2 text-[var(--helper-fg)]">
-                  "{lastQuestion}"
-                  {isSuggestedQuestion && (
-                    <span 
-                      className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800"
-                      aria-label="This question was suggested by the bot"
-                    >
-                      Suggested
-                    </span>
-                  )}
-                </p>
-              )}
-              <div className="text-left mt-2">
-                {loading ? (
-                  <p className="font-semibold animate-pulse text-[var(--helper-fg)]">
-                    Thinking…
-                  </p>
-                ) : lastQuestion ? (
-                  explainMode && responseText ? (
-                    <ReactMarkdown
-                      className="markdown-report"
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        table: ({node, ...props}) => <table {...props} className="markdown-table" />,
-                      }}
-                    >
-                      {responseText}
-                    </ReactMarkdown>
-                  ) : (
-                    <p className="text-base font-bold whitespace-pre-line">
-                      {responseText}
-                    </p>
-                  )
-                ) : null}
-              </div>
-              {/* Suggested next question "Yes" button */}
-              {!loading && lastQuestion && suggestNextQuestion && suggestedQuestion && (
-                <div className="mt-4">
-                  <div className="text-sm text-[var(--helper-fg)]">
-                    <span className="mr-2">{suggestedQuestion}</span>
-                    <button
-                      onClick={onAcceptSuggestedQuestion}
-                      className="inline-block px-4 py-2 bg-[var(--send-color)] text-white rounded-lg hover:brightness-110 transition-all active:scale-95"
-                      aria-label={`Accept suggestion: ${suggestedQuestion}`}
-                    >
-                      Yes
-                    </button>
-                  </div>
-                </div>
-              )}
-              <RecommendedSection
-                items={items}
-                normalizeAndSelectDemo={normalizeAndSelectDemo}
-                apiBase={apiBase}
-                botId={botId}
-                contentRef={contentRef}
-                setSelected={setSelected}
-                setMode={setMode}
-              />
-              {lastError && (
-                <details className="mt-4 text-[11px] p-2 border border-red-300 rounded bg-red-50">
-                  <summary className="cursor-pointer text-red-700 font-semibold">
-                    Technical details
-                  </summary>
-                  <pre className="mt-2 whitespace-pre-wrap break-all">
-{JSON.stringify(lastError, null, 2)}
-                  </pre>
-                </details>
-              )}
-            </div>
-          )}
-        </div>
-
-        {showAskBottom && (
-          <AskInputBar
-            value={input}
-            onChange={setInput}
-            onSend={onSendClick}
-            inputRef={inputRef}
-            placeholder="Ask your question here"
-            showLogo={true}
-          />
-        )}
-      </div>
-
-      {themeLabOn && botId && (
-        <ThemeLabPanels
-          apiBase={apiBase}
-          botId={botId}
-          frameRef={contentRef}
-          onVars={(varsUpdate) => {
-            if (typeof varsUpdate === "function") {
-              setPickerVars((prev) => ({
-                ...prev,
-                ...(varsUpdate(prev) || {}),
-              }));
-            } else {
-              setPickerVars((prev) => ({ ...prev, ...(varsUpdate || {}) }));
+        if visitor and visitor.get("id"):
+            entry_ctx = {
+                "entry_url": request.args.get("entry_url"),
+                "referrer":  request.headers.get("Referer") or request.args.get("referrer"),
+                "utm": {
+                    "source":   request.args.get("utm_source"),
+                    "medium":   request.args.get("utm_medium"),
+                    "campaign": request.args.get("utm_campaign"),
+                    "term":     request.args.get("utm_term"),
+                    "content":  request.args.get("utm_content"),
+                },
             }
-          }}
-          onFormfillChange={handleThemeLabFormfillChange}
-          onLiveMessages={(updated) => {
-            if (!updated || typeof updated !== "object") return;
-            if ("welcome_message" in updated)
-              setResponseText(updated.welcome_message || "");
-            if ("formfill_intro" in updated)
-              setFormFillIntro(updated.formfill_intro || "");
-            setPricingCopy((prev) => ({
-              intro:
-                "pricing_intro" in updated
-                  ? updated.pricing_intro || ""
-                  : prev.intro,
-              outro:
-                "pricing_outro" in updated
-                  ? updated.pricing_outro || ""
-                  : prev.outro,
-              custom_notice:
-                "pricing_custom_notice" in updated
-                  ? updated.pricing_custom_notice || ""
-                  : prev.custom_notice,
-            }));
-          }}
-          onOptionsChange={handleThemeLabOptionsChange}
-        />
-      )}
-    </div>
-  );
-}
+            entry_ctx["utm"] = {k: v for k, v in (entry_ctx["utm"] or {}).items() if v} or None
+
+            client_session_id = (request.args.get("session_id") or request.headers.get("X-Session-Id") or "").strip()
+            if client_session_id:
+                try:
+                    sr = (
+                        sb().table("activity_sessions_v2")
+                        .select("id, bot_id, visitor_id, started_at, ended_at")
+                        .eq("id", client_session_id)
+                        .eq("bot_id", bot_id)
+                        .eq("visitor_id", visitor["id"])
+                        .limit(1)
+                        .execute()
+                    )
+                    srows = sr.data or []
+                    session = srows[0] if srows else None
+                except Exception:
+                    pass
+
+            if not session:
+                try:
+                    sr = (
+                        sb().table("activity_sessions_v2")
+                        .select("id, bot_id, visitor_id, started_at, ended_at, last_event_at")
+                        .eq("bot_id", bot_id)
+                        .eq("visitor_id", visitor["id"])
+                        .is_("ended_at", None)
+                        .order("started_at", desc=True)
+                        .limit(1)
+                        .execute()
+                    )
+                    srows = sr.data or []
+                    if srows:
+                        candidate = srows[0]
+                        try:
+                            from datetime import datetime, timezone, timedelta
+                            ref_iso = candidate.get("last_event_at") or candidate.get("started_at")
+                            dt = None
+                            if isinstance(ref_iso, str):
+                                dt = datetime.fromisoformat(ref_iso.replace("Z", "+00:00"))
+                            if dt and (datetime.now(timezone.utc) - dt) <= timedelta(minutes=30):
+                                session = candidate
+                        except Exception:
+                            session = candidate
+                except Exception:
+                    pass
+
+            if not session:
+                session = create_session(bot_id, visitor["id"], entry=entry_ctx)
+                try:
+                    sb().rpc("inc_visitor_visit_count", {"p_visitor_id": visitor["id"]}).execute()
+                except Exception:
+                    try:
+                        sb().table("visitors_v2").update({
+                            "visit_count": (visitor.get("visit_count") or 1) + 1,
+                            "last_seen_at": "now()"
+                        }).eq("id", visitor["id"]).execute()
+                    except Exception:
+                        pass
+
+            try:
+                if session and session.get("id"):
+                    ev_count = 0
+                    try:
+                        ev_count = (
+                            sb().table("activity_events_v2")
+                            .select("id", count="exact")
+                            .eq("session_id", session["id"])
+                            .execute()
+                        ).count or 0
+                    except Exception:
+                        pass
+                    if ev_count == 0:
+                        log_event(
+                            bot_id=bot_id,
+                            session_id=session["id"],
+                            visitor_id=visitor["id"],
+                            event_type="init",
+                            payload={
+                                "version": os.getenv("APP_VERSION") or "unknown",
+                                "screen": "ask",
+                                "entry_params": {
+                                    "alias": alias or None,
+                                    "entry_url": entry_ctx.get("entry_url"),
+                                    "referrer": entry_ctx.get("referrer"),
+                                    "utm": entry_ctx.get("utm"),
+                                },
+                            },
+                        )
+            except Exception:
+                pass
+
+        resp = {
+            "ok": True,
+            "bot": {
+                "id": bot_id,
+                "alias": bot_row.get("alias"),
+                "company_name": bot_row.get("company_name"),
+                "description": bot_row.get("description"),
+                "active": bot_row.get("active"),
+                "created_at": bot_row.get("created_at"),
+                "prompt_override": bot_row.get("prompt_override"),
+                "has_demos": bot_row.get("has_demos"),
+                "has_docs": bot_row.get("has_docs"),
+                "show_browse_demos": bot_row.get("show_browse_demos"),
+                "show_browse_docs": bot_row.get("show_browse_docs"),
+                "show_schedule_meeting": bot_row.get("show_schedule_meeting"),
+                "show_price_estimate": bot_row.get("show_price_estimate"),
+                "welcome_message": bot_row.get("welcome_message"),
+                "intro_video_url": bot_row.get("intro_video_url"),
+                "show_intro_video": bot_row.get("show_intro_video"),
+                "logo_url": bot_row.get("logo_url"),
+                "pricing_intro": bot_row.get("pricing_intro"),
+                "pricing_outro": bot_row.get("pricing_outro"),
+                "pricing_custom_notice": bot_row.get("pricing_custom_notice"),
+                "first_question": bot_row.get("first_question"),
+                "formfill_intro": bot_row.get("formfill_intro"),
+                "website": bot_row.get("website"),
+                "topics": bot_row.get("topics"),
+                "banner_url": bot_row.get("banner_url"),
+                "use_banner_url": bot_row.get("use_banner_url"),
+            },
+            "visitor_id": (visitor or {}).get("id"),
+            "session_id": (session or {}).get("id"),
+        }
+        return _corsify(jsonify(resp)), 200
+    except Exception as e:
+        _log(f"[/bot-settings] {e}")
+        return _corsify(jsonify({"ok": False, "error": "server_error"})), 500
+
+@demo_hal_bp.get("/brand")
+def get_brand():
+    # (UNCHANGED)
+    try:
+        bot_id = (request.args.get("bot_id") or "").strip()
+        if not bot_id:
+            return jsonify({"ok": False, "error": "bot_id_required"}), 400
+
+        r2 = (
+            sb().table("brand_tokens_v2")
+            .select("token_key, value")
+            .eq("bot_id", bot_id)
+            .execute()
+        )
+        kv_rows = r2.data or []
+
+        TOKEN_TO_CSS = {
+            "banner.background":            "--banner-bg",
+            "banner.foreground":            "--banner-fg",
+            "page.background":              "--page-bg",
+            "content.area.background":      "--card-bg",
+
+            "message.text.foreground":      "--message-fg",
+            "helper.text.foreground":       "--helper-fg",
+            "mirror.text.foreground":       "--mirror-fg",
+
+            "tab.background":               "--tab-bg",
+            "tab.foreground":               "--tab-fg",
+
+            "demo.button.background":       "--demo-button-bg",
+            "demo.button.foreground":       "--demo-button-fg",
+
+            "doc.button.background":        "--doc-button-bg",
+            "doc.button.foreground":        "--doc-button-fg",
+
+            "price.button.background":      "--price-button-bg",
+            "price.button.foreground":      "--price-button-fg",
+
+            "send.button.background":       "--send-color",
+
+            "border.default":               "--border-default",
+        }
+
+        css_vars: Dict[str, str] = {}
+        for row in kv_rows:
+            tk = (row.get("token_key") or "").strip().lower()
+            val = (row.get("value") or "").strip()
+            css_name = TOKEN_TO_CSS.get(tk)
+            if css_name and val:
+                css_vars[css_name] = val
+
+        assets: Dict[str, Any] = {}
+        try:
+            br = (
+                sb().table("bots_v2")
+                .select("logo_url")
+                .eq("id", bot_id).limit(1).execute()
+            )
+            brow = (br.data or [{}])[0]
+            if brow.get("logo_url"):
+                assets["logo_url"] = brow["logo_url"]
+        except Exception as _e:
+            _log(f"[brand:assets-fallback] {_e}")
+
+        return jsonify({"ok": True, "css_vars": css_vars, "assets": assets})
+    except Exception as e:
+        _log(f"[brand] fatal: {e}")
+        return jsonify({"ok": False, "error": "server_error"}), 500
+
+# ---------------------------------------------------------------------
+# ThemeLab AUTH (bcrypt + signed cookie)
+# ---------------------------------------------------------------------
+THEMELAB_COOKIE_NAME = os.getenv("THEMELAB_COOKIE_NAME", "th_session")
+THEMELAB_TTL_SECONDS = int(os.getenv("THEMELAB_TTL_SECONDS", "7200"))  # 2h
+
+def _cookie_secret() -> bytes:
+    s = os.getenv("THEMELAB_COOKIE_SECRET") or current_app.config.get("SECRET_KEY") or "change-me"
+    return s.encode("utf-8")
+
+def _b64u(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
+
+def _b64u_dec(s: str) -> bytes:
+    pad = "=" * (-len(s) % 4)
+    return base64.urlsafe_b64decode(s + pad)
+
+def _sign(data: bytes) -> str:
+    mac = hmac.new(_cookie_secret(), data, hashlib.sha256).digest()
+    return _b64u(mac)
+
+def _mint_themelab_token(bot_id: str, ttl: int = THEMELAB_TTL_SECONDS) -> str:
+    payload = {"bot_id": bot_id, "exp": int(time.time()) + int(ttl), "v": 1}
+    raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    sig = _sign(raw)
+    return f"{_b64u(raw)}.{sig}"
+
+def _verify_themelab_token(token: str, expect_bot: Optional[str] = None) -> bool:
+    try:
+        p, s = token.split(".", 1)
+        raw = _b64u_dec(p)
+        if _sign(raw) != s:
+            return False
+        payload = json.loads(raw.decode("utf-8"))
+        if expect_bot and payload.get("bot_id") != expect_bot:
+            return False
+        if int(payload.get("exp", 0)) < int(time.time()):
+            return False
+        return True
+    except Exception:
+        return False
+
+def _is_secure_request() -> bool:
+    if request.is_secure:
+        return True
+    xf_proto = (request.headers.get("X-Forwarded-Proto") or "").lower()
+    return xf_proto == "https" or os.getenv("COOKIE_SECURE", "1") == "1"
+
+def _get_themelab_hash(bot_id: str) -> Optional[str]:
+    try:
+        r = (
+            sb().table("bots_v2")
+            .select("themelab_secret_hash")
+            .eq("id", bot_id)
+            .limit(1)
+            .execute()
+        )
+        rows = r.data or []
+        if not rows:
+            return None
+        return rows[0].get("themelab_secret_hash") or None
+    except Exception as e:
+        _log(f"[get_themelab_hash] {e}")
+        return None
+
+def _require_themelab(bot_id: str):
+    th = _get_themelab_hash(bot_id)
+    if not th:
+        return jsonify({"ok": False, "error": "themelab_disabled"}), 403
+    token = request.cookies.get(THEMELAB_COOKIE_NAME, "")
+    if not token or not _verify_themelab_token(token, expect_bot=bot_id):
+        return jsonify({"ok": False, "error": "auth_required"}), 401
+    return None
+
+@demo_hal_bp.route("/themelab/login", methods=["POST", "OPTIONS"])
+def themelab_login():
+    if request.method == "OPTIONS":
+        return _corsify(jsonify({"ok": True})), 200
+    try:
+        payload = request.get_json(force=True, silent=True) or {}
+        bot_id = (payload.get("bot_id") or "").strip()
+        pwd = (payload.get("password") or "").encode("utf-8")
+        if not bot_id or not pwd:
+            return _corsify(jsonify({"ok": False, "error": "bot_id_and_password_required"})), 400
+
+        h = _get_themelab_hash(bot_id)
+        if not h:
+            return _corsify(jsonify({"ok": False, "error": "themelab_disabled"})), 403
+
+        ok = False
+        try:
+            ok = bcrypt.checkpw(pwd, h.encode("utf-8"))
+        except Exception as e:
+            _log(f"[themelab_login:checkpw] {e}")
+
+        if not ok:
+            return _corsify(jsonify({"ok": False, "error": "invalid_password"})), 401
+
+        tok = _mint_themelab_token(bot_id)
+        resp = jsonify({"ok": True})
+        resp.set_cookie(
+            THEMELAB_COOKIE_NAME,
+            tok,
+            max_age=THEMELAB_TTL_SECONDS,
+            httponly=True,
+            secure=_is_secure_request(),
+            samesite="None",
+            path="/",
+        )
+        return _corsify(resp)
+    except Exception as e:
+        _log(f"[themelab_login] {e}")
+        return _corsify(jsonify({"ok": False, "error": "server_error"})), 500
+
+@demo_hal_bp.post("/themelab/logout")
+def themelab_logout():
+    resp = jsonify({"ok": True})
+    resp.set_cookie(
+        THEMELAB_COOKIE_NAME, "", expires=0, httponly=True,
+        secure=_is_secure_request(), samesite="None", path="/",
+    )
+    return _corsify(resp)
+
+@demo_hal_bp.route("/themelab/status", methods=["GET", "OPTIONS"])
+def themelab_status():
+    if request.method == "OPTIONS":
+        return _corsify(jsonify({"ok": True})), 200
+    bot_id = (request.args.get("bot_id") or "").strip()
+    h = _get_themelab_hash(bot_id)
+    if not h:
+        return _corsify(jsonify({"ok": False, "error": "themelab_disabled"})), 403
+    tok = request.cookies.get(THEMELAB_COOKIE_NAME, "")
+    if tok and _verify_themelab_token(tok, expect_bot=bot_id):
+        return _corsify(jsonify({"ok": True})), 200
+    return _corsify(jsonify({"ok": False, "error": "unauthorized"})), 401
+
+# ---------------------------------------------------------------------
+# Client-controlled tokens (ColorBox support)
+# ---------------------------------------------------------------------
+@demo_hal_bp.route("/brand/client-tokens", methods=["GET", "OPTIONS"])
+def brand_client_tokens():
+    if request.method == "OPTIONS":
+        return _corsify(jsonify({"ok": True})), 200
+    bot_id = (request.args.get("bot_id") or "").strip()
+    if not bot_id:
+        return _corsify(jsonify({"ok": False, "error": "missing_bot_id"})), 400
+    guard = _require_themelab(bot_id)
+    if guard is not None:
+        resp, code = guard
+        return _corsify(resp), code
+    try:
+        r = (
+            sb()
+            .table("brand_tokens_v2")
+            .select("token_key,label,value,screen_key,client_controlled")
+            .eq("bot_id", bot_id)
+            .eq("client_controlled", True)
+            .order("screen_key", desc=False)
+            .order("label", desc=False)
+            .execute()
+        )
+        rows = r.data or []
+        tokens = [
+            {
+                "token_key": x.get("token_key"),
+                "label": x.get("label"),
+                "value": x.get("value"),
+                "screen_key": x.get("screen_key") or "welcome",
+            }
+            for x in rows
+        ]
+        return _corsify(jsonify({"ok": True, "tokens": tokens})), 200
+    except Exception as e:
+        _log(f"[brand_client_tokens] {e}")
+        return _corsify(jsonify({"ok": False, "error": "server_error"})), 500
+
+@demo_hal_bp.route("/brand/client-tokens/save", methods=["POST", "OPTIONS"])
+def brand_client_tokens_save():
+    if request.method == "OPTIONS":
+        return _corsify(jsonify({"ok": True})), 200
+    payload = request.get_json(force=True, silent=True) or {}
+    bot_id = (payload.get("bot_id") or "").strip()
+    items = payload.get("updates") or payload.get("tokens") or []
+    if not bot_id:
+        return _corsify(jsonify({"ok": False, "error": "missing_bot_id"})), 400
+    guard = _require_themelab(bot_id)
+    if guard is not None:
+        resp, code = guard
+        return _corsify(resp), code
+    updated = 0
+    try:
+        for it in items:
+            k = (it.get("token_key") or "").strip()
+            v = (it.get("value") or "")
+            if not k:
+                continue
+            sb().table("brand_tokens_v2") \
+                .update({"value": v}) \
+                .eq("bot_id", bot_id) \
+                .eq("token_key", k) \
+                .eq("client_controlled", True) \
+                .execute()
+            updated += 1
+        return _corsify(jsonify({"ok": True, "updated": updated})), 200
+    except Exception as e:
+        _log(f"[brand_client_tokens_save] {e}")
+        return _corsify(jsonify({"ok": False, "error": "server_error"})), 500
+
+# (ThemeLab wording/options endpoints unchanged from previous patch)
+
+_WORDING_SELECT = (
+    "id, show_browse_demos, show_browse_docs, show_price_estimate, "
+    "show_schedule_meeting, show_intro_video, intro_video_url, show_formfill, "
+    "welcome_message, pricing_intro, pricing_outro, pricing_custom_notice, "
+    "formfill_fields"
+)
+
+def _sanitize_bool(v):
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return bool(v)
+    if isinstance(v, str):
+        return v.strip().lower() in ("1", "true", "yes", "y", "on", "t")
+    return False
+
+def _extract_standard_formfill(ff_arr):
+    KNOWN = {"organization", "company", "website", "title", "phone", "phone_number"}
+    out = []
+    try:
+        for f in ff_arr or []:
+            if not isinstance(f, dict):
+                continue
+            fk = (f.get("field_key") or "").strip()
+            if not fk:
+                continue
+            if bool(f.get("is_standard")) or fk in KNOWN:
+                out.append({
+                    "field_key": fk,
+                    "label": f.get("label") or fk.title(),
+                    "is_collected": bool(f.get("is_collected", True)),
+                    "is_required": bool(f.get("is_required", False)),
+                })
+    except Exception as e:
+        _log(f"[wording.extract_standard] {e}")
+    return out
+
+@demo_hal_bp.route("/themelab/wording-options", methods=["GET","OPTIONS"])
+def themelab_wording_options():
+    if request.method=="OPTIONS":
+        return _corsify(jsonify({"ok":True})),200
+    bot_id=(request.args.get("bot_id") or "").strip()
+    if not bot_id:
+        return _corsify(jsonify({"ok":False,"error":"missing_bot_id"})),400
+    guard=_require_themelab(bot_id)
+    if guard is not None:
+        resp,code=guard
+        return _corsify(resp),code
+    try:
+        r=sb().table("bots_v2").select(
+            "id, show_browse_demos, show_browse_docs, show_price_estimate, "
+            "show_schedule_meeting, show_intro_video, intro_video_url, show_formfill, "
+            "welcome_message, pricing_intro, pricing_outro, pricing_custom_notice, formfill_intro, formfill_fields"
+        ).eq("id",bot_id).limit(1).execute()
+        row=(r.data or [None])[0]
+        if not row:
+            return _corsify(jsonify({"ok":False,"error":"bot_not_found"})),404
+        fields = row.get("formfill_fields") or []
+        if not isinstance(fields,list): fields=[]
+        SYNONYMS={"fname":"first_name","lname":"last_name"}
+        CANON_LABELS={"first_name":"First Name","last_name":"Last Name"}
+        merged={}
+        for f in fields:
+            if not isinstance(f,dict): continue
+            fk = f.get("field_key")
+            if not fk: continue
+            canonical = SYNONYMS.get(fk,fk)
+            existing = merged.get(canonical)
+            cur = dict(f)
+            cur["field_key"]=canonical
+            if canonical=="perspective":
+                cur["field_type"]="single_select"
+                cur["options"]=[{"key":o["key"],"label":o["label"]} for o in (cur.get("options") or PERSPECTIVE_OPTIONS)]
+                # Add default tooltip if missing
+                if not cur.get("tooltip"):
+                    cur["tooltip"] = "Select the perspective you most care about (optional)"
+                if not cur.get("placeholder"):
+                    cur["placeholder"] = cur["tooltip"]
+            if canonical in CANON_LABELS:
+                cur["label"]=CANON_LABELS[canonical]
+            if not existing:
+                merged[canonical]=cur
+            else:
+                existing["is_collected"]=existing.get("is_collected") or cur.get("is_collected")
+                existing["is_required"]=existing.get("is_required") or cur.get("is_required")
+                for k in ("tooltip","placeholder","field_type","options"):
+                    if not existing.get(k) and cur.get(k): existing[k]=cur.get(k)
+        out=[]
+        for k in sorted(merged.keys()):
+            f=merged[k]
+            out.append({
+                "field_key":f.get("field_key"),
+                "label":f.get("label") or f.get("field_key"),
+                "field_type":f.get("field_type") or "text",
+                "is_required":bool(f.get("is_required")),
+                "is_collected":bool(f.get("is_collected",True)),
+                "options":f.get("options") if isinstance(f.get("options"),list) else None,
+                "tooltip":f.get("tooltip"),
+                "placeholder":f.get("placeholder"),
+            })
+        data={
+          "ok":True,
+          "bot_id":bot_id,
+          "options":{
+            "show_browse_demos":bool(row.get("show_browse_demos")),
+            "show_browse_docs":bool(row.get("show_browse_docs")),
+            "show_price_estimate":bool(row.get("show_price_estimate")),
+            "show_schedule_meeting":bool(row.get("show_schedule_meeting")),
+            "show_intro_video":bool(row.get("show_intro_video")),
+            "show_formfill":bool(row.get("show_formfill")),
+            "intro_video_url":row.get("intro_video_url") or "",
+          },
+          "messages":{
+            "welcome_message":row.get("welcome_message") or "",
+            "formfill_intro":row.get("formfill_intro") or "",
+            "pricing_intro":row.get("pricing_intro") or "",
+            "pricing_outro":row.get("pricing_outro") or "",
+            "pricing_custom_notice":row.get("pricing_custom_notice") or "",
+          },
+          "standard_fields":out
+        }
+        return _corsify(jsonify(data)),200
+    except Exception as e:
+        _log(f"[themelab_wording_options] {e}")
+        return _corsify(jsonify({"ok":False,"error":"server_error"})),500
+
+@demo_hal_bp.route("/themelab/wording-options/save", methods=["POST","OPTIONS"])
+def themelab_wording_options_save():
+    if request.method == "OPTIONS":
+        return _corsify(jsonify({"ok": True})), 200
+    body = request.get_json(silent=True) or {}
+    bot_id = (body.get("bot_id") or "").strip()
+    if not bot_id:
+        return _corsify(jsonify({"ok": False, "error": "missing_bot_id"})), 400
+    guard = _require_themelab(bot_id)
+    if guard is not None:
+        resp, code = guard
+        return _corsify(resp), code
+
+    options_in = body.get("options") or {}
+    messages_in = body.get("messages") or {}
+    std_fields_in = body.get("standard_fields") or []
+
+    OPT_BOOL = {
+        "show_browse_demos","show_browse_docs","show_price_estimate",
+        "show_schedule_meeting","show_intro_video","show_formfill"
+    }
+    OPT_STR = {"intro_video_url"}
+    MSG_KEYS = {
+        "welcome_message","pricing_intro","pricing_outro",
+        "pricing_custom_notice","formfill_intro"
+    }
+
+    def _b(v):
+        if isinstance(v,bool): return v
+        if isinstance(v,(int,float)): return bool(v)
+        if isinstance(v,str): return v.strip().lower() in ("1","true","yes","on","y","t")
+        return False
+
+    patch={}
+    for k in OPT_BOOL:
+        if k in options_in: patch[k]=_b(options_in[k])
+    for k in OPT_STR:
+        if k in options_in: patch[k]=(options_in[k] or "").strip()
+    for k in MSG_KEYS:
+        if k in messages_in: patch[k]=(messages_in[k] or "").strip()
+
+    try:
+        if patch:
+            sb().table("bots_v2").update(patch).eq("id",bot_id).execute()
+    except Exception as e:
+        _log(f"[wording_options_save:update] {e}")
+        return _corsify(jsonify({"ok": False, "error": "update_failed"})), 500
+
+    try:
+        existing_resp = sb().table("bots_v2").select("formfill_fields").eq("id",bot_id).limit(1).execute()
+        existing_row = (existing_resp.data or [None])[0] or {}
+        existing = existing_row.get("formfill_fields") or []
+        if not isinstance(existing,list): existing=[]
+    except Exception as e:
+        _log(f"[wording_options_save:select_existing] {e}")
+        existing=[]
+
+    by_key={}
+    for f in existing:
+        if isinstance(f,dict) and f.get("field_key"):
+            by_key[f["field_key"]]=dict(f)
+
+    SYNONYMS = {"fname":"first_name","lname":"last_name"}
+    CANON_LABELS = {"first_name":"First Name","last_name":"Last Name"}
+
+    for sf in std_fields_in:
+        if not isinstance(sf,dict): continue
+        fk = (sf.get("field_key") or "").strip()
+        if not fk: continue
+        canonical = SYNONYMS.get(fk,fk)
+        base = by_key.get(canonical) or by_key.get(fk) or {"field_key":canonical}
+        base["field_key"]=canonical
+        if canonical in CANON_LABELS:
+            base["label"]= CANON_LABELS[canonical]
+        else:
+            base.setdefault("label", base.get("label") or canonical.replace("_"," ").title())
+        base["is_collected"]=bool(sf.get("is_collected", True))
+        base["is_required"]=bool(sf.get("is_required", False))
+        if canonical=="perspective":
+            base["field_type"]="single_select"
+            base["options"]=[{"key":o["key"],"label":o["label"]} for o in (base.get("options") or PERSPECTIVE_OPTIONS)]
+        by_key[canonical]=base
+        if fk in SYNONYMS and fk in by_key:
+            try: del by_key[fk]
+            except: pass
+
+    for legacy,canon in SYNONYMS.items():
+        if legacy in by_key:
+            if canon in by_key:
+                by_key[canon]["is_collected"] = by_key[canon].get("is_collected") or by_key[legacy].get("is_collected")
+                by_key[canon]["is_required"] = by_key[canon].get("is_required") or by_key[legacy].get("is_required")
+            del by_key[legacy]
+
+    final_fields = [by_key[k] for k in sorted(by_key.keys())]
+
+    try:
+        sb().table("bots_v2").update({"formfill_fields": final_fields}).eq("id",bot_id).execute()
+    except Exception as e:
+        _log(f"[wording_options_save:write_ff] {e}")
+        return _corsify(jsonify({"ok": False, "error": "ff_write_failed"})), 500
+
+    return _corsify(jsonify({"ok": True,"saved_fields": len(final_fields)})), 200
+    
+# ---------------------------------------------------------------------
+# Activity logging helpers & session/visitor creation (unchanged)
+# ---------------------------------------------------------------------
+def _first_public_ip(req) -> Optional[str]:
+    def is_public(ip: str) -> bool:
+        try:
+            import ipaddress
+            ipobj = ipaddress.ip_address(ip.strip())
+            return not (ipobj.is_private or ipobj.is_loopback or ipobj.is_reserved or ipobj.is_multicast)
+        except Exception:
+            return False
+    xff = (req.headers.get("X-Forwarded-For") or "")
+    for part in [p.strip() for p in xff.split(",") if p.strip()]:
+        if is_public(part):
+            return part
+    xr = (req.headers.get("X-Real-IP") or "").strip()
+    if xr:
+        return xr
+    return req.remote_addr
+
+def _truncate_ip(ip: Optional[str]) -> Optional[str]:
+    if not ip:
+        return None
+    try:
+        import ipaddress
+        ipobj = ipaddress.ip_address(ip)
+        if isinstance(ipobj, ipaddress.IPv4Address):
+            parts = ip.split(".")
+            parts[-1] = "0"
+            return ".".join(parts)
+        if isinstance(ipobj, ipaddress.IPv6Address):
+            hextets = ipobj.exploded.split(":")
+            return ":".join(hextets[:4] + ["0000"] * 4)
+    except Exception:
+        return ip
+    return ip
+
+def _ua_major(ua: str) -> str:
+    s = (ua or "").lower()
+    if "chrome" in s and "safari" in s:
+        fam = "chrome"
+    elif "safari" in s and "chrome" not in s:
+        fam = "safari"
+    elif "firefox" in s:
+        fam = "firefox"
+    elif "edg" in s:
+        fam = "edge"
+    else:
+        fam = "other"
+    if "windows" in s:
+        osf = "windows"
+    elif "mac os x" in s or "macintosh" in s:
+        osf = "mac"
+    elif "android" in s:
+        osf = "android"
+    elif "iphone" in s or "ipad" in s or "ios" in s:
+        osf = "ios"
+    else:
+        osf = "other"
+    return f"{fam}/{osf}"
+
+def _cookie_secret() -> bytes:
+    s = os.getenv("THEMELAB_COOKIE_SECRET") or current_app.config.get("SECRET_KEY") or "change-me"
+    return s.encode("utf-8")
+
+def _fp_hmac(data: str) -> str:
+    mac = hmac.new(_cookie_secret(), data.encode("utf-8"), hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(mac).decode("ascii").rstrip("=")
+
+def _fingerprint_for_bot(bot_id: str, ip_trunc: Optional[str], ua_major: str, lang: str) -> str:
+    raw = "|".join([str(bot_id or ""), str(ip_trunc or ""), str(ua_major or ""), str(lang or ""), "fpv1"])
+    return _fp_hmac(raw)
+
+def _extract_client_hints(req) -> Dict[str, Any]:
+    ua = (req.headers.get("User-Agent") or "")
+    lang = (req.headers.get("Accept-Language") or "").split(",")[0].strip()
+    ip = _first_public_ip(req)
+    return {
+        "ip": ip,
+        "ip_trunc": _truncate_ip(ip),
+        "user_agent": ua,
+        "ua_major": _ua_major(ua),
+        "accept_language": lang,
+    }
+
+def get_or_create_visitor(bot_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Finds or creates a visitor based on (bot_id + truncated IP + UA major + lang) fingerprint.
+    Now also captures optional pid from the request's query string (?pid=...).
+    """
+    try:
+        pid_in = (request.args.get("pid") or "").strip()
+        hints = _extract_client_hints(request)
+        fp = _fingerprint_for_bot(bot_id, hints["ip_trunc"], hints["ua_major"], hints["accept_language"])
+        r = (
+            sb().table("visitors_v2")
+            .select("id, bot_id, fingerprint, fp_ver, first_ip, last_ip, user_agent, accept_language, visit_count, created_at, last_seen_at, pid")
+            .eq("bot_id", bot_id)
+            .eq("fingerprint", fp)
+            .limit(1)
+            .execute()
+        )
+        row = (r.data or [])
+        if row:
+            v = row[0]
+            patch = {
+                "last_ip": hints["ip"],
+                "user_agent": hints["user_agent"],
+                "accept_language": hints["accept_language"],
+                "last_seen_at": "now()",
+            }
+            # Only update pid if a new pid is provided and differs (do not erase existing)
+            if pid_in and (v.get("pid") or "") != pid_in:
+                patch["pid"] = pid_in
+            try:
+                sb().table("visitors_v2").update(patch).eq("id", v["id"]).execute()
+            except Exception:
+                pass
+            v.update(patch)
+            return v
+        ins = {
+            "bot_id": bot_id,
+            "fingerprint": fp,
+            "fp_ver": 1,
+            "first_ip": hints["ip"],
+            "last_ip": hints["ip"],
+            "user_agent": hints["user_agent"],
+            "accept_language": hints["accept_language"],
+            "visit_count": 1,
+        }
+        if pid_in:
+            ins["pid"] = pid_in
+        cr = sb().table("visitors_v2").insert(ins).execute()
+        created = (cr.data or [None])[0]
+        return created
+    except Exception as e:
+        _log(f"[get_or_create_visitor] {e}")
+        return None
+
+def create_session(bot_id: str, visitor_id: str, entry: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    entry = entry or {}
+    try:
+        hints = _extract_client_hints(request)
+        ins = {
+            "bot_id": bot_id,
+            "visitor_id": visitor_id,
+            "entry_url": entry.get("entry_url"),
+            "referrer": entry.get("referrer"),
+            "entry_ip": hints["ip"],
+            "entry_user_agent": hints["user_agent"],
+            "utm": entry.get("utm") or None,
+            "started_at": "now()",
+            "event_count": 0,
+            "context": {"recent_q": [], "last_item": None, "screen": "ask", "last_estimate": None, "updated_at": time.time()},
+        }
+        cr = sb().table("activity_sessions_v2").insert(ins).execute()
+        return (cr.data or [None])[0]
+    except Exception as e:
+        _log(f"[create_session] {e}")
+        return None
+
+def _update_session_denorm(session_id: str, when_iso: Optional[str] = None):
+    try:
+        patch = {
+            "event_count": sb().rpc("inc_session_event_count", {"p_session_id": session_id}).execute()
+        }
+    except Exception:
+        patch = {}
+    try:
+        sb().table("activity_sessions_v2").update({
+            "event_count": sb().table("activity_events_v2").select("id", count="exact").eq("session_id", session_id).execute().count,
+            "last_event_at": "now()" if not when_iso else when_iso,
+        }).eq("id", session_id).execute()
+    except Exception:
+        pass
+
+def update_session_context(session_id: str, event_type: str, payload: Dict[str, Any]):
+    try:
+        r = sb().table("activity_sessions_v2").select("context").eq("id", session_id).limit(1).execute()
+        ctx = ((r.data or [{}])[0].get("context") or {}) if r.data else {}
+        if not isinstance(ctx, dict):
+            ctx = {}
+        recent_q = ctx.get("recent_q") or []
+        screen = ctx.get("screen") or "ask"
+
+        if event_type == "ask":
+            q = (payload or {}).get("question") or ""
+            if q:
+                recent_q = (recent_q + [q])[-8:]
+            screen = "ask"
+            ctx["recent_q"] = recent_q
+        elif event_type == "demo_open":
+            ctx["last_item"] = {"type": "demo", "id": (payload or {}).get("demo_id"), "title": (payload or {}).get("title")}
+            screen = "demo_view"
+        elif event_type == "doc_open":
+            ctx["last_item"] = {"type": "doc", "id": (payload or {}).get("doc_id"), "title": (payload or {}).get("title")}
+            screen = "doc_view"
+        elif event_type == "price_estimate":
+            keep = {k: (payload or {}).get(k) for k in ["product_id", "tier_id", "total_min", "total_max"]}
+            ctx["last_estimate"] = keep
+
+        ctx["screen"] = screen
+        ctx["updated_at"] = time.time()
+        sb().table("activity_sessions_v2").update({"context": ctx}).eq("id", session_id).execute()
+    except Exception as e:
+        _log(f"[update_session_context] {e}")
+
+def log_event(bot_id: str, session_id: str, visitor_id: str, event_type: str, payload: Optional[Dict[str, Any]] = None, client_event_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    payload = payload or {}
+    try:
+        hints = _extract_client_hints(request)
+        ins = {
+            "bot_id": bot_id,
+            "visitor_id": visitor_id,
+            "session_id": session_id,
+            "event_type": event_type,
+            "payload": payload,
+            "ip": hints["ip"],
+            "user_agent": hints["user_agent"],
+            "client_event_id": client_event_id,
+        }
+        cr = sb().table("activity_events_v2").insert(ins).execute()
+        row = (cr.data or [None])[0]
+        try:
+            update_session_context(session_id, event_type, payload)
+        except Exception:
+            pass
+        try:
+            _update_session_denorm(session_id)
+        except Exception:
+            pass
+        return row
+    except Exception as e:
+        _log(f"[log_event] {e}")
+        return None
+
+# ---------------------------------------------------------------------
+# Bot alias quick lookup
+# ---------------------------------------------------------------------
+@demo_hal_bp.get("/bot-by-alias")
+def bot_by_alias():
+    alias  = (request.args.get("alias")  or "").strip().lower()
+    if not alias:
+        return jsonify({"ok": False, "error": "alias_required"}), 400
+    try:
+        r = (
+            sb().table("bots_v2")
+            .select("id, alias, company_name, active")
+            .eq("alias", alias).eq("active", True)
+            .limit(1).execute()
+        )
+        rows = r.data or []
+        if not rows:
+            return jsonify({"ok": False, "error": "not_found"}), 404
+        return jsonify({"ok": True, "bot": rows[0]})
+    except Exception as e:
+        _log(f"[bot_by_alias] {e}")
+        return jsonify({"ok": False, "error": "server_error"}), 500
+
+# ---------------------------------------------------------------------
+# /demo-hal (Perspective-enabled)
+# ---------------------------------------------------------------------
+# Paste this function INTO your existing routes.py, replacing the existing /demo-hal handler.
+# It adds legacy 'items' + 'buttons' arrays while preserving 'demo_buttons'/'doc_buttons'.
+# Assumes all referenced helpers already exist in the file.
+
+# --- PATCH: /demo-hal with explain=1 full technical report mode ---
+
+def _hash_embedding(vec):
+    try:
+        # Hash the embedding vector for brevity in report
+        if not vec or not isinstance(vec, list):
+            return "none"
+        b = bytearray()
+        for f in vec[:32]:  # just the first 32 floats
+            b.extend(bytearray(str(f), 'utf-8'))
+        return hashlib.sha256(b).hexdigest()[:12]
+    except Exception:
+        return "err"
+
+def _tokenize_for_report(s):
+    s = (s or "").lower()
+    out = []
+    buf = []
+    for ch in s:
+        if ch.isalnum():
+            buf.append(ch)
+        else:
+            if len(buf) >= 3:
+                word = "".join(buf)
+                if word not in STOPWORDS:
+                    out.append(word)
+                buf = []
+    if len(buf) >= 3:
+        word = "".join(buf)
+        if word not in STOPWORDS:
+            out.append(word)
+    return sorted(set(out))
+
+def build_explain_report(
+    user_question, params, kb_hits, expanded, lexical_added,
+    demos, demo_recs, doc_recs, system_text, kb_context, response_text,
+    embedding_vec, perspective
+):
+    explain_md = []
+    explain_md.append(f"# DemoHAL Technical Response Report")
+    explain_md.append("")
+    explain_md.append(f"### 1. User Question")
+    explain_md.append(f"> {user_question}")
+    explain_md.append("")
+    explain_md.append(f"---\n### 2. Parameters Used")
+    for k, v in params.items():
+        explain_md.append(f"- {k}: **{v}**")
+    explain_md.append("")
+    explain_md.append("---")
+    explain_md.append("### 3. Knowledge Base Retrieval")
+    explain_md.append(f"**Embedding Hash:** `{_hash_embedding(embedding_vec)}`")
+    explain_md.append("")
+    explain_md.append("| KB ID | Title | Similarity | Snippet | Source |")
+    explain_md.append("|-------|-------|-----------|---------|--------|")
+    for h in kb_hits:
+        explain_md.append(f"| {h.get('id','')} | {h.get('title','')[:36]} | {h.get('sim',0):.2f} | {str(h.get('content',''))[:40].replace('|','\\|')}... | semantic |")
+    for h in expanded:
+        explain_md.append(f"| {h.get('id','')} | {h.get('title','')[:36]} | {h.get('sim',0):.2f} | {str(h.get('content',''))[:40].replace('|','\\|')}... | expanded |")
+    for h in lexical_added:
+        explain_md.append(f"| {h.get('id','')} | {h.get('title','')[:36]} | {h.get('sim',0):.2f} | {str(h.get('content',''))[:40].replace('|','\\|')}... | lexical |")
+    explain_md.append("")
+    explain_md.append("---")
+    explain_md.append("### 4. Recommendations Scoring")
+    explain_md.append("| Type | Title | Overlap Tokens | Score | Selected? | Reason |")
+    explain_md.append("|------|-------|---------------|-------|-----------|--------|")
+
+    key_terms = set()
+    for h in kb_hits:
+        key_terms |= set(_tokenize_for_report(f"{h.get('title','')} {h.get('content','')}"))
+    if not key_terms:
+        key_terms = set(_tokenize_for_report(user_question))
+
+    def score_item(item, selected_list):
+        tokens = set(_tokenize_for_report(f"{item.get('title','')} {item.get('description','')}"))
+        overlap = sorted(tokens & key_terms)
+        score = len(overlap)
+        selected = item in selected_list
+        reason = "Overlap with KB hits/question" if score > 0 else "No relevant overlap"
+        return {
+            "type": "Demo" if item in demos else "Doc",
+            "title": item.get("title", "")[:36],
+            "overlap": overlap,
+            "score": score,
+            "selected": selected,
+            "reason": reason
+        }
+
+    # Combine both demos and docs in one table
+    all_items = list(demos) + list(doc_recs)
+    for item in all_items:
+        s = score_item(item, demo_recs + doc_recs)
+        explain_md.append(
+            f"| {s['type']} | {s['title']} | {', '.join(s['overlap'])} | {s['score']} | {'Yes' if s['selected'] else 'No'} | {s['reason']} |"
+        )
+
+    explain_md.append("")
+    explain_md.append("---")
+    explain_md.append("### 5. Prompt Sent to Model")
+    explain_md.append("**System Prompt:**")
+    explain_md.append("```")
+    explain_md.append(system_text)
+    explain_md.append("```")
+    explain_md.append("")
+    explain_md.append("**KB Context:**")
+    explain_md.append("```")
+    explain_md.append(kb_context)
+    explain_md.append("```")
+    explain_md.append("")
+    explain_md.append(f"**User Prompt:**\n> {user_question}")
+    explain_md.append("")
+    explain_md.append("---")
+    explain_md.append("### 6. LLM Model Output")
+    explain_md.append(f"**Model:** {params.get('model','gpt-4o')}")
+    explain_md.append(f"**Temperature:** {params.get('temperature',0.2)}")
+    explain_md.append("**Output:**")
+    explain_md.append(f"> {response_text}")
+    explain_md.append("")
+    explain_md.append("---")
+    explain_md.append("### 7. Summary")
+    explain_md.append("The system picked these demos and documents because their titles and descriptions contain keywords that matched both your question and the most relevant knowledge base articles. The answer was generated using only the selected articles, following the perspective you specified.")
+    return "\n".join(explain_md)
+
+# --- REPLACEMENT: /demo-hal route with improved language detection (accepting valid short questions) ---
+
+import re
+from langdetect import detect, DetectorFactory, LangDetectException
+DetectorFactory.seed = 0  # For consistent results
+
+def _is_nonsensical(text):
+    # True if: no alphabetic chars, or only one very short word, or all non-word
+    if not text or not any(c.isalpha() for c in text):
+        return True
+    words = re.findall(r'\b[a-zA-Z]{2,}\b', text)
+    if len(words) == 0:
+        return True
+    if len(words) == 1 and len(words[0]) < 4:
+        return True
+    # Accept common short questions like "Who are you?", "What is X?", etc.
+    return False
+
+def _detect_language(text):
+    try:
+        if _is_nonsensical(text):
+            return ("en", 0.0)
+        text_stripped = text.strip().lower()
+        # Romance language hacks:
+        # 1. Explicit Spanish question marks
+        if text_stripped.startswith("¿") or "qué hace" in text_stripped:
+            return ("es", 1.0)
+        # 2. French pattern
+        if re.search(r"que fait", text_stripped):
+            return ("fr", 1.0)
+        # 3. Portuguese: "o que faz", "o que é"
+        if re.search(r"o que (faz|é)", text_stripped):
+            return ("pt", 1.0)
+        # 4. Italian: "cosa fa", "che cosa fa"
+        if re.search(r"(cosa fa|che cosa fa)", text_stripped):
+            return ("it", 1.0)
+        lang = detect(text)
+        l = len(text_stripped)
+        word_count = len(re.findall(r'\w+', text_stripped))
+        if word_count >= 2 or l >= 12:
+            return (lang, 0.9)
+        return (lang, 0.7)
+    except LangDetectException:
+        return ("en", 0.0)
+    except Exception:
+        return ("en", 0.0)
+
+@demo_hal_bp.route("/demo-hal", methods=["POST", "OPTIONS"])
+def demo_hal():
+    if request.method == "OPTIONS":
+        return _corsify(jsonify({"ok": True})), 200
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        bot_id        = (body.get("bot_id") or "").strip() or (g.forced_bot_id or "")
+        user_question = (body.get("user_question") or body.get("question") or "").strip()
+        session_id    = (body.get("session_id") or request.headers.get("X-Session-Id") or "").strip()
+        visitor_id    = (body.get("visitor_id") or request.headers.get("X-Visitor-Id") or "").strip()
+        explain_param = (
+            (request.args.get("explain") == "1") or
+            (body.get("explain") in ("1", 1, "true", True))
+        )
+        themelab_param = (
+            (request.args.get("themelab") == "1") or
+            (body.get("themelab") in ("1", 1, "true", True))
+        )
+
+        if not bot_id or not user_question:
+            return _corsify(jsonify({"ok": False, "error": "missing_params"})), 400
+
+        top_k          = int(body.get("top_k") or 12)
+        min_score      = float(body.get("min_relevance_score") or 0.70)
+        temperature    = float(body.get("temperature") or 0.20)
+        top_p          = float(body.get("top_p") or 0.90)
+        presence_pen   = float(body.get("presence_penalty") or 0.20)
+        frequency_pen  = float(body.get("frequency_penalty") or 0.10)
+        max_out_tokens = int(body.get("max_output_tokens") or 700)
+        rec_cap        = int(body.get("max_recommendations") or 6)
+        model_name     = CHAT_MODEL
+
+        perspective = _infer_perspective(bot_id, session_id, visitor_id, body)
+        if session_id:
+            _persist_session_perspective(session_id, perspective)
+
+        client_name = _fetch_client_name_for_bot(bot_id)
+        demos = _fetch_all_demos(bot_id)
+        docs  = _fetch_all_documents(bot_id)
+
+        # Improved Language detection (allows valid short questions)
+        lang_code, lang_conf = _detect_language(user_question)
+        # Only allow high confidence, non-English triggers.
+        answer_in_lang = (
+            lang_code != "en"
+            and lang_conf >= 0.8
+            and lang_code in {"es", "fr", "de", "it", "pt", "nl", "pl", "ru", "zh-cn", "zh-tw", "ko", "ja"}
+        )
+
+        # Retrieval
+        q_vec    = _embed(user_question)
+        primary  = _kb_retrieve(bot_id, q_vec, top_k=top_k, min_score=min_score)
+        relaxed  = []
+        if len(primary) < max(2, top_k // 3):
+            relaxed = _kb_retrieve(bot_id, q_vec, top_k=top_k, min_score=min_score * 0.85)
+
+        merged, seen = [], set()
+        for grp in (primary, relaxed):
+            for h in grp:
+                if h["id"] not in seen:
+                    merged.append(h)
+                    seen.add(h["id"])
+
+        if 0 < len(merged) < max(3, top_k // 2):
+            expanded = _expand_if_low_coverage(bot_id, merged, user_question, target=top_k)
+            for h in expanded:
+                if h["id"] not in seen:
+                    merged.append(h)
+                    seen.add(h["id"])
+        else:
+            expanded = []
+
+        if len(merged) == 0:
+            lexical_added = _keyword_fallback(bot_id, user_question, limit=top_k)
+            for h in lexical_added:
+                if h["id"] not in seen:
+                    merged.append(h)
+                    seen.add(h["id"])
+        else:
+            lexical_added = []
+
+        kb_hits = merged[:top_k]
+        no_kb = len(kb_hits) == 0
+
+        kb_context = "\n\n".join(
+            f"[{i+1}] {h.get('title','')}\n{h.get('content','')}" for i, h in enumerate(kb_hits)
+        )
+
+        directive = PERSPECTIVE_PROMPTS.get(perspective, PERSPECTIVE_PROMPTS["general"])
+        system_text = f"""
+You are a Sales Assistant for {client_name}.
+Perspective directive: {directive}
+
+Use ONLY the KB context provided. If the needed information is missing, answer the best you can and recommend that if they need further details, they should schedule a meeting with our product expert.
+Answer-first, with as much detail as you have. Your answer should contain mostly prose with bullet points used sparingly for clarity. No more than three sentences per paragraph. Do NOT mention demos or documents directly in your answer.
+Remain positive about {client_name}. Never fabricate details not in the KB context.
+""".strip()
+
+        # Append language directive to system prompt if high confidence non-English detected
+        if answer_in_lang:
+            system_text += f"\n\nAnswer in {lang_code} (the language in which the question was asked)."
+
+        po_in = body.get("prompt_override")
+        if isinstance(po_in, str) and po_in.strip():
+            system_text = f"{po_in.strip()}\n\n{system_text}"
+
+        if no_kb:
+            response_text = "I don’t have enough information to answer that. Feel free to clarify or ask about another topic."
+        else:
+            messages = [
+                {"role": "system", "content": system_text},
+                {"role": "user", "content": f"User question:\n{user_question}\n\nKB context:\n{kb_context}\n"},
+            ]
+            try:
+                resp = _oa.chat.completions.create(
+                    model=model_name,
+                    temperature=temperature,
+                    top_p=top_p,
+                    presence_penalty=presence_pen,
+                    frequency_penalty=frequency_pen,
+                    max_tokens=max_out_tokens,
+                    messages=messages,
+                )
+                response_text = (resp.choices[0].message.content or "").strip()
+            except Exception as e:
+                _log(f"[/demo-hal:model] {e}")
+                response_text = "I encountered an issue generating a response. Please try again."
+
+        # Recommendations
+        demo_recs, doc_recs = _select_recommendations(demos, docs, kb_hits, limit=rec_cap)
+
+        def _demo_btn(d):
+            t = d.get("title") or ""
+            return {
+                "id": d.get("id"),
+                "action": "demo",
+                "button_action": "demo",
+                "title": t,
+                "button_title": t,
+                "label": f'Watch the "{t}" demo',
+                "button_label": f'Watch the "{t}" demo',
+                "summary": d.get("description") or "",
+                "description": d.get("description") or "",
+                "value": d.get("url") or "",
+                "button_value": d.get("url") or "",
+            }
+
+        def _doc_btn(d):
+            t = d.get("title") or ""
+            return {
+                "id": d.get("id"),
+                "action": "doc",
+                "button_action": "doc",
+                "title": t,
+                "button_title": t,
+                "label": f'View the "{t}" document',
+                "button_label": f'View the "{t}" document',
+                "summary": d.get("description") or "",
+                "description": d.get("description") or "",
+                "value": d.get("url") or "",
+                "button_value": d.get("url") or "",
+            }
+
+        demo_buttons = [_demo_btn(x) for x in demo_recs]
+        doc_buttons  = [_doc_btn(x) for x in doc_recs]
+
+        # Legacy combined arrays for backward compatibility
+        legacy_buttons = demo_buttons + doc_buttons
+        legacy_items   = legacy_buttons  # same shape for FE expecting 'items'
+              
+        # Logging (best effort)
+        try:
+            if bot_id and (not session_id or not visitor_id):
+                v = get_or_create_visitor(bot_id)
+                if v and v.get("id"):
+                    visitor_id = visitor_id or str(v["id"])
+                    try:
+                        sr = (
+                            sb().table("activity_sessions_v2")
+                            .select("id,last_event_at,started_at,ended_at")
+                            .eq("bot_id", bot_id)
+                            .eq("visitor_id", v["id"])
+                            .is_("ended_at", None)
+                            .order("started_at", desc=True)
+                            .limit(1).execute()
+                        )
+                        cand = (sr.data or [])
+                        if cand:
+                            ref = cand[0].get("last_event_at") or cand[0].get("started_at")
+                            dt = datetime.fromisoformat(ref.replace("Z","+00:00")) if isinstance(ref,str) else None
+                            if not dt or (datetime.now(timezone.utc) - dt) <= timedelta(minutes=30):
+                                session_id = session_id or str(cand[0]["id"])
+                    except Exception:
+                        pass
+            if bot_id and session_id and visitor_id:
+                log_event(
+                    bot_id=bot_id,
+                    session_id=session_id,
+                    visitor_id=visitor_id,
+                    event_type="ask",
+                    payload={
+                        "question": user_question,
+                        "answer_text": response_text,
+                        "kb_hit_ids": [h.get("id") for h in kb_hits],
+                        "demo_ids": [d.get("id") for d in demo_recs],
+                        "doc_ids":  [d.get("id") for d in doc_recs],
+                        "perspective": perspective,
+                        "no_kb": no_kb,
+                        "retrieval_counts": {
+                            "final_hits": len(kb_hits),
+                            "top_k": top_k,
+                            "expanded_added": len(expanded),
+                            "lexical_added": len(lexical_added),
+                        },
+                        "language_detected": lang_code,
+                        "lang_confidence": lang_conf,
+                        "language_prompted": answer_in_lang,
+                    },
+                )
+        except Exception as e:
+            _log(f"[/demo-hal.log_event] {e}")
+
+        # --- EXPLAIN MODE ---
+        result = {
+            "ok": True,
+            "response_text": response_text,
+            "demo_buttons": demo_buttons,
+            "doc_buttons": doc_buttons,
+            "buttons": legacy_buttons,   # legacy
+            "items": legacy_items,       # legacy
+            "perspective": perspective,
+            "no_kb": no_kb,
+            "language_detected": lang_code,
+            "lang_confidence": lang_conf,
+            "language_prompted": answer_in_lang,
+        }
+
+        # --- Add recommended_items array for FE ---
+        result["recommended_items"] = (
+            [ {"type": "demo", **_demo_btn(x), "action": "demo"} for x in demo_recs ] +
+            [ {"type": "doc",  **_doc_btn(x),  "action": "doc"}  for x in doc_recs ]
+        )
+        
+        if explain_param:
+            params_for_report = {
+                "top_k": top_k,
+                "min_score": min_score,
+                "temperature": temperature,
+                "top_p": top_p,
+                "presence_penalty": presence_pen,
+                "frequency_penalty": frequency_pen,
+                "max_output_tokens": max_out_tokens,
+                "rec_cap": rec_cap,
+                "perspective": perspective,
+                "model": model_name,
+                "language_detected": lang_code,
+                "lang_confidence": lang_conf,
+                "language_prompted": answer_in_lang,
+            }
+            explain_md = build_explain_report(
+                user_question=user_question,
+                params=params_for_report,
+                kb_hits=kb_hits,
+                expanded=expanded,
+                lexical_added=lexical_added,
+                demos=demos,
+                demo_recs=demo_recs,
+                doc_recs=doc_recs,
+                system_text=system_text,
+                kb_context=kb_context,
+                response_text=response_text,
+                embedding_vec=q_vec,
+                perspective=perspective
+            )
+            result["report_markdown"] = explain_md
+
+        if themelab_param:
+            result["options"] = {
+                "show_browse_demos": bool(body.get("show_browse_demos", True)),
+                "show_browse_docs": bool(body.get("show_browse_docs", True)),
+                "show_price_estimate": bool(body.get("show_price_estimate", True)),
+                "show_schedule_meeting": bool(body.get("show_schedule_meeting", True)),
+                "show_intro_video": bool(body.get("show_intro_video", True)),
+                "show_formfill": bool(body.get("show_formfill", True)),
+                "intro_video_url": body.get("intro_video_url", ""),
+            }
+            result["messages"] = {
+                "welcome_message": body.get("welcome_message", ""),
+                "formfill_intro": body.get("formfill_intro", ""),
+                "pricing_intro": body.get("pricing_intro", ""),
+                "pricing_outro": body.get("pricing_outro", ""),
+                "pricing_custom_notice": body.get("pricing_custom_notice", ""),
+            }
+            result["standard_fields"] = body.get("standard_fields", [])
+
+        return _corsify(jsonify(result)), 200
+
+    except Exception as e:
+        _log(f"[/demo-hal] {e}")
+        return _corsify(jsonify({"ok": False, "error": "server_error"})), 500
+
+# ---------------------------------------------------------------------
+# Browse APIs & other endpoints (unchanged except they now co-exist with perspective system)
+# ---------------------------------------------------------------------
+@demo_hal_bp.route("/browse-demos", methods=["GET", "OPTIONS"])
+def browse_demos():
+    # (UNCHANGED)
+    if request.method == "OPTIONS":
+        return _corsify(jsonify({"ok": True})), 200
+    try:
+        alias      = (request.args.get("alias") or "").strip()
+        bot_id_in  = (request.args.get("bot_id") or "").strip()
+        session_id = (request.args.get("session_id") or request.headers.get("X-Session-Id") or "").strip()
+        visitor_id = (request.args.get("visitor_id") or request.headers.get("X-Visitor-Id") or "").strip()
+        bot_id = None
+        if bot_id_in:
+            bot_id = bot_id_in
+        elif alias:
+            try:
+                br = (
+                    sb().table("bots_v2")
+                    .select("id,active")
+                    .eq("alias", alias)
+                    .eq("active", True)
+                    .limit(1)
+                    .execute()
+                )
+                botrow = (br.data or [])
+                if botrow:
+                    bot_id = str(botrow[0]["id"])
+            except Exception as e:
+                _log(f"[/browse-demos.resolve_bot] {e}")
+        if not bot_id:
+            return _corsify(jsonify({"ok": False, "error": "bot_not_found"})), 404
+        r = (
+            sb().table("demos_v2")
+            .select("id,title,description,url,active,topic")
+            .eq("bot_id", bot_id)
+            .eq("active", True)
+            .order("title", desc=False)
+            .execute()
+        )
+        rows = r.data or []
+        demos = [
+            {
+                "id": d.get("id"),
+                "title": d.get("title"),
+                "description": d.get("description"),
+                "url": d.get("url"),
+                "active": d.get("active"),
+                "topic": d.get("topic"),
+            }
+            for d in (rows or [])
+        ]
+        def _to_item(d):
+            return {
+                "id": d.get("id"),
+                "action": "demo",
+                "button_action": "demo",
+                "title": d.get("title"),
+                "button_title": d.get("title"),
+                "label": f"Watch the \"{d.get('title')}\" demo",
+                "button_label": f"Watch the \"{d.get('title')}\" demo",
+                "summary": d.get("description") or "",
+                "description": d.get("description") or "",
+                "value": d.get("url") or "",
+                "button_value": d.get("url") or "",
+                "topic": d.get("topic") or "",
+            }
+        items = [_to_item(d) for d in demos]
+        try:
+            if bot_id and (not session_id or not visitor_id):
+                v = get_or_create_visitor(bot_id)
+                if v and v.get("id"):
+                    visitor_id = visitor_id or str(v["id"])
+                    try:
+                        sr = (
+                            sb().table("activity_sessions_v2")
+                            .select("id, last_event_at, started_at, ended_at")
+                            .eq("bot_id", bot_id)
+                            .eq("visitor_id", v["id"])
+                            .is_("ended_at", None)
+                            .order("started_at", desc=True)
+                            .limit(1)
+                            .execute()
+                        )
+                        cand = (sr.data or [])
+                        if cand:
+                            from datetime import datetime, timezone, timedelta
+                            ref_time = cand[0].get("last_event_at") or cand[0].get("started_at")
+                            dt = datetime.fromisoformat(ref_time.replace("Z", "+00:00")) if isinstance(ref_time, str) else None
+                            if dt and (datetime.now(timezone.utc) - dt) <= timedelta(minutes=30):
+                                session_id = session_id or str(cand[0]["id"])
+                    except Exception:
+                        pass
+            if bot_id and session_id and visitor_id:
+                log_event(
+                    bot_id=bot_id,
+                    session_id=session_id,
+                    visitor_id=visitor_id,
+                    event_type="browse_demos",
+                    payload={"count": len(demos)},
+                )
+        except Exception as e:
+            _log(f"[/browse-demos.log_event] {e}")
+        return _corsify(jsonify({"ok": True, "demos": demos, "items": items})), 200
+    except Exception as e:
+        _log(f"[/browse-demos] {e}")
+        return _corsify(jsonify({"ok": False, "error": "server_error"})), 500
+
+@demo_hal_bp.route("/browse-docs", methods=["GET", "OPTIONS"])
+def browse_docs():
+    # (UNCHANGED)
+    if request.method == "OPTIONS":
+        return _corsify(jsonify({"ok": True})), 200
+    try:
+        alias      = (request.args.get("alias") or "").strip()
+        bot_id_in  = (request.args.get("bot_id") or "").strip()
+        session_id = (request.args.get("session_id") or request.headers.get("X-Session-Id") or "").strip()
+        visitor_id = (request.args.get("visitor_id") or request.headers.get("X-Visitor-Id") or "").strip()
+        bot_id = None
+        if bot_id_in:
+            bot_id = bot_id_in
+        elif alias:
+            try:
+                br = (
+                    sb().table("bots_v2")
+                    .select("id,active")
+                    .eq("alias", alias)
+                    .eq("active", True)
+                    .limit(1)
+                    .execute()
+                )
+                botrow = (br.data or [])
+                if botrow:
+                    bot_id = str(botrow[0]["id"])
+            except Exception as e:
+                _log(f"[/browse-docs.resolve_bot] {e}")
+        if not bot_id:
+            return _corsify(jsonify({"ok": False, "error": "bot_not_found"})), 404
+        r = (
+            sb().table("documents_v2")
+            .select("id,title,description,url,active,topic")
+            .eq("bot_id", bot_id)
+            .eq("active", True)
+            .order("title", desc=False)
+            .execute()
+        )
+        rows = r.data or []
+        docs = [
+            {
+                "id": d.get("id"),
+                "title": d.get("title"),
+                "description": d.get("description"),
+                "url": d.get("url"),
+                "active": d.get("active"),
+                "topic": d.get("topic"),
+            }
+            for d in (rows or [])
+        ]
+        def _to_item(d):
+            return {
+                "id": d.get("id"),
+                "action": "doc",
+                "button_action": "doc",
+                "title": d.get("title"),
+                "button_title": d.get("title"),
+                "label": f"View the \"{d.get('title')}\" document",
+                "button_label": f"View the \"{d.get('title')}\" document",
+                "summary": d.get("description") or "",
+                "description": d.get("description") or "",
+                "value": d.get("url") or "",
+                "button_value": d.get("url") or "",
+                "topic": d.get("topic") or "",
+            }
+        items = [_to_item(d) for d in docs]
+        try:
+            if bot_id and session_id and visitor_id:
+                log_event(
+                    bot_id=bot_id,
+                    session_id=session_id,
+                    visitor_id=visitor_id,
+                    event_type="browse_docs",
+                    payload={"count": len(docs)},
+                )
+        except Exception as e:
+            _log(f"[/browse-docs.log_event] {e}")
+        return _corsify(jsonify({"ok": True, "docs": docs, "items": items})), 200
+    except Exception as e:
+        _log(f"[/browse-docs] {e}")
+        return _corsify(jsonify({"ok": False, "error": "server_error"})), 500
+
+@demo_hal_bp.route("/render-video-iframe", methods=["POST", "OPTIONS"])
+def render_video_iframe():
+    # (UNCHANGED)
+    if request.method == "OPTIONS":
+        return _corsify(jsonify({"ok": True})), 200
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        bot_id  = (body.get("bot_id") or "").strip()
+        alias   = (body.get("alias") or request.args.get("alias") or "").strip()
+        if not bot_id and alias:
+            try:
+                br = (
+                    sb().table("bots_v2")
+                    .select("id,active")
+                    .eq("alias", alias)
+                    .eq("active", True)
+                    .limit(1)
+                    .execute()
+                )
+                rows = br.data or []
+                if rows:
+                    bot_id = str(rows[0]["id"])
+            except Exception as e:
+                _log(f"[/render-video-iframe.resolve_bot] {e}")
+        session_id = (body.get("session_id") or request.headers.get("X-Session-Id") or "").strip()
+        visitor_id = (body.get("visitor_id") or request.headers.get("X-Visitor-Id") or "").strip()
+        item    = body.get("item") or {}
+        demo_id = ((body.get("demo_id") or "") or (body.get("id") or "") or (item.get("id") or "")).strip()
+        title = ((body.get("title") or "") or (item.get("title") or "") or "Demo").strip()
+        url = (
+            (body.get("video_url") or "") or
+            (body.get("url") or "") or
+            (body.get("value") or "") or
+            (body.get("button_value") or "") or
+            (item.get("url") or "") or
+            (item.get("value") or "") or
+            (item.get("button_value") or "")
+        ).strip()
+        if not url and bot_id and demo_id:
+            try:
+                r = (
+                    sb().table("demos_v2")
+                    .select("id,title,description,url,active")
+                    .eq("bot_id", bot_id)
+                    .eq("id", demo_id)
+                    .eq("active", True)
+                    .limit(1)
+                    .execute()
+                )
+                rows = r.data or []
+                if rows:
+                    row = rows[0]
+                    title = row.get("title") or title
+                    url   = row.get("url") or url
+            except Exception as e:
+                _log(f"[/render-video-iframe.fetch_demo] {e}")
+        if not url:
+            return _corsify(jsonify({"ok": False, "error": "missing_demo_url"})), 400
+        iframe_html = (
+            f'<iframe src="{url}" '
+            'width="100%" height="480" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" '
+            'referrerpolicy="no-referrer-when-downgrade"></iframe>'
+        )
+        try:
+            if bot_id and (not session_id or not visitor_id):
+                v = get_or_create_visitor(bot_id)
+                if v and v.get("id"):
+                    visitor_id = visitor_id or str(v["id"])
+                    try:
+                        sr = (
+                            sb().table("activity_sessions_v2")
+                            .select("id,last_event_at,started_at,ended_at")
+                            .eq("bot_id", bot_id)
+                            .eq("visitor_id", v["id"])
+                            .is_("ended_at", None)
+                            .order("started_at", desc=True)
+                            .limit(1)
+                            .execute()
+                        )
+                        cand = (sr.data or [])
+                        if cand:
+                            from datetime import datetime, timezone, timedelta
+                            ref_time = cand[0].get("last_event_at") or cand[0].get("started_at")
+                            dt = datetime.fromisoformat(ref_time.replace("Z", "+00:00")) if isinstance(ref_time, str) else None
+                            if dt and (datetime.now(timezone.utc) - dt) <= timedelta(minutes=30):
+                                session_id = session_id or str(cand[0]["id"])
+                    except Exception:
+                        pass
+            if bot_id and session_id and visitor_id:
+                log_event(
+                    bot_id=bot_id,
+                    session_id=session_id,
+                    visitor_id=visitor_id,
+                    event_type="demo_open",
+                    payload={"demo_id": demo_id or None, "title": title, "url": url},
+                )
+        except Exception as e:
+            _log(f"[/render-video-iframe.log_event] {e}")
+        return _corsify(jsonify({"ok": True, "video_url": url, "iframe_html": iframe_html})), 200
+    except Exception as e:
+        _log(f"[/render-video-iframe] {e}")
+        return _corsify(jsonify({"ok": False, "error": "server_error"})), 500
+
+@demo_hal_bp.post("/all-demos")
+def all_demos():
+    try:
+        data = request.get_json(silent=True) or {}
+        bot_id = (data.get("bot_id") or "").strip()
+        if not bot_id:
+            return jsonify({"error": "Missing bot_id"}), 400
+        demos = _fetch_all_demos(bot_id)
+        items = [_to_demo_item(d) for d in demos if d.get("id") and d.get("url")]
+        buttons = [_to_demo_button(it) for it in items]
+        return jsonify({"type": "demo_list", "buttons": buttons})
+    except Exception as e:
+        return jsonify({"error": "Failed to retrieve demos", "details": str(e)}), 500
+
+@demo_hal_bp.post("/all-docs")
+def all_docs():
+    try:
+        data = request.get_json(silent=True) or {}
+        bot_id = (data.get("bot_id") or "").strip()
+        if not bot_id:
+            return jsonify({"error": "Missing bot_id"}), 400
+        docs = _fetch_all_documents(bot_id)
+        items = [_to_doc_item(d) for d in docs if d.get("id") and d.get("url")]
+        buttons = [_to_doc_button(it) for it in items]
+        return jsonify({"type": "doc_list", "buttons": buttons})
+    except Exception as e:
+        return jsonify({"error": "Failed to retrieve documents", "details": str(e)}), 500
+
+@demo_hal_bp.route("/render-doc-iframe", methods=["POST", "OPTIONS"])
+def render_doc_iframe():
+    if request.method == "OPTIONS":
+        return _corsify(jsonify({"ok": True})), 200
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        bot_id     = (body.get("bot_id") or "").strip()
+        doc_id     = (body.get("doc_id") or "").strip()
+        doc_url    = (body.get("url") or "").strip()
+        session_id = (body.get("session_id") or "").strip()
+        visitor_id = (body.get("visitor_id") or "").strip()
+        doc_row = None
+        if bot_id and doc_id:
+            try:
+                r = (
+                    sb().table("documents_v2")
+                    .select("id,title,description,url,active")
+                    .eq("bot_id", bot_id)
+                    .eq("id", doc_id)
+                    .eq("active", True)
+                    .limit(1)
+                    .execute()
+                )
+                rows = r.data or []
+                doc_row = rows[0] if rows else None
+            except Exception as e:
+                _log(f"[/render-doc-iframe:fetch_doc] {e}")
+        title = (doc_row or {}).get("title") or (body.get("title") or "Document")
+        url   = (doc_row or {}).get("url") or doc_url
+        if not url:
+            return _corsify(jsonify({"ok": False, "error": "missing_doc_url"})), 400
+        iframe_html = (
+            f'<iframe src="{url}" '
+            'width="100%" height="720" frameborder="0" allow="fullscreen" '
+            'referrerpolicy="no-referrer-when-downgrade"></iframe>'
+        )
+        try:
+            if bot_id and session_id and visitor_id:
+                log_event(
+                    bot_id=bot_id,
+                    session_id=session_id,
+                    visitor_id=visitor_id,
+                    event_type="doc_open",
+                    payload={"doc_id": doc_id or None, "title": title, "url": url},
+                )
+        except Exception as e:
+            _log(f"[/render-doc-iframe.log_event] {e}")
+        return _corsify(jsonify({"ok": True, "iframe_html": iframe_html})), 200
+    except Exception as e:
+        _log(f"[/render-doc-iframe] {e}")
+        return _corsify(jsonify({"ok": False, "error": "server_error"})), 500
+
+# -----------------------------------------------------------------------------
+# Additional endpoints (pricing, agent, calendly) remain unchanged
+# -----------------------------------------------------------------------------
+_YT_RE = re.compile(r"(?:youtube\.com/watch\?v=|youtu\.be/)([A-Za-z0-9_-]{6,})")
+def _extract_youtube_id(url: str) -> Optional[str]:
+    if not url:
+        return None
+    m = _YT_RE.search(url)
+    return m.group(1) if m else None
+
+# Pricing endpoints unchanged (except they coexist with perspective logic) ...
+
+# (Pricing code omitted here for brevity in comment; it remains as previously provided)
+# --- The pricing section from the user's provided file remains unmodified below ---
+
+# =====================================================================
+# Pricing — (unchanged relative to previous patch) 
+# =====================================================================
+
+def _normalize_pricing_answers(payload: Dict[str, Any]) -> Dict[str, Optional[str]]:
+    product_id = None
+    tier_id = None
+    ans = payload.get("answers")
+    if isinstance(ans, dict):
+        product_id = (ans.get("product_id") or ans.get("edition") or ans.get("product") or "").strip() or None
+        tier_id    = (ans.get("tier_id")    or ans.get("transactions") or ans.get("tier") or "").strip() or None
+        return {"product_id": product_id, "tier_id": tier_id}
+    if isinstance(ans, list) and len(ans) >= 1:
+        a0 = ans[0] or {}
+        product_id = (a0.get("answer_value") or a0.get("value") or a0.get("id") or "").strip() or None
+        if len(ans) >= 2:
+            a1 = ans[1] or {}
+            tier_id = (a1.get("answer_value") or a1.get("value") or a1.get("id") or "").strip() or None
+        return {"product_id": product_id, "tier_id": tier_id}
+    return {"product_id": None, "tier_id": None}
+
+def _get_baseline_products(bot_id: str) -> List[Dict[str, Any]]:
+    try:
+        r = (
+            sb()
+            .table("price_products_v2")
+            .select("id,label,description,is_included")
+            .eq("bot_id", bot_id)
+            .eq("is_included", True)
+            .order("label", desc=False)
+            .execute()
+        )
+        return r.data or []
+    except Exception as e:
+        _log(f"[_get_baseline_products] {e}")
+        return []
+
+def _get_product_by_id(bot_id: str, product_id: str) -> Optional[Dict[str, Any]]:
+    if not product_id:
+        return None
+    try:
+        r = (
+            sb()
+            .table("price_products_v2")
+            .select("id,label,description,is_included")
+            .eq("bot_id", bot_id)
+            .eq("id", product_id)
+            .limit(1)
+            .execute()
+        )
+        rows = r.data or []
+        return rows[0] if rows else None
+    except Exception as e:
+        _log(f"[_get_product_by_id] {e}")
+        return None
+
+def _get_tier_by_id(bot_id: str, tier_id: str) -> Optional[Dict[str, Any]]:
+    if not tier_id:
+        return None
+    try:
+        r = (
+            sb()
+            .table("price_tiers_v2")
+            .select("id,label,is_custom")
+            .eq("bot_id", bot_id)
+            .eq("id", tier_id)
+            .limit(1)
+            .execute()
+        )
+        rows = r.data or []
+        return rows[0] if rows else None
+    except Exception as e:
+        _log(f"[_get_tier_by_id] {e}")
+        return None
+
+def _get_matrix_row(product_id: str, tier_id: str) -> Dict[str, Any]:
+    try:
+        r = (
+            sb()
+            .table("price_matrix_v2")
+            .select("currency_code,price_min,price_max")
+            .eq("product_id", product_id)
+            .eq("tier_id", tier_id)
+            .limit(1)
+            .execute()
+        )
+        row = (r.data or [{}])[0]
+        if row:
+            return {
+                "currency_code": row.get("currency_code") or "USD",
+                "price_min": row.get("price_min") if row.get("price_min") is not None else 0.0,
+                "price_max": row.get("price_max") if row.get("price_max") is not None else 0.0,
+            }
+    except Exception as e:
+        _log(f"[_get_matrix_row] {e}")
+    return {"currency_code": "USD", "price_min": 0.0, "price_max": 0.0}
+
+@demo_hal_bp.get("/pricing/questions")
+def pricing_questions():
+    # (UNCHANGED from provided file)
+    try:
+        alias    = (request.args.get("alias") or "").strip()
+        bot_id_q = (request.args.get("bot_id") or "").strip()
+        bot_row = None
+        if bot_id_q:
+            r = (
+                sb().table("bots_v2")
+                .select("id,active")
+                .eq("id", bot_id_q)
+                .eq("active", True)
+                .limit(1)
+                .execute()
+            )
+            bot_row = (r.data or [None])[0]
+        elif alias:
+            r = (
+                sb().table("bots_v2")
+                .select("id,active")
+                .eq("alias", alias)
+                .eq("active", True)
+                .limit(1)
+                .execute()
+            )
+            bot_row = (r.data or [None])[0]
+        if not bot_row:
+            return jsonify({"ok": False, "error": "bot_not_found"}), 404
+        bot_id = str(bot_row["id"])
+        try:
+            pr = (
+                sb().table("price_products_v2")
+                .select("id,label,is_included")
+                .eq("bot_id", bot_id)
+                .order("label", desc=False)
+                .execute()
+            )
+            products = pr.data or []
+        except Exception as e:
+            _log(f"[pricing_questions:v2 products] {e}")
+            products = []
+        product_options = [
+            {"id": str(p["id"]), "label": p.get("label") or ""}
+            for p in products if p.get("id")
+        ]
+        any_not_included = any(not bool(p.get("is_included")) for p in products)
+        all_included = (len(products) > 0) and not any_not_included
+        def _fetch_tiers():
+            try:
+                tr = (
+                    sb().table("price_tiers_v2")
+                    .select("id,label,min_inclusive")
+                    .eq("bot_id", bot_id)
+                    .order("min_inclusive", desc=False)
+                    .execute()
+                )
+                return tr.data or []
+            except Exception as e:
+                _log(f"[pricing_questions:v2 tiers:min_inclusive missing -> fallback label] {e}")
+                try:
+                    tr = (
+                        sb().table("price_tiers_v2")
+                        .select("id,label,min_inclusive")
+                        .eq("bot_id", bot_id)
+                        .order("label", desc=False)
+                        .execute()
+                    )
+                    return tr.data or []
+                except Exception as e2:
+                    _log(f"[pricing_questions:v2 tiers fallback failed] {e2}")
+                    return []
+        tiers = _fetch_tiers()
+        tier_options = [
+            {"id": str(t["id"]), "label": t.get("label") or ""}
+            for t in tiers if t.get("id")
+        ]
+        try:
+            copy_r = (
+                sb().table("bots_v2")
+                .select("pricing_intro,pricing_outro,pricing_custom_notice")
+                .eq("id", bot_id).limit(1).execute()
+            )
+            copy_row = (copy_r.data or [{}])[0]
+        except Exception as e:
+            _log(f"[pricing_questions:v2 copy] {e}")
+            copy_row = {}
+        pricing_intro = copy_row.get("pricing_intro") or ""
+        pricing_outro = copy_row.get("pricing_outro") or ""
+        pricing_custom_notice = copy_row.get("pricing_custom_notice") or ""
+        qdefs = []
+        try:
+            qd = (
+                sb().table("price_questions_v2")
+                .select("id,prompt,mirror_template,sort_order")
+                .eq("bot_id", bot_id)
+                .order("sort_order", desc=False)
+                .limit(2)
+                .execute()
+            )
+            qdefs = qd.data or []
+        except Exception as e:
+            _log(f"[pricing_questions:v2 qdefs sort_order missing] {e}")
+            try:
+                qd = (
+                    sb().table("price_questions_v2")
+                    .select("id,prompt,mirror_template")
+                    .eq("bot_id", bot_id)
+                    .limit(2)
+                    .execute()
+                )
+                qdefs = qd.data or []
+            except Exception as e2:
+                _log(f"[pricing_questions:v2 qdefs fallback failed] {e2}")
+                qdefs = []
+        default_product_prompt = "Choose a product"
+        default_tier_prompt = "Choose a tier"
+        product_q_def = qdefs[0] if qdefs else None
+        tier_q_def = qdefs[1] if len(qdefs) > 1 else (qdefs[0] if qdefs else None)
+        product_prompt = (product_q_def or {}).get("prompt") or default_product_prompt
+        tier_prompt = (tier_q_def or {}).get("prompt") or default_tier_prompt
+        product_mirror = (product_q_def or {}).get("mirror_template") or ""
+        tier_mirror = (tier_q_def or {}).get("mirror_template") or ""
+        questions = []
+        if all_included:
+            questions.append({
+                "id": "q_tier",
+                "q_key": "tier",
+                "type": "single_select",
+                "prompt": tier_prompt,
+                "help_text": None,
+                "required": True,
+                "options": tier_options,
+                "mirror_template": tier_mirror,
+            })
+        else:
+            questions.append({
+                "id": "q_product",
+                "q_key": "product",
+                "type": "single_select",
+                "prompt": product_prompt,
+                "help_text": None,
+                "required": True,
+                "options": product_options,
+                "mirror_template": product_mirror,
+            })
+            questions.append({
+                "id": "q_tier",
+                "q_key": "tier",
+                "type": "single_select",
+                "prompt": tier_prompt,
+                "help_text": None,
+                "required": True,
+                "options": tier_options,
+                "mirror_template": tier_mirror,
+            })
+        return jsonify({
+            "ok": True,
+            "bot_id": bot_id,
+            "pricing_intro": pricing_intro,
+            "pricing_outro": pricing_outro,
+            "pricing_custom_notice": pricing_custom_notice,
+            "questions": questions,
+        }), 200
+    except Exception as e:
+        _log(f"[pricing_questions:v2 fatal] {e}")
+        return jsonify({"ok": False, "error": "server_error"}), 500
+
+@demo_hal_bp.post("/pricing/estimate")
+def pricing_estimate():
+    # (UNCHANGED)
+    try:
+        payload    = request.get_json(force=True, silent=True) or {}
+        bot_id     = (payload.get("bot_id") or "").strip()
+        session_id = (payload.get("session_id") or "").strip()
+        visitor_id = (payload.get("visitor_id") or "").strip()
+        if not bot_id:
+            return jsonify({"ok": False, "error": "bot_id_required"}), 400
+        sel = _normalize_pricing_answers(payload)
+        product_id = sel.get("product_id")
+        tier_id    = sel.get("tier_id")
+        tier_row = _get_tier_by_id(bot_id, tier_id) if tier_id else None
+        if not tier_row:
+            return jsonify({"ok": False, "error": "tier_id_required"}), 400
+        if bool(tier_row.get("is_custom")):
+            try:
+                qr = (
+                    sb().table("price_questions_v2")
+                    .select("id,mirror_template")
+                    .eq("bot_id", bot_id)
+                    .order("sort_order", desc=False)
+                    .limit(2)
+                    .execute()
+                )
+                qrows = qr.data or []
+            except Exception as e:
+                _log(f"[pricing_estimate:mirror:custom] {e}")
+                qrows = []
+            product_row_local = _get_product_by_id(bot_id, product_id) if product_id else None
+            product_label = (product_row_local.get("label") if product_row_local else "") or ""
+            tier_label    = (tier_row.get("label") or "") if tier_row else ""
+            def _sub(tpl: Optional[str], label: str) -> str:
+                return (tpl or "").replace("{{answer_label}}", label)
+            mirror_text = []
+            if len(qrows) >= 1 and product_label:
+                mirror_text.append({"q_key": "product", "text": _sub(qrows[0].get("mirror_template"), product_label)})
+            if len(qrows) >= 2:
+                mirror_text.append({"q_key": "tier", "text": _sub(qrows[1].get("mirror_template"), tier_label)})
+            return jsonify({"ok": True, "custom": True, "mirror_text": mirror_text}), 200
+        product_row = _get_product_by_id(bot_id, product_id) if product_id else None
+        baselines = _get_baseline_products(bot_id)
+        line_items: List[Dict[str, Any]] = []
+        for b in baselines:
+            m = _get_matrix_row(b["id"], tier_id)
+            line_items.append({
+                "label": b.get("label") or "",
+                "currency_code": m["currency_code"],
+                "price_min": float(m["price_min"] or 0.0),
+                "price_max": float(m["price_max"] or 0.0),
+            })
+        if product_row and not bool(product_row.get("is_included")):
+            m = _get_matrix_row(product_row["id"], tier_id)
+            line_items.append({
+                "label": product_row.get("label") or "",
+                "currency_code": m["currency_code"],
+                "price_min": float(m["price_min"] or 0.0),
+                "price_max": float(m["price_max"] or 0.0),
+            })
+        currency = "USD"
+        if line_items:
+            currency = line_items[0].get("currency_code") or "USD"
+        total_min = sum(float(li.get("price_min") or 0.0) for li in line_items)
+        total_max = sum(float(li.get("price_max") or 0.0) for li in line_items)
+        try:
+            qr = (
+                sb().table("price_questions_v2")
+                .select("id,mirror_template")
+                .eq("bot_id", bot_id)
+                .order("sort_order", desc=False)
+                .limit(2)
+                .execute()
+            )
+            qrows = qr.data or []
+        except Exception as e:
+            _log(f"[pricing_estimate:mirror] {e}")
+            qrows = []
+        product_label = (product_row.get("label") if product_row else "") or ""
+        tier_label    = (tier_row.get("label") or "")
+        def _sub(tpl: Optional[str], label: str) -> str:
+            return (tpl or "").replace("{{answer_label}}", label)
+        mirror_text = []
+        if len(qrows) >= 1 and product_label:
+            mirror_text.append({"q_key": "product", "text": _sub(qrows[0].get("mirror_template"), product_label)})
+        if len(qrows) >= 2:
+            mirror_text.append({"q_key": "tier", "text": _sub(qrows[1].get("mirror_template"), tier_label)})
+        try:
+            if bot_id and session_id and visitor_id:
+                log_event(
+                    bot_id=bot_id,
+                    session_id=session_id,
+                    visitor_id=visitor_id,
+                    event_type="price_estimate",
+                    payload={
+                        "product_id": product_id or None,
+                        "tier_id": tier_id or None,
+                        "custom": False,
+                        "total_min": total_min,
+                        "total_max": total_max,
+                        "currency_code": currency,
+                    },
+                )
+        except Exception as e:
+            _log(f"[/pricing/estimate.log_event] {e}")
+        return jsonify({
+            "ok": True,
+            "custom": False,
+            "currency_code": currency,
+            "total_min": total_min,
+            "total_max": total_max,
+            "line_items": line_items,
+            "mirror_text": mirror_text,
+        }), 200
+    except Exception as e:
+        _log(f"[/pricing/estimate] {e}")
+        return jsonify({"ok": False, "error": "server_error"}), 500
+
+def _session_context_set_agent(session_id: str, agent_id: str, agent_alias: Optional[str]):
+    """
+    Idempotently store agent_id (+ alias) in session context.
+    """
+    if not session_id or not agent_id:
+        return
+    try:
+        r = (
+            sb().table("activity_sessions_v2")
+            .select("context")
+            .eq("id", session_id)
+            .limit(1)
+            .execute()
+        )
+        row = (r.data or [None])[0]
+        ctx = {}
+        if row and isinstance(row.get("context"), dict):
+            ctx = dict(row["context"])
+        changed = False
+        if ctx.get("agent_id") != agent_id:
+            ctx["agent_id"] = agent_id
+            changed = True
+        if agent_alias and ctx.get("agent_alias") != agent_alias:
+            ctx["agent_alias"] = agent_alias
+            changed = True
+        if changed:
+            ctx["updated_at"] = time.time()
+            sb().table("activity_sessions_v2").update({"context": ctx}).eq("id", session_id).execute()
+    except Exception as e:
+        _log(f"[_session_context_set_agent] {e}")
+
+
+@demo_hal_bp.route("/agent", methods=["GET", "OPTIONS"])
+def get_agent():
+    """
+    Retrieve an active scheduling agent for a bot.
+
+    Features:
+      - Supports ?agent=<alias> to select by agents_v2.alias (scoped to bot_id).
+      - Case-insensitive lookup (stores alias normalized) unless strict_case=1 provided.
+      - Optional strict behavior: if &strict=1 and requested alias not found -> 404 (no fallback).
+      - Default (non-strict): fallback to first active agent if alias not found.
+      - Records agent_id / agent_alias into activity_sessions_v2.context when session_id present.
+      - Logs schedule_open event (includes requested_alias vs resolved alias).
+
+    Query Params:
+      bot_id (required)
+      agent  (optional alias)
+      strict=1 (optional) -> disable fallback if alias not found
+      strict_case=1 (optional) -> treat alias comparison case-sensitively
+      session_id / visitor_id (optional, for logging & context enrichment)
+
+    Response:
+      200: {"ok": true, "agent": {...}}
+      404: {"ok": false, "error": "agent_not_found"}
+      400: {"ok": false, "error": "bot_id_required"}
+    """
+    if request.method == "OPTIONS":
+        return _corsify(jsonify({"ok": True})), 200
+    try:
+        bot_id       = (request.args.get("bot_id") or "").strip()
+        agent_alias  = (request.args.get("agent") or "").strip()
+        strict       = (request.args.get("strict") or "").strip().lower() in ("1", "true", "yes", "y")
+        strict_case  = (request.args.get("strict_case") or "").strip().lower() in ("1", "true", "yes", "y")
+
+        if not bot_id:
+            return _corsify(jsonify({"ok": False, "error": "bot_id_required"})), 400
+
+        agent = None
+        alias_requested = agent_alias or None
+        alias_normalized = agent_alias if strict_case else agent_alias.lower()
+
+        # Attempt alias lookup first (if provided)
+        if agent_alias:
+            try:
+                q = (
+                    sb().table("agents_v2")
+                    .select(AGENT_SELECT_FIELDS)
+                    .eq("bot_id", bot_id)
+                    .eq("active", True)
+                )
+                # Case handling
+                if strict_case:
+                    q = q.eq("alias", agent_alias)
+                else:
+                    # Fetch possible matches then normalize locally (ilike would work too, but this avoids
+                    # potential collation differences and lets us keep a small code path)
+                    # If you expect many rows, consider .ilike("alias", agent_alias)
+                    pass
+                res = q.execute()
+                rows = res.data or []
+                if not strict_case:
+                    rows = [r for r in rows if (r.get("alias") or "").lower() == alias_normalized]
+                if rows:
+                    agent = rows[0]
+            except Exception as e:
+                _log(f"[get_agent:alias_lookup] {e}")
+
+        # Fallback if alias not found and not strict
+        if not agent and (not agent_alias or not strict):
+            try:
+                r_any = (
+                    sb().table("agents_v2")
+                    .select(AGENT_SELECT_FIELDS)
+                    .eq("bot_id", bot_id)
+                    .eq("active", True)
+                    .limit(1)
+                    .execute()
+                )
+                rows_any = r_any.data or []
+                if rows_any:
+                    agent = rows_any[0]
+            except Exception as e:
+                _log(f"[get_agent:fallback_lookup] {e}")
+
+        if not agent:
+            return _corsify(jsonify({"ok": False, "error": "agent_not_found"})), 404
+
+        session_id = (request.args.get("session_id") or request.headers.get("X-Session-Id") or "").strip()
+        visitor_id = (request.args.get("visitor_id") or request.headers.get("X-Visitor-Id") or "").strip()
+
+        # If session or visitor missing, attempt same visitor/session reuse logic as elsewhere.
+        try:
+            if bot_id and (not session_id or not visitor_id):
+                v = get_or_create_visitor(bot_id)
+                if v and v.get("id"):
+                    visitor_id = visitor_id or str(v["id"])
+                    try:
+                        sr = (
+                            sb().table("activity_sessions_v2")
+                            .select("id,last_event_at,started_at,ended_at")
+                            .eq("bot_id", bot_id)
+                            .eq("visitor_id", v["id"])
+                            .is_("ended_at", None)
+                            .order("started_at", desc=True)
+                            .limit(1)
+                            .execute()
+                        )
+                        cand = (sr.data or [])
+                        if cand:
+                            from datetime import datetime, timezone, timedelta
+                            ref_time = cand[0].get("last_event_at") or cand[0].get("started_at")
+                            dt = datetime.fromisoformat(ref_time.replace("Z", "+00:00")) if isinstance(ref_time, str) else None
+                            if dt and (datetime.now(timezone.utc) - dt) <= timedelta(minutes=30):
+                                session_id = session_id or str(cand[0]["id"])
+                    except Exception:
+                        pass
+        except Exception as e:
+            _log(f"[get_agent:visitor_session_resolve] {e}")
+
+        # Persist agent in session context if possible
+        try:
+            if session_id and agent.get("id"):
+                _session_context_set_agent(session_id, str(agent["id"]), agent.get("alias"))
+        except Exception as e:
+            _log(f"[get_agent:context_store] {e}")
+
+        # Log schedule_open event
+        try:
+            if bot_id and session_id and visitor_id:
+                log_event(
+                    bot_id=bot_id,
+                    session_id=session_id,
+                    visitor_id=visitor_id,
+                    event_type="schedule_open",
+                    payload={
+                        "calendar_link_type": agent.get("calendar_link_type"),
+                        "calendar_link": agent.get("calendar_link"),
+                        "agent_id": agent.get("id"),
+                        "agent_alias": agent.get("alias"),
+                        "requested_alias": alias_requested,
+                        "strict": strict,
+                        "strict_case": strict_case,
+                        "fallback_used": bool(alias_requested and agent.get("alias") and (agent.get("alias") != alias_requested) and not strict),
+                    },
+                )
+        except Exception as e:
+            _log(f"[get_agent.log_event] {e}")
+
+        return _corsify(jsonify({"ok": True, "agent": agent})), 200
+    except Exception as e:
+        _log(f"[get_agent] {e}")
+        return _corsify(jsonify({"ok": False, "error": "server_error"})), 500
+
+@demo_hal_bp.route("/calendly/webhook", methods=["POST", "OPTIONS"])
+def calendly_webhook():
+    if request.method == "OPTIONS":
+        return _corsify(jsonify({"ok": True})), 200
+    return _corsify(jsonify({
+        "ok": False,
+        "error": "calendly_webhook_disabled",
+        "message": "Use /calendly/js-event from the browser postMessage."
+    })), 410
+
+@demo_hal_bp.route("/calendly/js-event", methods=["POST", "OPTIONS"])
+def calendly_js_event():
+    if request.method == "OPTIONS":
+        return _corsify(jsonify({"ok": True})), 200
+    def _to_str(v):
+        try:
+            if v is None:
+                return ""
+            if isinstance(v, str):
+                return v.strip()
+            if isinstance(v, (int, float)):
+                return str(v)
+            if isinstance(v, dict):
+                for k in ("id", "value"):
+                    if k in v and isinstance(v[k], (str, int, float)):
+                        return str(v[k]).strip()
+                return json.dumps(v, separators=(",", ":" ))[:128]
+            if isinstance(v, (list, tuple)) and v:
+                return _to_str(v[0])
+            return str(v)
+        except Exception:
+            return ""
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        if "data" in body and isinstance(body["data"], dict) and not any(k in body for k in ("bot_id", "session_id", "visitor_id", "payload")):
+            body = body["data"]
+        bot_id     = _to_str(body.get("bot_id"))
+        session_id = _to_str(body.get("session_id"))
+        visitor_id = _to_str(body.get("visitor_id"))
+        payload    = body.get("payload") or {}
+        if not (bot_id and session_id and visitor_id):
+            return _corsify(jsonify({"ok": False, "error": "missing_ids"})), 400
+        ev_in_payload = payload.get("event")
+        ev = _to_str(ev_in_payload).lower()
+        if ev == "calendly.event_canceled":
+            ev_type = "meeting_canceled"
+        else:
+            ev_type = "meeting_scheduled"
+        log_event(
+            bot_id=bot_id,
+            session_id=session_id,
+            visitor_id=visitor_id,
+            event_type=ev_type,
+            payload={"source": "js", **payload},
+        )
+        return _corsify(jsonify({"ok": True})), 200
+    except Exception as e:
+        _log(f"[/calendly/js-event] {e}")
+        return _corsify(jsonify({"ok": False, "error": "server_error"})), 500
+
+# ---------- Formfill Endpoints (Perspective injection) ----------
+
+@demo_hal_bp.route("/formfill-config", methods=["GET", "OPTIONS"])
+def formfill_config():
+    """
+    Return full formfill definition + visitor defaults (spec rev):
+      - Returns ALL stored formfill_fields.
+      - Ensures core fields (first_name, last_name, email, perspective) exist.
+      - Perspective includes canonical options.
+      - No is_standard flag; FE decides which to show (collected) or hide.
+    """
+    if request.method == "OPTIONS":
+        return _corsify(jsonify({"ok": True})), 200
+
+    bot_id = (request.args.get("bot_id") or "").strip()
+    alias  = (request.args.get("alias") or "").strip()
+    visitor_id = (request.args.get("visitor_id") or "").strip()
+
+    if not bot_id and not alias:
+        return _corsify(jsonify({"ok": False, "error": "missing bot_id or alias"})), 400
+
+    try:
+        if not bot_id and alias:
+            br = (
+                sb().table("bots_v2")
+                .select("id")
+                .eq("alias", alias)
+                .eq("active", True)
+                .limit(1).execute()
+            )
+            brow = (br.data or [None])[0]
+            if not brow:
+                return _corsify(jsonify({"ok": False, "error": "invalid_alias"})), 404
+            bot_id = brow["id"]
+
+        r = (
+            sb().table("bots_v2")
+            .select("show_formfill,formfill_fields")
+            .eq("id", bot_id)
+            .limit(1).execute()
+        )
+        bot_row = (r.data or [None])[0]
+        if not bot_row:
+            return _corsify(jsonify({"ok": False, "error": "bot_not_found"})), 404
+
+        show_formfill = bool(bot_row.get("show_formfill"))
+        fields_arr = bot_row.get("formfill_fields") or []
+        if not isinstance(fields_arr, list):
+            fields_arr = []
+
+        by_key = {}
+        for f in fields_arr:
+            if isinstance(f, dict) and f.get("field_key"):
+                by_key[f["field_key"]] = dict(f)
+
+        def ensure_core(fk, label, ftype, opts=None):
+            """
+            Ensure a core field exists. If it already exists, augment missing
+            structural attributes but do not overwrite user-customized label,
+            tooltip, or placeholder unless they are absent.
+            """
+            default_tooltips = {
+                "first_name": "Your first name",
+                "last_name": "Your last name",
+                "email": "Your work email",
+                "perspective": "Select the perspective you most care about (optional)",
+            }
+            if fk not in by_key:
+                by_key[fk] = {
+                    "field_key": fk,
+                    "label": label,
+                    "field_type": ftype,
+                    "is_collected": True,
+                    "is_required": True,
+                }
+                if opts is not None:
+                    by_key[fk]["options"] = opts
+                # Inject tooltip & placeholder for perspective (and others if desired)
+                if fk in default_tooltips:
+                    by_key[fk]["tooltip"] = default_tooltips[fk]
+                    # Optional: also set placeholder explicitly
+                    by_key[fk].setdefault("placeholder", default_tooltips[fk])
+            else:
+                # Preserve existing, just enforce structural parts
+                if fk == "perspective":
+                    by_key[fk]["field_type"] = "single_select"
+                    by_key[fk]["options"] = PERSPECTIVE_OPTIONS
+                    if not by_key[fk].get("tooltip"):
+                        by_key[fk]["tooltip"] = default_tooltips["perspective"]
+                    if not by_key[fk].get("placeholder"):
+                        by_key[fk]["placeholder"] = default_tooltips["perspective"]
+
+        # Ensure core fields (unchanged order)
+        ensure_core("first_name", "First Name", "text")
+        ensure_core("last_name", "Last Name", "text")
+        ensure_core("email", "Email", "email")
+        ensure_core("perspective", "Perspective", "single_select", PERSPECTIVE_OPTIONS)
+
+        normalized = []
+        for k in sorted(by_key.keys()):
+            f = by_key[k]
+            normalized.append({
+                "field_key": f.get("field_key"),
+                "label": f.get("label") or f.get("field_key"),
+                "tooltip": f.get("tooltip"),
+                "placeholder": f.get("placeholder"),
+                "field_type": f.get("field_type") or "text",
+                "is_required": bool(f.get("is_required", False)),
+                "is_collected": bool(f.get("is_collected", True)),
+                "options": f.get("options") if isinstance(f.get("options"), list) else None,
+            })
+
+        visitor_values = {}
+        if visitor_id:
+            vr = (
+                sb().table("visitors_v2")
+                .select("formfill_fields")
+                .eq("id", visitor_id)
+                .limit(1).execute()
+            )
+            vrow = (vr.data or [None])[0]
+            arr = (vrow.get("formfill_fields") if vrow else []) or []
+            visitor_values = _ff_arr_to_map(arr)
+
+        pv = (visitor_values.get("perspective") or "").lower()
+        visitor_values["perspective"] = pv if pv in ALLOWED_PERSPECTIVES else "general"
+
+        return _corsify(jsonify({
+            "ok": True,
+            "show_formfill": show_formfill,
+            "fields": normalized,
+            "visitor_values": visitor_values,
+            "bot_id": bot_id,
+        })), 200
+
+    except Exception as e:
+        _log(f"[formfill_config] {e}")
+        return _corsify(jsonify({"ok": False, "error": "server_error"})), 500
+        
+@demo_hal_bp.route("/visitor-formfill", methods=["GET", "OPTIONS"])
+def visitor_formfill_get():
+    if request.method == "OPTIONS":
+        return _corsify(jsonify({"ok": True})), 200
+    visitor_id = (request.args.get("visitor_id") or "").strip()
+    if not visitor_id:
+        return _corsify(jsonify({"ok": False, "error": "missing_visitor_id"})), 400
+    try:
+        resp = (
+            sb().table("visitors_v2")
+            .select("formfill_fields")
+            .eq("id", visitor_id)
+            .limit(1)
+            .execute()
+        )
+        row = (getattr(resp, "data", None) or [None])[0]
+        arr = (row.get("formfill_fields") if row else []) or []
+        vals = _ff_arr_to_map(arr)
+        pv = (vals.get("perspective") or "").lower()
+        if pv not in ALLOWED_PERSPECTIVES:
+            vals["perspective"] = "general"
+        else:
+            vals["perspective"] = pv
+        return _corsify(jsonify({"ok": True, "values": vals})), 200
+    except Exception as e:
+        _log(f"[visitor_formfill_get] {e}")
+        return _corsify(jsonify({"ok": False, "error": "server_error"})), 500
+
+def _update_latest_session_context_fields(visitor_id: str, bot_id: Optional[str], values_map: Dict[str, str]):
+    """
+    Merge updated visitor formfill values into the latest open session context.
+    Also sync perspective directly if present.
+    """
+    if not visitor_id:
+        return
+    try:
+        q = (
+            sb().table("activity_sessions_v2")
+            .select("id,context,started_at,last_event_at")
+            .eq("visitor_id", visitor_id)
+            .is_("ended_at", None)
+            .order("started_at", desc=True)
+            .limit(1)
+        )
+        if bot_id:
+            q = q.eq("bot_id", bot_id)
+        r = q.execute()
+        row = (r.data or [None])[0]
+        if not row:
+            return
+        ctx = row.get("context")
+        if not isinstance(ctx, dict):
+            ctx = {}
+        ff_map = ctx.get("formfill_values")
+        if not isinstance(ff_map, dict):
+            ff_map = {}
+        ff_map.update(values_map)
+        ctx["formfill_values"] = ff_map
+        if "perspective" in values_map and values_map["perspective"] in ALLOWED_PERSPECTIVES:
+            ctx["perspective"] = values_map["perspective"]
+        ctx["updated_at"] = time.time()
+        sb().table("activity_sessions_v2").update({"context": ctx}).eq("id", row["id"]).execute()
+    except Exception as e:
+        _log(f"[update_latest_session_context_fields] {e}")
+
+
+@demo_hal_bp.route("/visitor-formfill", methods=["POST", "OPTIONS"])
+def visitor_formfill_post():
+    """
+    Upserts visitor formfill values. Perspective normalized to allowed set.
+    Accepts arbitrary keys present in formfill fields configuration.
+    """
+    if request.method == "OPTIONS":
+        return _corsify(jsonify({"ok": True})), 200
+
+    data = request.get_json(silent=True) or {}
+    visitor_id = (data.get("visitor_id") or "").strip()
+    values = data.get("values") or {}
+    bot_id = (data.get("bot_id") or "").strip()
+
+    if not visitor_id or not isinstance(values, dict):
+        return _corsify(jsonify({"ok": False, "error": "missing_visitor_id_or_values"})), 400
+
+    if "perspective" in values:
+        pv = (values.get("perspective") or "").strip().lower()
+        values["perspective"] = pv if pv in ALLOWED_PERSPECTIVES else "general"
+
+    try:
+        r = (
+            sb().table("visitors_v2")
+            .select("formfill_fields,bot_id")
+            .eq("id", visitor_id)
+            .limit(1).execute()
+        )
+        row = (r.data or [None])[0]
+        base_arr = (row.get("formfill_fields") if row else []) or []
+        merged = _ff_merge_map_into_arr(base_arr, values)
+        sb().table("visitors_v2").update({"formfill_fields": merged}).eq("id", visitor_id).execute()
+
+        full_map = _ff_arr_to_map(merged)
+        _update_latest_session_context_fields(visitor_id, bot_id or (row or {}).get("bot_id"), full_map)
+
+        if "perspective" in values:
+            try:
+                sr = (
+                    sb().table("activity_sessions_v2")
+                    .select("id")
+                    .eq("visitor_id", visitor_id)
+                    .is_("ended_at", None)
+                    .order("started_at", desc=True)
+                    .limit(1).execute()
+                )
+                srow = (sr.data or [None])[0]
+                effective_bot_id = bot_id or (row or {}).get("bot_id")
+                if srow and srow.get("id") and effective_bot_id:
+                    log_event(
+                        bot_id=effective_bot_id,
+                        session_id=srow["id"],
+                        visitor_id=visitor_id,
+                        event_type="perspective_change",
+                        payload={"new": values["perspective"]},
+                    )
+            except Exception as e:
+                _log(f"[visitor_formfill_post:log_perspective_change] {e}")
+
+        return _corsify(jsonify({"ok": True})), 200
+    except Exception as e:
+        _log(f"[visitor_formfill_post] {e}")
+        return _corsify(jsonify({"ok": False, "error": "server_error"})), 500
+
+def _now_utc_iso() -> str:
+    return datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()
+
+def _end_session(session_id: str, cause: str, reason: Optional[str] = None) -> bool:
+    """
+    Idempotently end a session and emit a session_end event.
+    cause: 'explicit' | 'sweep'
+    reason: arbitrary string (e.g. 'unload', 'hidden', 'pagehide', 'inactivity')
+    Returns True iff we actually set ended_at (i.e. session was open).
+    """
+    if not session_id:
+        return False
+    try:
+        # Fetch full row (we need bot_id, visitor_id, timestamps)
+        r = (
+            sb().table("activity_sessions_v2")
+            .select("id, bot_id, visitor_id, started_at, last_event_at, ended_at")
+            .eq("id", session_id)
+            .limit(1)
+            .execute()
+        )
+        row = (r.data or [None])[0]
+        if not row:
+            return False
+        if row.get("ended_at"):
+            # Already ended -> no new event
+            return False
+
+        # Perform idempotent update (server now)
+        sb().table("activity_sessions_v2") \
+            .update({"ended_at": "now()"}) \
+            .eq("id", session_id) \
+            .is_("ended_at", None) \
+            .execute()
+
+        # Re-fetch ended_at (optional; or rely on now())
+        try:
+            r2 = (
+                sb().table("activity_sessions_v2")
+                .select("ended_at")
+                .eq("id", session_id)
+                .limit(1)
+                .execute()
+            )
+            ended_iso = ((r2.data or [{}])[0]).get("ended_at")
+        except Exception:
+            ended_iso = None
+
+        started_dt = _parse_iso_dt(row.get("started_at"))
+        last_dt = _parse_iso_dt(row.get("last_event_at")) or started_dt
+        ended_dt = _parse_iso_dt(ended_iso) or datetime.utcnow().replace(tzinfo=timezone.utc)
+
+        duration_sec = None
+        inactivity_sec = None
+        if started_dt and ended_dt:
+            duration_sec = max(0, int((ended_dt - started_dt).total_seconds()))
+        if last_dt and ended_dt:
+            inactivity_sec = max(0, int((ended_dt - last_dt).total_seconds()))
+
+        payload = {
+            "cause": cause,                    # 'explicit' or 'sweep'
+            "reason": reason or ("inactivity" if cause == "sweep" else None),
+            "duration_sec": duration_sec,
+            "inactivity_sec": inactivity_sec,
+            "last_event_at": row.get("last_event_at"),
+        }
+
+        bot_id = row.get("bot_id")
+        visitor_id = row.get("visitor_id")
+        if bot_id and visitor_id:
+            try:
+                # Use log_event so denorm fields & last_event_at refresh still pipeline through existing logic
+                log_event(
+                    bot_id=bot_id,
+                    session_id=session_id,
+                    visitor_id=visitor_id,
+                    event_type="session_end",
+                    payload=payload,
+                )
+            except Exception as e:
+                _log(f"[session_end:log_event_error] {e}")
+
+        _log(f"[session_end] session={session_id} cause={cause} reason={reason} duration={duration_sec}s inactivity={inactivity_sec}s")
+        return True
+    except Exception as e:
+        _log(f"[session_end:error] {e}")
+        return False
+
+# --- Modify /session/end endpoint to use new signature (only change inside handler) ---
+@demo_hal_bp.route("/session/end", methods=["POST", "OPTIONS"])
+def session_end():
+    if request.method == "OPTIONS":
+        return _corsify(jsonify({"ok": True})), 200
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        sid = (body.get("session_id") or "").strip()
+        reason = (body.get("reason") or "").strip().lower() or None
+        if not sid:
+            return _corsify(jsonify({"ok": False, "error": "missing_session_id"})), 400
+        updated = _end_session(sid, cause="explicit", reason=reason)
+        return _corsify(jsonify({"ok": True, "updated": bool(updated)})), 200
+    except Exception as e:
+        _log(f"[/session/end] {e}")
+        return _corsify(jsonify({"ok": False, "error": "server_error"})), 500
+
+# --- Modify /session/sweep endpoint to call _end_session with cause='sweep' and reason='inactivity' ---
+@demo_hal_bp.route("/session/sweep", methods=["POST", "OPTIONS"])
+def session_sweep():
+    if request.method == "OPTIONS":
+        return _corsify(jsonify({"ok": True})), 200
+
+    if not SESSION_SWEEP_SECRET:
+        return _corsify(jsonify({"ok": False, "error": "sweep_disabled"})), 403
+
+    provided = (request.headers.get("X-Sweep-Secret") or "").strip()
+    if provided != SESSION_SWEEP_SECRET:
+        return _corsify(jsonify({"ok": False, "error": "unauthorized"})), 401
+
+    try:
+        idle_after = datetime.utcnow() - timedelta(minutes=SESSION_IDLE_TIMEOUT_MINUTES)
+        cutoff_iso = idle_after.replace(tzinfo=timezone.utc).isoformat()
+
+        resp = (
+            sb().table("activity_sessions_v2")
+            .select("id,last_event_at,started_at,ended_at")
+            .is_("ended_at", None)
+            .lt("last_event_at", cutoff_iso)
+            .limit(1000)
+            .execute()
+        )
+        candidates = resp.data or []
+
+        try:
+            null_last_event_resp = (
+                sb().table("activity_sessions_v2")
+                .select("id,last_event_at,started_at,ended_at")
+                .is_("ended_at", None)
+                .is_("last_event_at", None)
+                .lt("started_at", cutoff_iso)
+                .limit(1000)
+                .execute()
+            )
+            null_candidates = null_last_event_resp.data or []
+        except Exception:
+            null_candidates = []
+
+        id_set = {c["id"] for c in candidates if c.get("id")}
+        for nc in null_candidates:
+            if nc.get("id") and nc["id"] not in id_set:
+                candidates.append(nc)
+                id_set.add(nc["id"])
+
+        ended_count = 0
+        for row in candidates:
+            sid = row.get("id")
+            if not sid:
+                continue
+            ok = _end_session(sid, cause="sweep", reason="inactivity")
+            if ok:
+                ended_count += 1
+
+        return _corsify(jsonify({
+            "ok": True,
+            "ended": ended_count,
+            "timeout_minutes": SESSION_IDLE_TIMEOUT_MINUTES,
+        })), 200
+    except Exception as e:
+        _log(f"[/session/sweep] {e}")
+        return _corsify(jsonify({"ok": False, "error": "server_error"})), 500
+
+# (End of file)
