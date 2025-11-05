@@ -3073,15 +3073,16 @@ setItems(recommendedItems);
               {/* Suggested next question "Yes" button */}
               {!loading && lastQuestion && suggestNextQuestion && suggestedQuestion && (
                 <div className="mt-4">
-                  <p className="text-sm text-[var(--helper-fg)] mb-2">
-                    Suggested next question: <span className="font-semibold text-[var(--message-fg)]">{suggestedQuestion}</span>
-                  </p>
-                  <button
-                    onClick={onAcceptSuggestedQuestion}
-                    className="px-4 py-2 bg-[var(--send-color)] text-white rounded-lg hover:brightness-110 transition-all active:scale-95"
-                  >
-                    Yes
-                  </button>
+                  <div className="text-sm text-[var(--helper-fg)]">
+                    <span className="mr-2">{suggestedQuestion}</span>
+                    <button
+                      onClick={onAcceptSuggestedQuestion}
+                      className="inline-block px-4 py-2 bg-[var(--send-color)] text-white rounded-lg hover:brightness-110 transition-all active:scale-95"
+                      aria-label={`Accept suggestion: ${suggestedQuestion}`}
+                    >
+                      Yes
+                    </button>
+                  </div>
                 </div>
               )}
               <RecommendedSection
