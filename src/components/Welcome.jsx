@@ -1685,7 +1685,8 @@ export default function Welcome() {
     // Intercept affirmative responses and replace with suggested question
     let finalQuestion = outgoing;
     if (suggestNextQuestion && suggestedQuestion) {
-      if (AFFIRMATIVE_KEYWORDS.includes(outgoing.toLowerCase())) {
+      const lowerInput = outgoing.toLowerCase();
+      if (AFFIRMATIVE_KEYWORDS.includes(lowerInput)) {
         finalQuestion = suggestedQuestion;
       }
     }
