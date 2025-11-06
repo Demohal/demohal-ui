@@ -2550,12 +2550,12 @@ setItems(recommendedItems);
           useBannerUrl ? "items-center" : ""
         ].join(" ")}>
           {useBannerUrl && bannerUrl && bannerUrl.trim() ? (
-            // When use_banner_url is TRUE: Show banner image at 720px × 160px with tabs inside at bottom
-            <div className="relative w-full max-w-[720px]" style={{ height: '160px', borderBottom: '2px solid black' }}>
+            // When use_banner_url is TRUE: Show banner image with responsive aspect ratio
+            <div className="relative w-full max-w-[720px] border-b-2 border-black" style={{ paddingTop: '22.22%' }}>
               <img
                 src={bannerUrl}
                 alt="Banner"
-                className="w-full h-full object-cover"
+                className="absolute top-0 left-0 w-full h-full object-cover"
                 onError={(e) => {
                   // Fallback: hide the image and show traditional layout
                   console.warn("Banner image failed to load:", bannerUrl);
