@@ -469,7 +469,7 @@ function ThemeLabColorBox({ apiBase, botId, frameRef, onVars, sharedAuth }) {
   const ORDER = [
     { key: "welcome", label: "Welcome" },
     { key: "bot_response", label: "Bot Response" },
-    { key: "browse_demos", label: "Browse Demos" },
+    { key: "browse_demos", label: "Browse Videos" },
     { key: "browse_docs", label: "Browse Documents" },
     { key: "price", label: "Price Estimate" },
   ];
@@ -2405,7 +2405,7 @@ setItems(recommendedItems);
     if (tabsEnabled.demos)
       out.push({
         key: "demos",
-        label: "Browse Demos",
+        label: "Browse Videos",
         onClick: openBrowse,
       });
     if (tabsEnabled.docs)
