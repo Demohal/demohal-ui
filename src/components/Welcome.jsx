@@ -2855,7 +2855,7 @@ setItems(recommendedItems);
                         <select
                           value={selectedDemoTopic}
                           onChange={(e) => setSelectedDemoTopic(e.target.value)}
-                          className="w-full px-3 py-2 border-2 border-[var(--border-default,#9ca3af)] rounded-[0.75rem] bg-[var(--card-bg)] text-[var(--message-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--send-color,#22c55e)]"
+                          className="w-full px-3 py-2 border-2 border-[var(--border-default,#9ca3af)] rounded-[0.75rem] bg-[var(--card-bg)] text-[var(--message-fg)] focus:outline-none focus:border-[var(--border-default,#9ca3af)] active:border-[var(--border-default,#9ca3af)] hover:border-[var(--border-default,#9ca3af)]"
                         >
                           <option value="all">Show All</option>
                           {demoTopics.map((topic) => (
@@ -2907,7 +2907,7 @@ setItems(recommendedItems);
                         <select
                           value={selectedDocTopic}
                           onChange={(e) => setSelectedDocTopic(e.target.value)}
-                          className="w-full px-3 py-2 border-2 border-[var(--border-default,#9ca3af)] rounded-[0.75rem] bg-[var(--card-bg)] text-[var(--message-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--send-color,#22c55e)]"
+                          className="w-full px-3 py-2 border-2 border-[var(--border-default,#9ca3af)] rounded-[0.75rem] bg-[var(--card-bg)] text-[var(--message-fg)] focus:outline-none focus:border-[var(--border-default,#9ca3af)] active:border-[var(--border-default,#9ca3af)] hover:border-[var(--border-default,#9ca3af)]"
                         >
                           <option value="all">Show All</option>
                           {docTopics.map((topic) => (
