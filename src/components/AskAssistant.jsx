@@ -112,10 +112,10 @@ const UI = {
     "w-full rounded-[0.75rem] px-4 py-3 text-base bg-[var(--card-bg)] " +
     "border border-[var(--border-default)]",
   TAB_ACTIVE:
-    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] " +
+    "px-2 py-1 sm:px-4 sm:py-1.5 text-xs sm:text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] " +
     "[box-shadow:var(--shadow-elevation)]",
   TAB_INACTIVE:
-    "px-4 py-1.5 text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] hover:brightness-110",
+    "px-2 py-1 sm:px-4 sm:py-1.5 text-xs sm:text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] hover:brightness-110",
 };
 
 function Row({ item, onPick, kind = "demo" }) {
@@ -291,11 +291,11 @@ function QuestionBlock({ q, value, onPick }) {
 function TabsNav({ mode, tabs }) {
   return (
     <div
-      className="w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="w-full flex justify-start md:justify-center overflow-x-auto overflow-y-hidden px-2 sm:px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       data-patch="tabs-nav"
     >
       <nav
-        className="inline-flex min-w-max items-center gap-0.5 overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="inline-flex min-w-max items-center gap-0.5 sm:gap-1 overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         role="tablist"
       >
         {tabs.map((t) => {
