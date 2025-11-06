@@ -2623,7 +2623,7 @@ setItems(recommendedItems);
                       : mode === "personalize" || mode === "formfill"
                       ? "Personalize"
                       : mode === "browse"
-                      ? "Browse Demos"
+                      ? "Browse Videos"
                       : mode === "docs"
                       ? "Browse Documents"
                       : mode === "meeting"
