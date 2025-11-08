@@ -1709,7 +1709,8 @@ export default function Welcome() {
     setLoading(true);
     setLastError(null);
     
-    // Track if this was a suggested question (don't clear - let backend provide new one)
+    // Clear suggestion immediately (like items) - backend will provide new one in response
+    setSuggestedQuestion("");
     setIsSuggestedQuestion(isUsingSuggestion);
 
     const perspectiveForCall = visitorDefaults.perspective
