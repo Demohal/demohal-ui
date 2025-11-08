@@ -86,7 +86,7 @@ function RecommendedSection({ items, onPick, normalizeAndSelectDemo, apiBase, bo
     <div className="flex flex-col gap-1">
       {demos.length > 0 && (
         <>
-          <div className="flex items-center justify-between mt-3 mb-2">
+          <div className="flex items-center justify-between mt-1.5 mb-2">
             <p className="italic text-[var(--helper-fg)]">
               Recommended videos
             </p>
@@ -134,8 +134,8 @@ function SuggestedQuestionButton({ question, onSubmit }) {
   if (!question) return null;
   
   return (
-    <div className="mb-4">
-      <p className="text-xs italic text-[var(--helper-fg)] mb-2">
+    <div className="mt-4 mb-2">
+      <p className="italic text-[var(--helper-fg)] mb-2">
         Suggested follow-on question
       </p>
       <button
@@ -1709,8 +1709,7 @@ export default function Welcome() {
     setLoading(true);
     setLastError(null);
     
-    // Clear suggested question state after sending
-    setSuggestedQuestion("");
+    // Track if this was a suggested question (don't clear - let backend provide new one)
     setIsSuggestedQuestion(isUsingSuggestion);
 
     const perspectiveForCall = visitorDefaults.perspective
