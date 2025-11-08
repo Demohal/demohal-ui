@@ -86,7 +86,7 @@ function RecommendedSection({ items, onPick, normalizeAndSelectDemo, apiBase, bo
     <div className="flex flex-col gap-1">
       {demos.length > 0 && (
         <>
-          <div className="flex items-center justify-between mt-3 mb-2">
+          <div className="flex items-center justify-between mt-1.5 mb-2">
             <p className="italic text-[var(--helper-fg)]">
               Recommended videos
             </p>
@@ -122,6 +122,28 @@ function RecommendedSection({ items, onPick, normalizeAndSelectDemo, apiBase, bo
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+//
+// SuggestedQuestionButton component - displays the suggested follow-on question
+// styled like AskInputBar for consistency
+//
+function SuggestedQuestionButton({ question, onSubmit }) {
+  if (!question) return null;
+  
+  return (
+    <div className="mt-4 mb-2">
+      <p className="italic text-[var(--helper-fg)] mb-2">
+        Suggested follow-on question
+      </p>
+      <button
+        onClick={() => onSubmit(question)}
+        className="w-full rounded-[0.75rem] px-4 py-3 text-base text-left bg-[var(--card-bg)] border-2 border-[var(--border-default)] hover:border-[var(--send-color)] transition-colors cursor-pointer"
+      >
+        <span className="block text-[var(--message-fg)]">{question}</span>
+      </button>
     </div>
   );
 }
@@ -178,6 +200,9 @@ const STOPWORDS = new Set([
   "from","but","was","are","an","so","can","if","all","we","our","not","will","about","after",
   "before","which","into","how","when","what","who","where","why","should","could","would","support","supports"
 ]);
+
+// Affirmative keywords that trigger suggested question auto-fill
+const AFFIRMATIVE_KEYWORDS = ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'y', 'ja', 'si', 'oui', 'da'];
 
 function tokenize(text) {
   return ((text || "").toLowerCase().match(/[a-z0-9]{3,}/g) || []).filter(t => !STOPWORDS.has(t));
@@ -1278,6 +1303,10 @@ export default function Welcome() {
   const [explainMode, setExplainMode] = useState(explainModeFromQS); // PATCH: add this
   const [bannerUrl, setBannerUrl] = useState(""); // Banner URL from bot settings
   const [useBannerUrl, setUseBannerUrl] = useState(false); // Whether to use banner URL
+  
+  // Suggested follow-on questions state
+  const [suggestedQuestion, setSuggestedQuestion] = useState("");
+  const [isSuggestedQuestion, setIsSuggestedQuestion] = useState(false);
 
   /* Theme */
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
@@ -1667,6 +1696,10 @@ export default function Welcome() {
   /* Ask flow */
   async function doSend(outgoing) {
     if (!outgoing || !botId) return;
+    
+    // Check if this is a suggested question being sent
+    const isUsingSuggestion = suggestedQuestion && outgoing === suggestedQuestion;
+    
     setMode("ask");
     setLastQuestion(outgoing);
     setInput("");
@@ -1675,6 +1708,10 @@ export default function Welcome() {
     setItems([]);
     setLoading(true);
     setLastError(null);
+    
+    // Clear suggestion immediately (like items) - backend will provide new one in response
+    setSuggestedQuestion("");
+    setIsSuggestedQuestion(isUsingSuggestion);
 
     const perspectiveForCall = visitorDefaults.perspective
       ? visitorDefaults.perspective.toLowerCase()
@@ -1688,6 +1725,7 @@ export default function Welcome() {
       perspective: perspectiveForCall,
       prompt_override: promptOverride || "",
       ...(explainMode ? { explain: 1 } : {}), // PATCH: add this line
+      ...(isUsingSuggestion ? { use_suggested_question: true } : {}), // Flag when using suggestion
     });
 
     try {
@@ -1822,6 +1860,14 @@ setItems(recommendedItems);
 
       setItems(mapped);
       setResponseText(text);
+      
+      // Capture suggested_question from backend response
+      if (typeof data.suggested_question === "string" && data.suggested_question.trim()) {
+        setSuggestedQuestion(data.suggested_question.trim());
+      } else {
+        setSuggestedQuestion("");
+      }
+      
       setLoading(false);
       requestAnimationFrame(() =>
         contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
@@ -1848,6 +1894,7 @@ setItems(recommendedItems);
         payloadSent: payload,
       });
       setItems([]);
+      setSuggestedQuestion(""); // Clear suggestion on error
       setLoading(false);
     }
   }
@@ -1867,6 +1914,30 @@ setItems(recommendedItems);
       return true;
     }
     return false;
+  }
+
+  // Handler for input changes with affirmative keyword interception
+  function handleInputChange(newValue) {
+    // Guard clause for null/undefined
+    if (newValue === null || newValue === undefined) {
+      setInput('');
+      return;
+    }
+    
+    // Check if we should auto-replace with suggested question
+    if (suggestedQuestion) {
+      const trimmed = newValue.trim();
+      if (trimmed.length > 0) {
+        const lowerInput = trimmed.toLowerCase();
+        if (AFFIRMATIVE_KEYWORDS.includes(lowerInput)) {
+          // Auto-replace input with suggested question
+          setInput(suggestedQuestion);
+          return;
+        }
+      }
+    }
+    // Normal input update
+    setInput(newValue);
   }
 
   async function onSendClick() {
@@ -3001,6 +3072,11 @@ setItems(recommendedItems);
               {lastQuestion && (
                 <p className="text-base italic text-center mb-2 text-[var(--helper-fg)]">
                   "{lastQuestion}"
+                  {isSuggestedQuestion && (
+                    <span className="ml-2 inline-block px-2 py-0.5 text-xs rounded-full bg-[var(--helper-fg)] text-white">
+                      From suggestion
+                    </span>
+                  )}
                 </p>
               )}
               <div className="text-left mt-2">
@@ -3026,6 +3102,16 @@ setItems(recommendedItems);
                   )
                 ) : null}
               </div>
+              {/* Suggested follow-on question button - appears above recommendations */}
+              {suggestedQuestion && lastQuestion && (
+                <SuggestedQuestionButton
+                  question={suggestedQuestion}
+                  onSubmit={async (q) => {
+                    if (maybeOpenForm({ type: "ask", payload: { text: q } })) return;
+                    await doSend(q);
+                  }}
+                />
+              )}
               <RecommendedSection
                 items={items}
                 normalizeAndSelectDemo={normalizeAndSelectDemo}
@@ -3052,7 +3138,7 @@ setItems(recommendedItems);
         {showAskBottom && (
           <AskInputBar
             value={input}
-            onChange={setInput}
+            onChange={handleInputChange}
             onSend={onSendClick}
             inputRef={inputRef}
             placeholder="Ask your question here"
