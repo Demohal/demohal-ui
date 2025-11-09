@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Banner Test - Visual Comparison</title>
+  <title>Banner Test - Visual Comparison (720px × 80px)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     :root {
@@ -20,17 +20,17 @@
 </head>
 <body class="bg-[var(--page-bg)] p-4">
   <div class="max-w-7xl mx-auto space-y-8">
-    <h1 class="text-3xl font-bold text-center mb-8">Banner Test - Visual Comparison</h1>
+    <h1 class="text-3xl font-bold text-center mb-8">Banner Test - Visual Comparison (720px × 80px)</h1>
     
-    <!-- Test 1: Without banner_url (Normal Mode) -->
+    <!-- Test 1: Without banner_url (Normal Mode) - 720px × 80px -->
     <div class="space-y-2">
-      <h2 class="text-xl font-semibold">Test 1: Without banner_url (use_banner_url = false)</h2>
+      <h2 class="text-xl font-semibold">Test 1: Without banner_url (use_banner_url = false) - 720px × 80px</h2>
       <div class="flex justify-center">
         <div class="w-full max-w-[720px] bg-[var(--card-bg)] rounded-xl shadow-lg flex flex-col overflow-hidden" style="height: 600px;">
-          <!-- Header -->
+          <!-- Header - Fixed 720px × 80px -->
           <div class="bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)] flex flex-col">
-            <div class="px-6">
-              <div class="flex items-center justify-between w-full py-3">
+            <div class="relative w-full max-w-[720px]" style="height: 80px;">
+              <div class="px-6 pt-3 flex items-center justify-between">
                 <div class="flex items-center gap-3">
                   <div class="w-10 h-10 bg-white rounded flex items-center justify-center text-xs font-bold">LOGO</div>
                 </div>
@@ -38,12 +38,13 @@
                   Ask the Assistant
                 </div>
               </div>
-            </div>
-            <div class="px-6 pb-2">
-              <div class="flex gap-2">
-                <div class="px-3 py-1.5 bg-[var(--tab-bg)] text-[var(--tab-fg)] rounded-t-lg text-sm">Personalize</div>
-                <div class="px-3 py-1.5 bg-gray-700 text-gray-300 rounded-t-lg text-sm">Browse Demos</div>
-                <div class="px-3 py-1.5 bg-gray-700 text-gray-300 rounded-t-lg text-sm">Browse Docs</div>
+              <!-- Tabs at bottom -->
+              <div class="absolute bottom-0 left-0 right-0 px-6">
+                <div class="flex gap-2">
+                  <div class="px-3 py-1.5 bg-[var(--tab-bg)] text-[var(--tab-fg)] rounded-t-lg text-sm">Personalize</div>
+                  <div class="px-3 py-1.5 bg-gray-700 text-gray-300 rounded-t-lg text-sm">Browse Demos</div>
+                  <div class="px-3 py-1.5 bg-gray-700 text-gray-300 rounded-t-lg text-sm">Browse Docs</div>
+                </div>
               </div>
             </div>
           </div>
@@ -55,21 +56,21 @@
       </div>
     </div>
 
-    <!-- Test 2: With banner_url (Banner Mode) -->
+    <!-- Test 2: With banner_url (Banner Mode) - 720px × 80px -->
     <div class="space-y-2">
-      <h2 class="text-xl font-semibold">Test 2: With banner_url (use_banner_url = true)</h2>
+      <h2 class="text-xl font-semibold">Test 2: With banner_url (use_banner_url = true) - 720px × 80px</h2>
       <div class="flex justify-center">
-        <div class="w-full max-w-[1128px] bg-[var(--card-bg)] rounded-xl shadow-lg flex flex-col overflow-hidden" style="height: 600px;">
-          <!-- Header with Banner -->
-          <div class="bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)] flex flex-col h-[250px]">
-            <div class="flex-1 relative">
+        <div class="w-full max-w-[720px] bg-[var(--card-bg)] rounded-xl shadow-lg flex flex-col overflow-hidden" style="height: 600px;">
+          <!-- Header with Banner - Fixed 720px × 80px -->
+          <div class="bg-[var(--banner-bg)] text-[var(--banner-fg)] border-b border-[var(--border-default)] flex flex-col">
+            <div class="relative w-full max-w-[720px]" style="height: 80px;">
               <!-- Banner Image Placeholder -->
-              <div class="w-full h-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
-                <span class="text-white text-2xl font-bold">BANNER IMAGE (1128px × 250px)</span>
+              <div class="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
+                <span class="text-white text-xl font-bold">BANNER IMAGE (720px × 80px)</span>
               </div>
               <!-- Tabs anchored to bottom -->
               <div class="absolute bottom-0 left-0 right-0 px-6">
-                <div class="flex gap-2 pb-2">
+                <div class="flex gap-2">
                   <div class="px-3 py-1.5 bg-[var(--tab-bg)] text-[var(--tab-fg)] rounded-t-lg text-sm">Personalize</div>
                   <div class="px-3 py-1.5 bg-gray-700 text-gray-300 rounded-t-lg text-sm">Browse Demos</div>
                   <div class="px-3 py-1.5 bg-gray-700 text-gray-300 rounded-t-lg text-sm">Browse Docs</div>
@@ -87,13 +88,15 @@
 
     <!-- Key Differences -->
     <div class="bg-white p-6 rounded-lg shadow-lg">
-      <h2 class="text-xl font-semibold mb-4">Key Differences</h2>
+      <h2 class="text-xl font-semibold mb-4">Key Details (Updated)</h2>
       <ul class="space-y-2 list-disc list-inside">
-        <li><strong>Width:</strong> Normal mode = 720px, Banner mode = 1128px</li>
-        <li><strong>Banner Height:</strong> Normal mode = auto, Banner mode = 250px fixed</li>
+        <li><strong>Width:</strong> Both modes = 720px (consistent)</li>
+        <li><strong>Banner Height:</strong> Both modes = 80px (consistent)</li>
         <li><strong>Logo:</strong> Visible in normal mode, hidden in banner mode</li>
         <li><strong>Title:</strong> Visible in normal mode, hidden in banner mode</li>
-        <li><strong>Tabs Position:</strong> Below logo/title in normal mode, anchored to bottom of banner in banner mode</li>
+        <li><strong>Tabs Position:</strong> Anchored to bottom in both modes (consistent)</li>
+        <li><strong>Image Mode:</strong> Banner image fills entire 720px × 80px area with object-cover</li>
+        <li><strong>Normal Mode:</strong> Logo/title centered vertically within 80px height</li>
       </ul>
     </div>
   </div>
