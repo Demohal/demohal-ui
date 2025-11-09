@@ -2622,7 +2622,7 @@ setItems(recommendedItems);
         ].join(" ")}>
           {useBannerUrl && bannerUrl && bannerUrl.trim() ? (
             // When use_banner_url is TRUE: Show banner image at exactly 720px × 120px
-            <div className="relative w-full max-w-[720px]" style={{ height: '120px' }}>
+            <div className="relative w-full max-w-[720px]" style={{ height: '100px' }}>
               <img
                 src={bannerUrl}
                 alt="Banner"
@@ -2643,7 +2643,7 @@ setItems(recommendedItems);
             </div>
           ) : (
             // When use_banner_url is FALSE/null: Show logo and title in 720px × 80px container
-            <div className="relative w-full max-w-[720px]" style={{ height: '80px' }}>
+            <div className="relative w-full max-w-[720px]" style={{ height: '100px' }}>
               <div className="px-4 sm:px-6 pt-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   {/* TOP BANNER LOGO AREA: link if websiteUrl exists */}
