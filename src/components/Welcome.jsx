@@ -2623,17 +2623,39 @@ setItems(recommendedItems);
           {useBannerUrl && bannerUrl && bannerUrl.trim() ? (
             // When use_banner_url is TRUE: Show banner image at exactly 720px × 120px
             <div className="relative w-full max-w-[720px]" style={{ height: '100px' }}>
-              <img
-                src={bannerUrl}
-                alt="Banner"
-                className="absolute top-0 left-0 w-full h-full object-cover"
-                onError={(e) => {
-                  // Fallback: hide the image and show traditional layout
-                  console.warn("Banner image failed to load:", bannerUrl);
-                  setUseBannerUrl(false);
-                }}
-              />
-              {/* Tabs anchored at bottom inside the banner card */}
+              {websiteUrl ? (
+                <a
+                  href={websiteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="absolute top-0 left-0 w-full h-full block"
+                  title="Visit website"
+                  aria-label="Visit website"
+                >
+                  <img
+                    src={bannerUrl}
+                    alt="Banner"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Fallback: hide the image and show traditional layout
+                      console.warn("Banner image failed to load:", bannerUrl);
+                      setUseBannerUrl(false);
+                    }}
+                  />
+                </a>
+              ) : (
+                <img
+                  src={bannerUrl}
+                  alt="Banner"
+                  className="absolute top-0 left-0 w-full h-full object-cover"
+                  onError={(e) => {
+                    // Fallback: hide the image and show traditional layout
+                    console.warn("Banner image failed to load:", bannerUrl);
+                    setUseBannerUrl(false);
+                  }}
+                />
+              )}
+              {/* Tabs anchored at bottom inside the banner card - OUTSIDE the <a> tag */}
               <div className="absolute bottom-0 left-0 right-0 px-4 sm:px-6">
                 <TabsNav
                   mode={mode === "formfill" ? "personalize" : mode}
