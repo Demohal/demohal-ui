@@ -2622,25 +2622,55 @@ setItems(recommendedItems);
         ].join(" ")}>
           {useBannerUrl && bannerUrl && bannerUrl.trim() ? (
             // When use_banner_url is TRUE: Show banner image at exactly 720px × 120px
-            <div className="relative w-full max-w-[720px]" style={{ height: '100px' }}>
-              <img
-                src={bannerUrl}
-                alt="Banner"
-                className="absolute top-0 left-0 w-full h-full object-cover"
-                onError={(e) => {
-                  // Fallback: hide the image and show traditional layout
-                  console.warn("Banner image failed to load:", bannerUrl);
-                  setUseBannerUrl(false);
-                }}
-              />
-              {/* Tabs anchored at bottom inside the banner card */}
-              <div className="absolute bottom-0 left-0 right-0 px-4 sm:px-6">
-                <TabsNav
-                  mode={mode === "formfill" ? "personalize" : mode}
-                  tabs={tabs}
+            websiteUrl ? (
+              <a
+                href={websiteUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="relative w-full max-w-[720px] block"
+                style={{ height: '100px' }}
+                title="Visit website"
+                aria-label="Visit website"
+              >
+                <img
+                  src={bannerUrl}
+                  alt="Banner"
+                  className="absolute top-0 left-0 w-full h-full object-cover"
+                  onError={(e) => {
+                    // Fallback: hide the image and show traditional layout
+                    console.warn("Banner image failed to load:", bannerUrl);
+                    setUseBannerUrl(false);
+                  }}
                 />
+                {/* Tabs anchored at bottom inside the banner card */}
+                <div className="absolute bottom-0 left-0 right-0 px-4 sm:px-6">
+                  <TabsNav
+                    mode={mode === "formfill" ? "personalize" : mode}
+                    tabs={tabs}
+                  />
+                </div>
+              </a>
+            ) : (
+              <div className="relative w-full max-w-[720px]" style={{ height: '100px' }}>
+                <img
+                  src={bannerUrl}
+                  alt="Banner"
+                  className="absolute top-0 left-0 w-full h-full object-cover"
+                  onError={(e) => {
+                    // Fallback: hide the image and show traditional layout
+                    console.warn("Banner image failed to load:", bannerUrl);
+                    setUseBannerUrl(false);
+                  }}
+                />
+                {/* Tabs anchored at bottom inside the banner card */}
+                <div className="absolute bottom-0 left-0 right-0 px-4 sm:px-6">
+                  <TabsNav
+                    mode={mode === "formfill" ? "personalize" : mode}
+                    tabs={tabs}
+                  />
+                </div>
               </div>
-            </div>
+            )
           ) : (
             // When use_banner_url is FALSE/null: Show logo and title in 720px × 80px container
             <div className="relative w-full max-w-[720px]" style={{ height: '100px' }}>
