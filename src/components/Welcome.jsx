@@ -1943,8 +1943,9 @@ setItems(recommendedItems);
   async function onSendClick() {
     const outgoing = input.trim();
     if (!outgoing || !botId) return;
-    if (maybeOpenForm({ type: "ask", payload: { text: outgoing } }))
-      return;
+    // COMMENTED OUT: Form fill no longer required before asking questions
+    // if (maybeOpenForm({ type: "ask", payload: { text: outgoing } }))
+    //   return;
     await doSend(outgoing);
   }
 
@@ -2029,7 +2030,8 @@ setItems(recommendedItems);
   }
 
   async function openBrowse() {
-    if (maybeOpenForm({ type: "demos" })) return;
+    // COMMENTED OUT: Form fill no longer required before browsing demos
+    // if (maybeOpenForm({ type: "demos" })) return;
     await _openBrowse();
   }
 
@@ -2076,7 +2078,8 @@ setItems(recommendedItems);
   }
 
   async function openBrowseDocs() {
-    if (maybeOpenForm({ type: "docs" })) return;
+    // COMMENTED OUT: Form fill no longer required before browsing docs
+    // if (maybeOpenForm({ type: "docs" })) return;
     await _openBrowseDocs();
   }
 
@@ -2119,7 +2122,8 @@ setItems(recommendedItems);
   }
 
   async function openMeeting() {
-    if (maybeOpenForm({ type: "meeting" })) return;
+    // COMMENTED OUT: Form fill no longer required before scheduling meeting
+    // if (maybeOpenForm({ type: "meeting" })) return;
     await _openMeeting();
   }
 
@@ -2129,7 +2133,8 @@ setItems(recommendedItems);
     setSelected(null);
   }
   function openPrice() {
-    if (maybeOpenForm({ type: "price" })) return;
+    // COMMENTED OUT: Form fill no longer required before viewing price estimate
+    // if (maybeOpenForm({ type: "price" })) return;
     _openPrice();
   }
 
@@ -3128,7 +3133,8 @@ setItems(recommendedItems);
                 <SuggestedQuestionButton
                   question={suggestedQuestion}
                   onSubmit={async (q) => {
-                    if (maybeOpenForm({ type: "ask", payload: { text: q } })) return;
+                    // COMMENTED OUT: Form fill no longer required before asking suggested questions
+                    // if (maybeOpenForm({ type: "ask", payload: { text: q } })) return;
                     await doSend(q);
                   }}
                 />
