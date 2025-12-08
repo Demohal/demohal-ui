@@ -47,7 +47,7 @@ function FieldRow({ f, value, onChange, error }) {
           >
             {isPerspective ? (
               <option value="" disabled hidden>
-                {placeholder || "Select Perspective"}
+                {placeholder || "Select Role Type"}
               </option>
             ) : (
               <option value="">
