@@ -36,7 +36,7 @@ import remarkGfm from "remark-gfm";
 //
 // Add this helper component at the top level of the file (after imports, before the main component):
 //
-function RecommendedSection({ items, onPick, normalizeAndSelectDemo, apiBase, botId, contentRef, setSelected, setMode }) {
+function RecommendedSection({ items, onPick, normalizeAndSelectDemo, apiBase, botId, contentRef, setSelected, setMode, onSelectDoc }) {
   // Split items into demos and docs
   const demos = (items || []).filter(it => (it.action || it.type) === "demo").slice(0, 4);
   const docs = (items || []).filter(it => (it.action || it.type) === "doc").slice(0, 2);
@@ -69,6 +69,16 @@ function RecommendedSection({ items, onPick, normalizeAndSelectDemo, apiBase, bo
           action: "doc"
         });
         setMode && setMode("docs");
+        
+        // Fetch recommendations after selecting the doc
+        const docId = val.id || val.url;
+        if (typeof onSelectDoc === "function" && docId) {
+          try {
+            await onSelectDoc(docId);
+          } catch (err) {
+            console.error("Failed to fetch recommendations for doc:", err);
+          }
+        }
       } catch {
         setSelected({ ...val, action: "doc" });
         setMode && setMode("docs");
@@ -1308,6 +1318,11 @@ export default function Welcome() {
   const [suggestedQuestion, setSuggestedQuestion] = useState("");
   const [isSuggestedQuestion, setIsSuggestedQuestion] = useState(false);
 
+  // Recommendations fetched after video/doc selection
+  const [postSelectionRecommendations, setPostSelectionRecommendations] = useState([]);
+  const [postSelectionSuggestedQuestion, setPostSelectionSuggestedQuestion] = useState("");
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+
   /* Theme */
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
   const derivedTheme = useMemo(
@@ -1709,6 +1724,10 @@ export default function Welcome() {
     setLoading(true);
     setLastError(null);
     
+    // Clear post-selection recommendations when starting a new query
+    setPostSelectionRecommendations([]);
+    setPostSelectionSuggestedQuestion("");
+    
     // Clear suggestion immediately (like items) - backend will provide new one in response
     setSuggestedQuestion("");
     setIsSuggestedQuestion(isUsingSuggestion);
@@ -1717,6 +1736,8 @@ export default function Welcome() {
       ? visitorDefaults.perspective.toLowerCase()
       : "general";
 
+    // NOTE: agentAlias is required for notification logic in routes.py (backend)
+    // to enable customized events and notifications based on the agent parameter
     const payload = withIdsBody({
       bot_id: botId,
       user_question: outgoing,
@@ -1726,6 +1747,7 @@ export default function Welcome() {
       prompt_override: promptOverride || "",
       ...(explainMode ? { explain: 1 } : {}), // PATCH: add this line
       ...(isUsingSuggestion ? { use_suggested_question: true } : {}), // Flag when using suggestion
+      ...(agentAlias ? { agent_alias: agentAlias } : {}), // Include agentAlias for backend notification logic
     });
 
     try {
@@ -1956,6 +1978,104 @@ setItems(recommendedItems);
     setFormShown(true);
   }
 
+  async function fetchRecommendationsForSelection(itemId, itemType) {
+    // Validate inputs
+    if (!itemId) {
+      console.warn("Cannot fetch recommendations: No item ID provided");
+      return;
+    }
+    if (!botId) {
+      console.warn("Cannot fetch recommendations: No bot ID available");
+      return;
+    }
+    
+    setLoadingRecommendations(true);
+    try {
+      // Endpoint and field mapping for different item types
+      const typeConfig = {
+        doc: { endpoint: "/recommend-docs", idField: "doc_id" },
+        demo: { endpoint: "/recommend-demos", idField: "demo_id" }
+      };
+      
+      // Get config for item type, with fallback to demo
+      const config = typeConfig[itemType];
+      if (!config) {
+        console.warn(`Unknown item type: ${itemType}. Defaulting to demo recommendations.`);
+      }
+      
+      const endpoint = config ? config.endpoint : typeConfig.demo.endpoint;
+      const idField = config ? config.idField : typeConfig.demo.idField;
+      
+      // Build request body
+      const requestBody = withIdsBody({
+        bot_id: botId,
+        [idField]: itemId,
+      });
+      
+      const r = await fetch(`${apiBase}${endpoint}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...withIdsHeaders(),
+        },
+        body: JSON.stringify(requestBody),
+      });
+      
+      const j = await r.json();
+      
+      // Validate response structure
+      if (!j || typeof j !== 'object') {
+        console.error("Invalid response format from recommendations endpoint");
+        setPostSelectionRecommendations([]);
+        setPostSelectionSuggestedQuestion("");
+        return;
+      }
+      
+      if (j.ok) {
+        // Parse recommendations from response
+        const recs = [];
+        
+        // Validate and add demo recommendations
+        if (Array.isArray(j.recommended_demos)) {
+          recs.push(...j.recommended_demos.map(demo => ({
+            ...demo,
+            action: "demo",
+            type: "demo"
+          })));
+        }
+        
+        // Validate and add doc recommendations
+        if (Array.isArray(j.recommended_docs)) {
+          recs.push(...j.recommended_docs.map(doc => ({
+            ...doc,
+            action: "doc",
+            type: "doc"
+          })));
+        }
+        
+        setPostSelectionRecommendations(recs);
+        
+        // Capture suggested question if present
+        if (typeof j.suggested_question === "string" && j.suggested_question.trim()) {
+          setPostSelectionSuggestedQuestion(j.suggested_question.trim());
+        } else {
+          setPostSelectionSuggestedQuestion("");
+        }
+      } else {
+        // Backend returned an error response
+        console.error("Failed to fetch recommendations - backend returned error:", j);
+        setPostSelectionRecommendations([]);
+        setPostSelectionSuggestedQuestion("");
+      }
+    } catch (err) {
+      console.error("Failed to fetch recommendations:", err);
+      setPostSelectionRecommendations([]);
+      setPostSelectionSuggestedQuestion("");
+    } finally {
+      setLoadingRecommendations(false);
+    }
+  }
+
   async function normalizeAndSelectDemo(item) {
     try {
       const r = await fetch(`${apiBase}/render-video-iframe`, {
@@ -1976,6 +2096,13 @@ setItems(recommendedItems);
       const j = await r.json();
       const embed = j?.video_url || item.url;
       setSelected({ ...item, url: embed });
+      
+      // Fetch recommendations after selecting the video
+      const videoId = item.id || item.url;
+      if (videoId) {
+        await fetchRecommendationsForSelection(videoId, "demo");
+      }
+      
       requestAnimationFrame(() =>
         contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
       );
@@ -1992,6 +2119,9 @@ setItems(recommendedItems);
     setMode("browse");
     setSelected(null);
     setSelectedDemoTopic("all"); // Reset topic filter
+    // Clear post-selection recommendations when switching modes
+    setPostSelectionRecommendations([]);
+    setPostSelectionSuggestedQuestion("");
     try {
       const url = withIdsQS(
         `${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`
@@ -2040,6 +2170,9 @@ setItems(recommendedItems);
     setMode("docs");
     setSelected(null);
     setSelectedDocTopic("all"); // Reset topic filter
+    // Clear post-selection recommendations when switching modes
+    setPostSelectionRecommendations([]);
+    setPostSelectionSuggestedQuestion("");
     try {
       const url = withIdsQS(
         `${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`
@@ -2168,6 +2301,7 @@ setItems(recommendedItems);
             [],
           tracking: p.tracking || {},
         };
+        // NOTE: agentAlias is required for notification logic in routes.py (backend)
         fetch(`${apiBase}/calendly/js-event`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -2176,6 +2310,7 @@ setItems(recommendedItems);
             session_id: sessionId,
             visitor_id: visitorId,
             payload: payloadOut,
+            ...(agentAlias ? { agent_alias: agentAlias } : {}),
           }),
         }).catch(() => {});
       } catch {}
@@ -2183,7 +2318,7 @@ setItems(recommendedItems);
     window.addEventListener("message", onCalendlyMessage);
     return () =>
       window.removeEventListener("message", onCalendlyMessage);
-  }, [mode, botId, sessionId, visitorId, apiBase]);
+  }, [mode, botId, sessionId, visitorId, apiBase, agentAlias]);
 
   useEffect(() => {
     const el = inputRef.current;
@@ -2403,7 +2538,12 @@ setItems(recommendedItems);
     function sendEnd(reason = "unload") {
       try {
         const url = `${apiBase}/session/end`;
-        const body = JSON.stringify({ session_id: sessionId, reason });
+        // NOTE: agentAlias is required for notification logic in routes.py (backend)
+        const body = JSON.stringify({ 
+          session_id: sessionId, 
+          reason,
+          ...(agentAlias ? { agent_alias: agentAlias } : {}),
+        });
         if (navigator.sendBeacon) {
           const blob = new Blob([body], { type: "application/json" });
             navigator.sendBeacon(url, blob);
@@ -2428,7 +2568,7 @@ setItems(recommendedItems);
       window.removeEventListener("pagehide", onPageHide);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [sessionId, apiBase]);
+  }, [sessionId, apiBase, agentAlias]);
 
     // ✅ Session heartbeat + hard-end safety
   useEffect(() => {
@@ -2439,10 +2579,15 @@ setItems(recommendedItems);
 
     async function sendHeartbeat() {
       try {
+        // NOTE: agentAlias is required for notification logic in routes.py (backend)
         await fetch(`${apiBase}/session/heartbeat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: sessionId, visitor_id: visitorId }),
+          body: JSON.stringify({ 
+            session_id: sessionId, 
+            visitor_id: visitorId,
+            ...(agentAlias ? { agent_alias: agentAlias } : {}),
+          }),
         });
       } catch {}
     }
@@ -2454,10 +2599,15 @@ setItems(recommendedItems);
     // hard exit on tab close
     const handleUnload = () => {
       try {
+        // NOTE: agentAlias is required for notification logic in routes.py (backend)
         fetch(`${apiBase}/session/end`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: sessionId, reason: "force-unload" }),
+          body: JSON.stringify({ 
+            session_id: sessionId, 
+            reason: "force-unload",
+            ...(agentAlias ? { agent_alias: agentAlias } : {}),
+          }),
           keepalive: true,
         });
       } catch {}
@@ -2468,7 +2618,7 @@ setItems(recommendedItems);
       clearInterval(timer);
       window.removeEventListener("beforeunload", handleUnload);
     };
-  }, [sessionId, visitorId, apiBase]);
+  }, [sessionId, visitorId, apiBase, agentAlias]);
 
   
   const tabs = useMemo(() => {
@@ -2770,6 +2920,7 @@ setItems(recommendedItems);
                   updateLocalVisitorValues(vals);
                   let postOk = false;
                   try {
+                    // NOTE: agentAlias is required for notification logic in routes.py (backend)
                     const resp = await fetch(`${apiBase}/visitor-formfill`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
@@ -2777,6 +2928,7 @@ setItems(recommendedItems);
                         visitor_id: visitorId,
                         values: vals,
                         bot_id: botId || undefined,
+                        ...(agentAlias ? { agent_alias: agentAlias } : {}),
                       }),
                     });
                     postOk = resp.ok;
@@ -2916,7 +3068,44 @@ setItems(recommendedItems);
                   />
                 </div>
               )}
-              {mode === "ask" && (visibleUnderVideo || []).length > 0 && (
+              
+              {/* Show suggested question below iframe for both video and doc modes */}
+              {postSelectionSuggestedQuestion && (
+                <SuggestedQuestionButton
+                  question={postSelectionSuggestedQuestion}
+                  onSubmit={async (q) => {
+                    await doSend(q);
+                  }}
+                />
+              )}
+              
+              {/* Show post-selection recommendations below iframe for both video and doc modes */}
+              {loadingRecommendations ? (
+                <div className="mt-4 text-sm text-[var(--helper-fg)] italic">
+                  Loading recommendations…
+                </div>
+              ) : postSelectionRecommendations.length > 0 ? (
+                <RecommendedSection
+                  items={postSelectionRecommendations}
+                  normalizeAndSelectDemo={normalizeAndSelectDemo}
+                  apiBase={apiBase}
+                  botId={botId}
+                  contentRef={contentRef}
+                  setSelected={setSelected}
+                  setMode={setMode}
+                  onSelectDoc={async (docId) => {
+                    try {
+                      await fetchRecommendationsForSelection(docId, "doc");
+                    } catch (err) {
+                      console.error("Failed to fetch recommendations:", err);
+                    }
+                  }}
+                />
+              ) : null}
+              
+              {/* Legacy: Show recommendations from Ask mode response when in Ask mode
+                  Only show these if no post-selection recommendations are available (precedence) */}
+              {mode === "ask" && (visibleUnderVideo || []).length > 0 && postSelectionRecommendations.length === 0 && (
                 <RecommendedSection
                   items={visibleUnderVideo}
                   normalizeAndSelectDemo={normalizeAndSelectDemo}
@@ -2925,6 +3114,13 @@ setItems(recommendedItems);
                   contentRef={contentRef}
                   setSelected={setSelected}
                   setMode={setMode}
+                  onSelectDoc={async (docId) => {
+                    try {
+                      await fetchRecommendationsForSelection(docId, "doc");
+                    } catch (err) {
+                      console.error("Failed to fetch recommendations:", err);
+                    }
+                  }}
                 />
               )}
             </div>
@@ -3050,6 +3246,12 @@ setItems(recommendedItems);
                                 ...val,
                                 _iframe_html: j?.iframe_html || null,
                               });
+                              
+                              // Fetch recommendations after selecting the doc
+                              const docId = val.id || val.url;
+                              if (docId) {
+                                await fetchRecommendationsForSelection(docId, "doc");
+                              }
                             } catch {
                               setSelected(val);
                             }
@@ -3147,6 +3349,13 @@ setItems(recommendedItems);
                 contentRef={contentRef}
                 setSelected={setSelected}
                 setMode={setMode}
+                onSelectDoc={async (docId) => {
+                  try {
+                    await fetchRecommendationsForSelection(docId, "doc");
+                  } catch (err) {
+                    console.error("Failed to fetch recommendations:", err);
+                  }
+                }}
               />
               {lastError && (
                 <details className="mt-4 text-[11px] p-2 border border-red-300 rounded bg-red-50">
