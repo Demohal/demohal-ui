@@ -1792,96 +1792,83 @@ export default function Welcome() {
       }
       const text = data.response_text || "";
 
-      // NEW API SHAPE: Check for next_question field (fallback to suggested_question)
-      const nextQuestion = data.next_question ?? data.suggested_question;
-      if (typeof nextQuestion === "string" && nextQuestion.trim()) {
-        setSuggestedQuestion(nextQuestion.trim());
-      } else {
-        setSuggestedQuestion("");
-      }
+      const demoBtns = Array.isArray(data.demo_buttons) ? data.demo_buttons : [];
+      const docBtns = Array.isArray(data.doc_buttons) ? data.doc_buttons : [];
 
-      // NEW API SHAPE: Check for recommended_items array with type property
-      let finalRecommendations = [];
+      const legacyItems = Array.isArray(data.items) ? data.items : [];
+      const legacyButtons = Array.isArray(data.buttons)
+        ? data.buttons
+        : [];
+
+      // Instead of filtering out docs, combine both demos and docs
+      const combinedRaw =
+        Array.isArray(data.items) && data.items.length > 0
+          ? data.items
+          : Array.isArray(data.buttons) && data.buttons.length > 0
+          ? data.buttons
+          : [...demoBtns, ...docBtns]; // combine both demo and doc buttons if legacy arrays are empty
       
-      if (Array.isArray(data.recommended_items) && data.recommended_items.length > 0) {
-        // New API shape: recommended_items with type property
-        // Since this is the new API shape, `type` is authoritative
-        finalRecommendations = data.recommended_items.map((it, idx) => ({
-          id: it.id ?? it.value ?? it.url ?? it.title ?? String(idx),
-          title: it.title ?? it.label ?? "",
-          url: it.url ?? it.value ?? "",
-          description: it.description ?? it.summary ?? it.functions_text ?? "",
-          functions_text: it.functions_text ?? it.description ?? it.summary ?? "",
-          type: it.type ?? "demo", // type is authoritative in new API
-          action: it.type ?? "demo", // derive action from type for consistency
-        }));
-      } else {
-        // FALLBACK: Old API shape with separate arrays
-        const demoBtns = Array.isArray(data.demo_buttons) ? data.demo_buttons : [];
-        const docBtns = Array.isArray(data.doc_buttons) ? data.doc_buttons : [];
-        const legacyItems = Array.isArray(data.items) ? data.items : [];
-        const legacyButtons = Array.isArray(data.buttons) ? data.buttons : [];
+      const combined = combinedRaw;
 
-        // Combine legacy sources
-        const combinedRaw =
-          Array.isArray(data.items) && data.items.length > 0
-            ? data.items
-            : Array.isArray(data.buttons) && data.buttons.length > 0
-            ? data.buttons
-            : [...demoBtns, ...docBtns];
+      let mapped = combined.map((it, idx) => ({
+        id:
+          it.id ??
+          it.value ??
+          it.url ??
+          it.button_value ??
+          it.button_id ??
+          it.title ??
+          String(idx),
+        title:
+          it.title ??
+          it.button_title ??
+          (typeof it.label === "string"
+            ? it.label.replace(/^Watch the "(.+)" demo$/, "$1")
+            : it.label) ??
+          "",
+        url:
+          it.url ??
+          it.value ??
+          it.button_value ??
+          "",
+        description:
+          it.description ??
+          it.summary ??
+          it.functions_text ??
+          "",
+        functions_text:
+          it.functions_text ??
+          it.description ??
+          it.summary ??
+          "",
+        action: it.action ?? it.button_action ?? "demo",
+      }));
 
-        let mapped = combinedRaw.map((it, idx) => ({
-          id:
-            it.id ??
-            it.value ??
-            it.url ??
-            it.button_value ??
-            it.button_id ??
-            it.title ??
-            String(idx),
-          title:
-            it.title ??
-            it.button_title ??
-            (typeof it.label === "string"
-              ? it.label.replace(/^Watch the "(.+)" demo$/, "$1")
-              : it.label) ??
-            "",
-          url:
-            it.url ??
-            it.value ??
-            it.button_value ??
-            "",
-          description:
-            it.description ??
-            it.summary ??
-            it.functions_text ??
-            "",
-          functions_text:
-            it.functions_text ??
-            it.description ??
-            it.summary ??
-            "",
-          action: it.action ?? it.button_action ?? "demo",
-          type: it.type ?? it.action ?? it.button_action ?? "demo",
-        }));
+      // Split into demos and docs
+      const mappedDemos = mapped.filter(it => (it.action || it.type) === "demo");
+      const mappedDocs = mapped.filter(it => (it.action || it.type) === "doc");
 
-        // Split into demos and docs
-        const mappedDemos = mapped.filter(it => (it.action || it.type) === "demo");
-        const mappedDocs = mapped.filter(it => (it.action || it.type) === "doc");
+      // Prune demos by scoring, limit to 4
+      const prunedDemos = pruneDemoButtons(outgoing, mappedDemos).slice(0, 4);
+      // Limit docs to 2 (no scoring applied)
+      const prunedDocs = mappedDocs.slice(0, 2);
 
-        // Prune demos by scoring, limit to 4
-        const prunedDemos = pruneDemoButtons(outgoing, mappedDemos).slice(0, 4);
-        // Limit docs to 2 (no scoring applied)
-        const prunedDocs = mappedDocs.slice(0, 2);
+      // Combine for recommended section
+      const recommendedItems = [...prunedDemos, ...prunedDocs];
 
-        // Combine for recommended section (demos first, then docs)
-        finalRecommendations = [...prunedDemos, ...prunedDocs];
-      }
+if (typeof data.perspective === "string" && data.perspective) {
+  if (
+    visitorDefaults.perspective !== null &&
+    visitorDefaults.perspective !== undefined
+  ) {
+    updateLocalVisitorValues({
+      perspective: data.perspective.toLowerCase(),
+    });
+  }
+}
 
-      setItems(finalRecommendations);
-      setResponseText(text);
-      
-      // Handle perspective update
+setItems(recommendedItems);
+
       if (typeof data.perspective === "string" && data.perspective) {
         if (
           visitorDefaults.perspective !== null &&
@@ -1891,6 +1878,16 @@ export default function Welcome() {
             perspective: data.perspective.toLowerCase(),
           });
         }
+      }
+
+      setItems(mapped);
+      setResponseText(text);
+      
+      // Capture suggested_question from backend response
+      if (typeof data.suggested_question === "string" && data.suggested_question.trim()) {
+        setSuggestedQuestion(data.suggested_question.trim());
+      } else {
+        setSuggestedQuestion("");
       }
       
       setLoading(false);
@@ -2035,47 +2032,35 @@ export default function Welcome() {
       }
       
       if (j.ok) {
-        // NEW API SHAPE: Check for next_question field (fallback to suggested_question)
-        const nextQuestion = j.next_question ?? j.suggested_question;
-        if (typeof nextQuestion === "string" && nextQuestion.trim()) {
-          setPostSelectionSuggestedQuestion(nextQuestion.trim());
-        } else {
-          setPostSelectionSuggestedQuestion("");
+        // Parse recommendations from response
+        const recs = [];
+        
+        // Validate and add demo recommendations
+        if (Array.isArray(j.recommended_demos)) {
+          recs.push(...j.recommended_demos.map(demo => ({
+            ...demo,
+            action: "demo",
+            type: "demo"
+          })));
         }
         
-        // NEW API SHAPE: Check for recommended_items array with type property
-        let recs = [];
-        
-        if (Array.isArray(j.recommended_items) && j.recommended_items.length > 0) {
-          // New API shape: recommended_items with type property
-          // Since this is the new API shape, `type` is authoritative
-          recs = j.recommended_items.map(item => ({
-            ...item,
-            type: item.type ?? "demo", // type is authoritative in new API
-            action: item.type ?? "demo" // derive action from type for consistency
-          }));
-        } else {
-          // FALLBACK: Old API shape with separate recommended_demos and recommended_docs arrays
-          // Validate and add demo recommendations
-          if (Array.isArray(j.recommended_demos)) {
-            recs.push(...j.recommended_demos.map(demo => ({
-              ...demo,
-              action: "demo",
-              type: "demo"
-            })));
-          }
-          
-          // Validate and add doc recommendations
-          if (Array.isArray(j.recommended_docs)) {
-            recs.push(...j.recommended_docs.map(doc => ({
-              ...doc,
-              action: "doc",
-              type: "doc"
-            })));
-          }
+        // Validate and add doc recommendations
+        if (Array.isArray(j.recommended_docs)) {
+          recs.push(...j.recommended_docs.map(doc => ({
+            ...doc,
+            action: "doc",
+            type: "doc"
+          })));
         }
         
         setPostSelectionRecommendations(recs);
+        
+        // Capture suggested question if present
+        if (typeof j.suggested_question === "string" && j.suggested_question.trim()) {
+          setPostSelectionSuggestedQuestion(j.suggested_question.trim());
+        } else {
+          setPostSelectionSuggestedQuestion("");
+        }
       } else {
         // Backend returned an error response
         console.error("Failed to fetch recommendations - backend returned error:", j);
