@@ -36,7 +36,7 @@ import remarkGfm from "remark-gfm";
 //
 // Add this helper component at the top level of the file (after imports, before the main component):
 //
-function RecommendedSection({ items, onPick, normalizeAndSelectDemo, apiBase, botId, contentRef, setSelected, setMode, onSelectDoc }) {
+function RecommendedSection({ items, onPick, normalizeAndSelectDemo, apiBase, botId, contentRef, setSelected, setMode }) {
   // Split items into demos and docs
   const demos = (items || []).filter(it => (it.action || it.type) === "demo").slice(0, 4);
   const docs = (items || []).filter(it => (it.action || it.type) === "doc").slice(0, 2);
@@ -69,16 +69,6 @@ function RecommendedSection({ items, onPick, normalizeAndSelectDemo, apiBase, bo
           action: "doc"
         });
         setMode && setMode("docs");
-        
-        // Fetch recommendations after selecting the doc
-        const docId = val.id || val.url;
-        if (typeof onSelectDoc === "function" && docId) {
-          try {
-            await onSelectDoc(docId);
-          } catch (err) {
-            console.error("Failed to fetch recommendations for doc:", err);
-          }
-        }
       } catch {
         setSelected({ ...val, action: "doc" });
         setMode && setMode("docs");
@@ -1318,11 +1308,6 @@ export default function Welcome() {
   const [suggestedQuestion, setSuggestedQuestion] = useState("");
   const [isSuggestedQuestion, setIsSuggestedQuestion] = useState(false);
 
-  // Recommendations fetched after video/doc selection
-  const [postSelectionRecommendations, setPostSelectionRecommendations] = useState([]);
-  const [postSelectionSuggestedQuestion, setPostSelectionSuggestedQuestion] = useState("");
-  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
-
   /* Theme */
   const [themeVars, setThemeVars] = useState(DEFAULT_THEME_VARS);
   const derivedTheme = useMemo(
@@ -1724,10 +1709,6 @@ export default function Welcome() {
     setLoading(true);
     setLastError(null);
     
-    // Clear post-selection recommendations when starting a new query
-    setPostSelectionRecommendations([]);
-    setPostSelectionSuggestedQuestion("");
-    
     // Clear suggestion immediately (like items) - backend will provide new one in response
     setSuggestedQuestion("");
     setIsSuggestedQuestion(isUsingSuggestion);
@@ -1978,104 +1959,6 @@ setItems(recommendedItems);
     setFormShown(true);
   }
 
-  async function fetchRecommendationsForSelection(itemId, itemType) {
-    // Validate inputs
-    if (!itemId) {
-      console.warn("Cannot fetch recommendations: No item ID provided");
-      return;
-    }
-    if (!botId) {
-      console.warn("Cannot fetch recommendations: No bot ID available");
-      return;
-    }
-    
-    setLoadingRecommendations(true);
-    try {
-      // Endpoint and field mapping for different item types
-      const typeConfig = {
-        doc: { endpoint: "/recommend-docs", idField: "doc_id" },
-        demo: { endpoint: "/recommend-demos", idField: "demo_id" }
-      };
-      
-      // Get config for item type, with fallback to demo
-      const config = typeConfig[itemType];
-      if (!config) {
-        console.warn(`Unknown item type: ${itemType}. Defaulting to demo recommendations.`);
-      }
-      
-      const endpoint = config ? config.endpoint : typeConfig.demo.endpoint;
-      const idField = config ? config.idField : typeConfig.demo.idField;
-      
-      // Build request body
-      const requestBody = withIdsBody({
-        bot_id: botId,
-        [idField]: itemId,
-      });
-      
-      const r = await fetch(`${apiBase}${endpoint}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...withIdsHeaders(),
-        },
-        body: JSON.stringify(requestBody),
-      });
-      
-      const j = await r.json();
-      
-      // Validate response structure
-      if (!j || typeof j !== 'object') {
-        console.error("Invalid response format from recommendations endpoint");
-        setPostSelectionRecommendations([]);
-        setPostSelectionSuggestedQuestion("");
-        return;
-      }
-      
-      if (j.ok) {
-        // Parse recommendations from response
-        const recs = [];
-        
-        // Validate and add demo recommendations
-        if (Array.isArray(j.recommended_demos)) {
-          recs.push(...j.recommended_demos.map(demo => ({
-            ...demo,
-            action: "demo",
-            type: "demo"
-          })));
-        }
-        
-        // Validate and add doc recommendations
-        if (Array.isArray(j.recommended_docs)) {
-          recs.push(...j.recommended_docs.map(doc => ({
-            ...doc,
-            action: "doc",
-            type: "doc"
-          })));
-        }
-        
-        setPostSelectionRecommendations(recs);
-        
-        // Capture suggested question if present
-        if (typeof j.suggested_question === "string" && j.suggested_question.trim()) {
-          setPostSelectionSuggestedQuestion(j.suggested_question.trim());
-        } else {
-          setPostSelectionSuggestedQuestion("");
-        }
-      } else {
-        // Backend returned an error response
-        console.error("Failed to fetch recommendations - backend returned error:", j);
-        setPostSelectionRecommendations([]);
-        setPostSelectionSuggestedQuestion("");
-      }
-    } catch (err) {
-      console.error("Failed to fetch recommendations:", err);
-      setPostSelectionRecommendations([]);
-      setPostSelectionSuggestedQuestion("");
-    } finally {
-      setLoadingRecommendations(false);
-    }
-  }
-
   async function normalizeAndSelectDemo(item) {
     try {
       const r = await fetch(`${apiBase}/render-video-iframe`, {
@@ -2097,12 +1980,6 @@ setItems(recommendedItems);
       const embed = j?.video_url || item.url;
       setSelected({ ...item, url: embed });
       
-      // Fetch recommendations after selecting the video
-      const videoId = item.id || item.url;
-      if (videoId) {
-        await fetchRecommendationsForSelection(videoId, "demo");
-      }
-      
       requestAnimationFrame(() =>
         contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
       );
@@ -2119,9 +1996,6 @@ setItems(recommendedItems);
     setMode("browse");
     setSelected(null);
     setSelectedDemoTopic("all"); // Reset topic filter
-    // Clear post-selection recommendations when switching modes
-    setPostSelectionRecommendations([]);
-    setPostSelectionSuggestedQuestion("");
     try {
       const url = withIdsQS(
         `${apiBase}/browse-demos?bot_id=${encodeURIComponent(botId)}`
@@ -2170,9 +2044,6 @@ setItems(recommendedItems);
     setMode("docs");
     setSelected(null);
     setSelectedDocTopic("all"); // Reset topic filter
-    // Clear post-selection recommendations when switching modes
-    setPostSelectionRecommendations([]);
-    setPostSelectionSuggestedQuestion("");
     try {
       const url = withIdsQS(
         `${apiBase}/browse-docs?bot_id=${encodeURIComponent(botId)}`
@@ -3069,43 +2940,8 @@ setItems(recommendedItems);
                 </div>
               )}
               
-              {/* Show suggested question below iframe for both video and doc modes */}
-              {postSelectionSuggestedQuestion && (
-                <SuggestedQuestionButton
-                  question={postSelectionSuggestedQuestion}
-                  onSubmit={async (q) => {
-                    await doSend(q);
-                  }}
-                />
-              )}
-              
-              {/* Show post-selection recommendations below iframe for both video and doc modes */}
-              {loadingRecommendations ? (
-                <div className="mt-4 text-sm text-[var(--helper-fg)] italic">
-                  Loading recommendations…
-                </div>
-              ) : postSelectionRecommendations.length > 0 ? (
-                <RecommendedSection
-                  items={postSelectionRecommendations}
-                  normalizeAndSelectDemo={normalizeAndSelectDemo}
-                  apiBase={apiBase}
-                  botId={botId}
-                  contentRef={contentRef}
-                  setSelected={setSelected}
-                  setMode={setMode}
-                  onSelectDoc={async (docId) => {
-                    try {
-                      await fetchRecommendationsForSelection(docId, "doc");
-                    } catch (err) {
-                      console.error("Failed to fetch recommendations:", err);
-                    }
-                  }}
-                />
-              ) : null}
-              
-              {/* Legacy: Show recommendations from Ask mode response when in Ask mode
-                  Only show these if no post-selection recommendations are available (precedence) */}
-              {mode === "ask" && (visibleUnderVideo || []).length > 0 && postSelectionRecommendations.length === 0 && (
+              {/* In ask mode, show original recommendations (items) received from the /demo-hal API endpoint */}
+              {mode === "ask" && (visibleUnderVideo || []).length > 0 && (
                 <RecommendedSection
                   items={visibleUnderVideo}
                   normalizeAndSelectDemo={normalizeAndSelectDemo}
@@ -3114,13 +2950,6 @@ setItems(recommendedItems);
                   contentRef={contentRef}
                   setSelected={setSelected}
                   setMode={setMode}
-                  onSelectDoc={async (docId) => {
-                    try {
-                      await fetchRecommendationsForSelection(docId, "doc");
-                    } catch (err) {
-                      console.error("Failed to fetch recommendations:", err);
-                    }
-                  }}
                 />
               )}
             </div>
@@ -3246,12 +3075,6 @@ setItems(recommendedItems);
                                 ...val,
                                 _iframe_html: j?.iframe_html || null,
                               });
-                              
-                              // Fetch recommendations after selecting the doc
-                              const docId = val.id || val.url;
-                              if (docId) {
-                                await fetchRecommendationsForSelection(docId, "doc");
-                              }
                             } catch {
                               setSelected(val);
                             }
@@ -3349,13 +3172,6 @@ setItems(recommendedItems);
                 contentRef={contentRef}
                 setSelected={setSelected}
                 setMode={setMode}
-                onSelectDoc={async (docId) => {
-                  try {
-                    await fetchRecommendationsForSelection(docId, "doc");
-                  } catch (err) {
-                    console.error("Failed to fetch recommendations:", err);
-                  }
-                }}
               />
               {lastError && (
                 <details className="mt-4 text-[11px] p-2 border border-red-300 rounded bg-red-50">
