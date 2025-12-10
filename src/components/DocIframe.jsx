@@ -1,7 +1,7 @@
 // DocIframe.jsx — document viewer
 import React from "react";
 
-export default function DocIframe({ doc }) {
+export default function DocIframe({ doc, mode }) {
   const iframeSrc = React.useMemo(() => {
     const html = doc?._iframe_html || "";
     if (!html) return null;
@@ -13,10 +13,15 @@ export default function DocIframe({ doc }) {
 
   const src = iframeSrc || doc?.url || "";
 
+  // In docs mode, use full available height; in ask mode, use standard height
+  const heightClass = mode === "docs" 
+    ? "h-[75vh] md:h-[85vh]" 
+    : "h-[65vh] md:h-[78vh]";
+
   return (
     <div className="bg-[var(--card-bg)] pt-2 pb-2">
       <iframe
-        className="w-full h-[65vh] md:h-[78vh] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
+        className={`w-full ${heightClass} rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]`}
         src={src}
         title={doc?.title || "Document"}
         loading="lazy"
