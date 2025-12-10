@@ -2940,7 +2940,7 @@ setItems(recommendedItems);
             <div className="w-full flex-1 flex flex-col">
               {/* Show DocIframe for docs in any mode, or regular iframe for demos */}
               {isDocumentType(selected) ? (
-                <DocIframe doc={selected} />
+                <DocIframe doc={selected} mode={mode} />
               ) : (
                 <div className="bg-[var(--card-bg)] pt-2 pb-2">
                   <iframe
