@@ -33,32 +33,19 @@ import remarkGfm from "remark-gfm";
 
 // PATCH: Recommended section - show up to 4 demos, then up to 2 docs; if docs are shown, add "Recommended documents" help text.
 
-// Helper function to check if an item is a document
-function isDocumentType(item) {
-  return (item?.action || item?.type) === "doc";
-}
-
 //
 // Add this helper component at the top level of the file (after imports, before the main component):
 //
-function RecommendedSection({ items, onPick, normalizeAndSelectDemo, apiBase, botId, contentRef, setSelected, setMode, currentMode }) {
+function RecommendedSection({ items, onPick, normalizeAndSelectDemo, apiBase, botId, contentRef, setSelected, setMode }) {
   // Split items into demos and docs
   const demos = (items || []).filter(it => (it.action || it.type) === "demo").slice(0, 4);
-  const docs = (items || []).filter(it => isDocumentType(it)).slice(0, 2);
+  const docs = (items || []).filter(it => (it.action || it.type) === "doc").slice(0, 2);
 
   if (demos.length === 0 && docs.length === 0) return null;
 
-  // Helper to handle mode switching
-  const switchModeIfNeeded = () => {
-    // Only switch to docs mode if not currently in ask mode
-    if (currentMode !== "ask" && setMode) {
-      setMode("docs");
-    }
-  };
-
   // Pick handler
   const handlePick = async (val) => {
-    if (isDocumentType(val)) {
+    if ((val.action || val.type) === "doc") {
       try {
         const r = await fetch(
           `${apiBase}/render-doc-iframe`,
@@ -81,10 +68,10 @@ function RecommendedSection({ items, onPick, normalizeAndSelectDemo, apiBase, bo
           _iframe_html: j?.iframe_html || null,
           action: "doc"
         });
-        switchModeIfNeeded();
+        setMode && setMode("docs");
       } catch {
         setSelected({ ...val, action: "doc" });
-        switchModeIfNeeded();
+        setMode && setMode("docs");
       }
       requestAnimationFrame(() =>
         contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
@@ -2938,9 +2925,8 @@ setItems(recommendedItems);
             </div>
           ) : selected ? (
             <div className="w-full flex-1 flex flex-col">
-              {/* Show DocIframe for docs in any mode, or regular iframe for demos */}
-              {isDocumentType(selected) ? (
-                <DocIframe doc={selected} mode={mode} />
+              {mode === "docs" ? (
+                <DocIframe doc={selected} />
               ) : (
                 <div className="bg-[var(--card-bg)] pt-2 pb-2">
                   <iframe
@@ -2976,7 +2962,6 @@ setItems(recommendedItems);
                   contentRef={contentRef}
                   setSelected={setSelected}
                   setMode={setMode}
-                  currentMode={mode}
                 />
               )}
             </div>
@@ -3199,7 +3184,6 @@ setItems(recommendedItems);
                 contentRef={contentRef}
                 setSelected={setSelected}
                 setMode={setMode}
-                currentMode={mode}
               />
               {lastError && (
                 <details className="mt-4 text-[11px] p-2 border border-red-300 rounded bg-red-50">
