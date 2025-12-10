@@ -15,7 +15,7 @@ export default function DocIframe({ doc, mode }) {
 
   // In docs mode, use full available height; in ask mode, use standard height
   const heightClass = mode === "docs" 
-    ? "h-[75vh] md:h-[85vh]" 
+    ? "h-[100vh] md:h-[100vh]" 
     : "h-[65vh] md:h-[78vh]";
 
   return (
