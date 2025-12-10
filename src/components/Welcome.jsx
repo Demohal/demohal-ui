@@ -2940,6 +2940,18 @@ setItems(recommendedItems);
                 </div>
               )}
               
+              {/* In ask mode, show suggested question button below video iframe, before recommendations */}
+              {mode === "ask" && suggestedQuestion && lastQuestion && (
+                <SuggestedQuestionButton
+                  question={suggestedQuestion}
+                  onSubmit={async (q) => {
+                    // COMMENTED OUT: Form fill no longer required before asking suggested questions
+                    // if (maybeOpenForm({ type: "ask", payload: { text: q } })) return;
+                    await doSend(q);
+                  }}
+                />
+              )}
+              
               {/* In ask mode, show original recommendations (items) received from the /demo-hal API endpoint */}
               {mode === "ask" && (visibleUnderVideo || []).length > 0 && (
                 <RecommendedSection
