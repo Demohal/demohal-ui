@@ -3,7 +3,7 @@ module.exports = {
     theme: {
         extend: {},
         fontSize: {
-            base: ['14pt', { lineHeight: '1.4' }],
+            base: ['12pt', { lineHeight: '1.2' }],
             sm: ['0.875rem', { lineHeight: '1.25rem' }],
             lg: ['1.125rem', { lineHeight: '1.75rem' }],
         },
@@ -12,8 +12,8 @@ module.exports = {
         function ({ addUtilities }) {
             addUtilities({
                 '.text-base-semibold': {
-                    fontSize: '14pt',
-                    lineHeight: '1.4',
+                    fontSize: '12pt',
+                    lineHeight: '1.2',
                     fontWeight: '600', // semi-bold
                 }
             });
