@@ -3122,7 +3122,7 @@ setItems(recommendedItems);
             <div className="w-full flex-1 flex flex-col">
               {!lastQuestion && !loading && (
                 <div className="space-y-3">
-                  <div className="text-base font-semibold text-sm whitespace-pre-line">
+                  <div className="text-base text-sm whitespace-pre-line">
                     {responseText}
                   </div>
                   {showIntroVideo && introVideoUrl && (
@@ -3173,7 +3173,7 @@ setItems(recommendedItems);
                       {responseText}
                     </ReactMarkdown>
                   ) : (
-                    <p className="text-base font-semibold text-sm whitespace-pre-line">
+                    <p className="text-base text-sm whitespace-pre-line">
                       {responseText}
                     </p>
                   )
