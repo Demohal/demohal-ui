@@ -43,7 +43,7 @@ function RecommendedSection({ items, onPick, normalizeAndSelectDemo, apiBase, bo
 
   if (demos.length === 0 && docs.length === 0) return null;
 
-  // Pick handler
+  // pick handler logic for recommended demos and docs
   const handlePick = async (val) => {
     if ((val.action || val.type) === "doc") {
       try {
@@ -63,15 +63,16 @@ function RecommendedSection({ items, onPick, normalizeAndSelectDemo, apiBase, bo
           }
         );
         const j = await r.json();
+        const embed = j?.pdf_url || j?.url || val.url;
         setSelected({
           ...val,
-          _iframe_html: j?.iframe_html || null,
+          url: embed,
           action: "doc"
         });
-        setMode && setMode("docs");
+        setMode && setMode("ask");
       } catch {
-        setSelected({ ...val, action: "doc" });
-        setMode && setMode("docs");
+        setSelected({ ...val, url: val.url, action: "doc" });
+        setMode && setMode("ask");
       }
       requestAnimationFrame(() =>
         contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
@@ -2925,8 +2926,21 @@ setItems(recommendedItems);
             </div>
           ) : selected ? (
             <div className="w-full flex-1 flex flex-col">
-              {mode === "docs" ? (
-                <DocIframe doc={selected} />
+              {selected.action === "doc" ? (
+                <div className="bg-[var(--card-bg)] pt-2 pb-2">
+                  <iframe
+                    src={selected.url}
+                    title={selected.title}
+                    style={{
+                      width: '100%',
+                      maxWidth: '540px', // for portrait PDF
+                      height: '800px',
+                      margin: '0 auto',
+                      display: 'block'
+                    }}
+                    frameBorder="0"
+                  />
+                </div>
               ) : (
                 <div className="bg-[var(--card-bg)] pt-2 pb-2">
                   <iframe
