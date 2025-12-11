@@ -2926,7 +2926,7 @@ setItems(recommendedItems);
             </div>
           ) : selected ? (
             <div className="w-full flex-1 flex flex-col">
-              {selected.action === "doc" ? (
+              {(mode === "docs" || selected.action === "doc") ? (
                 <div className="bg-[var(--card-bg)] pt-2 pb-2">
                   <iframe
                     src={selected.url}
