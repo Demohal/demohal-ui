@@ -12,8 +12,8 @@ module.exports = {
         function ({ addUtilities }) {
             addUtilities({
                 '.text-base-semibold': {
-                    fontSize: '12pt',
-                    lineHeight: '1.2',
+                    fontSize: '14pt',
+                    lineHeight: '1.4',
                     fontWeight: '600', // semi-bold
                 }
             });
