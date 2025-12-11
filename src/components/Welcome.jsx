@@ -25,7 +25,6 @@ import fallbackLogo from "../assets/logo.png";
 
 import TabsNav from "./TabsNav";
 import Row from "./Row";
-import DocIframe from "./DocIframe";
 import AskInputBar from "./AskInputBar";
 import FormFillCard from "./FormFillCard";
 import ReactMarkdown from "react-markdown";
@@ -2926,7 +2925,31 @@ setItems(recommendedItems);
           ) : selected ? (
             <div className="w-full flex-1 flex flex-col">
               {mode === "docs" ? (
-                <DocIframe doc={selected} />
+                (() => {
+                  const iframeSrc = React.useMemo(() => {
+                    const html = selected?._iframe_html || "";
+                    if (!html) return null;
+                    const m =
+                      html.match(/src\s*=\s*"([^"]+)"/i) ||
+                      html.match(/src\s*=\s*'([^']+)'/i);
+                    return m ? m[1] : null;
+                  }, [selected?._iframe_html]);
+
+                  const src = iframeSrc || selected?.url || "";
+
+                  return (
+                    <div className="bg-[var(--card-bg)] pt-2 pb-2">
+                      <iframe
+                        className="w-full h-[65vh] md:h-[78vh] rounded-[0.75rem] [box-shadow:var(--shadow-elevation)]"
+                        src={src}
+                        title={selected?.title || "Document"}
+                        loading="lazy"
+                        referrerPolicy="strict-origin-when-cross-origin"
+                        allow="fullscreen"
+                      />
+                    </div>
+                  );
+                })()
               ) : (
                 <div className="bg-[var(--card-bg)] pt-2 pb-2">
                   <iframe
