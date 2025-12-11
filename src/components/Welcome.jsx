@@ -128,7 +128,7 @@ function RecommendedSection({ items, onPick, normalizeAndSelectDemo, apiBase, bo
 }
 
 //
-// SuggestedQuestionButton component - displays the suggested follow-on question
+// SuggestedButton component - displays the suggested follow-on question
 // styled like AskInputBar for consistency
 //
 function SuggestedQuestionButton({ question, onSubmit }) {
@@ -3147,7 +3147,7 @@ setItems(recommendedItems);
                 </div>
               )}
               {lastQuestion && (
-                <p className="text-base italic text-center mb-2 text-[var(--helper-fg)]">
+                <p className="text-base font-semibold italic text-center mb-2 text-[var(--mirror-fg)]">
                   "{lastQuestion}"
                   {isSuggestedQuestion && (
                     <span className="ml-2 inline-block px-2 py-0.5 text-xs rounded-full bg-[var(--helper-fg)] text-white">
