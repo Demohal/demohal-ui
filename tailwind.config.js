@@ -4,8 +4,10 @@ module.exports = {
         extend: {},
         fontSize: {
             base: ['12pt', { lineHeight: '1.4' }],
+            xs: ['0.750rem', { lineHeight: '1.00rem' }],
             sm: ['0.875rem', { lineHeight: '1.25rem' }],
             lg: ['1.125rem', { lineHeight: '1.75rem' }],
+            xl: ['1.250rem', { lineHeight: '2.00rem' }]
         },
     },
     plugins: [
