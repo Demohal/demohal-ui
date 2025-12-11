@@ -3,7 +3,7 @@ import React from "react";
 
 const UI = {
   TAB_ACTIVE:
-    "px-2 py-1 sm:px-4 sm:py-1.5 text-xs sm:text-sm font-medium whitespace-nowrap flex-none transition",
+    "px-2 py-1 sm:px-4 sm:py-1.5 text-xs sm:text-sm font-medium whitespace-nowrap flex-none transition [color:var(--tab-bg)]",
   TAB_INACTIVE:
     "px-2 py-1 sm:px-4 sm:py-1.5 text-xs sm:text-sm font-medium whitespace-nowrap flex-none transition hover:underline"
 };
