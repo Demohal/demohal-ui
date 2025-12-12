@@ -43,7 +43,7 @@ function RecommendedSection({ items, onPick, normalizeAndSelectDemo, apiBase, bo
 
   if (demos.length === 0 && docs.length === 0) return null;
 
-  // Pick handler
+  // pick handler logic for recommended demos and docs
   const handlePick = async (val) => {
     if ((val.action || val.type) === "doc") {
       try {
@@ -63,15 +63,16 @@ function RecommendedSection({ items, onPick, normalizeAndSelectDemo, apiBase, bo
           }
         );
         const j = await r.json();
+        const embed = j?.pdf_url || j?.url || val.url;
         setSelected({
           ...val,
-          _iframe_html: j?.iframe_html || null,
+          url: embed,
           action: "doc"
         });
-        setMode && setMode("docs");
+        setMode && setMode("ask");
       } catch {
-        setSelected({ ...val, action: "doc" });
-        setMode && setMode("docs");
+        setSelected({ ...val, url: val.url, action: "doc" });
+        setMode && setMode("ask");
       }
       requestAnimationFrame(() =>
         contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
@@ -127,7 +128,7 @@ function RecommendedSection({ items, onPick, normalizeAndSelectDemo, apiBase, bo
 }
 
 //
-// SuggestedQuestionButton component - displays the suggested follow-on question
+// SuggestedButton component - displays the suggested follow-on question
 // styled like AskInputBar for consistency
 //
 function SuggestedQuestionButton({ question, onSubmit }) {
@@ -1717,6 +1718,8 @@ export default function Welcome() {
       ? visitorDefaults.perspective.toLowerCase()
       : "general";
 
+    // NOTE: agentAlias is required for notification logic in routes.py (backend)
+    // to enable customized events and notifications based on the agent parameter
     const payload = withIdsBody({
       bot_id: botId,
       user_question: outgoing,
@@ -1726,6 +1729,7 @@ export default function Welcome() {
       prompt_override: promptOverride || "",
       ...(explainMode ? { explain: 1 } : {}), // PATCH: add this line
       ...(isUsingSuggestion ? { use_suggested_question: true } : {}), // Flag when using suggestion
+      ...(agentAlias ? { agent_alias: agentAlias } : {}), // Include agentAlias for backend notification logic
     });
 
     try {
@@ -1976,6 +1980,7 @@ setItems(recommendedItems);
       const j = await r.json();
       const embed = j?.video_url || item.url;
       setSelected({ ...item, url: embed });
+      
       requestAnimationFrame(() =>
         contentRef.current?.scrollTo({ top: 0, behavior: "auto" })
       );
@@ -2168,6 +2173,7 @@ setItems(recommendedItems);
             [],
           tracking: p.tracking || {},
         };
+        // NOTE: agentAlias is required for notification logic in routes.py (backend)
         fetch(`${apiBase}/calendly/js-event`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -2176,6 +2182,7 @@ setItems(recommendedItems);
             session_id: sessionId,
             visitor_id: visitorId,
             payload: payloadOut,
+            ...(agentAlias ? { agent_alias: agentAlias } : {}),
           }),
         }).catch(() => {});
       } catch {}
@@ -2183,7 +2190,7 @@ setItems(recommendedItems);
     window.addEventListener("message", onCalendlyMessage);
     return () =>
       window.removeEventListener("message", onCalendlyMessage);
-  }, [mode, botId, sessionId, visitorId, apiBase]);
+  }, [mode, botId, sessionId, visitorId, apiBase, agentAlias]);
 
   useEffect(() => {
     const el = inputRef.current;
@@ -2403,7 +2410,12 @@ setItems(recommendedItems);
     function sendEnd(reason = "unload") {
       try {
         const url = `${apiBase}/session/end`;
-        const body = JSON.stringify({ session_id: sessionId, reason });
+        // NOTE: agentAlias is required for notification logic in routes.py (backend)
+        const body = JSON.stringify({ 
+          session_id: sessionId, 
+          reason,
+          ...(agentAlias ? { agent_alias: agentAlias } : {}),
+        });
         if (navigator.sendBeacon) {
           const blob = new Blob([body], { type: "application/json" });
             navigator.sendBeacon(url, blob);
@@ -2428,7 +2440,7 @@ setItems(recommendedItems);
       window.removeEventListener("pagehide", onPageHide);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [sessionId, apiBase]);
+  }, [sessionId, apiBase, agentAlias]);
 
     // ✅ Session heartbeat + hard-end safety
   useEffect(() => {
@@ -2439,10 +2451,15 @@ setItems(recommendedItems);
 
     async function sendHeartbeat() {
       try {
+        // NOTE: agentAlias is required for notification logic in routes.py (backend)
         await fetch(`${apiBase}/session/heartbeat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: sessionId, visitor_id: visitorId }),
+          body: JSON.stringify({ 
+            session_id: sessionId, 
+            visitor_id: visitorId,
+            ...(agentAlias ? { agent_alias: agentAlias } : {}),
+          }),
         });
       } catch {}
     }
@@ -2454,10 +2471,15 @@ setItems(recommendedItems);
     // hard exit on tab close
     const handleUnload = () => {
       try {
+        // NOTE: agentAlias is required for notification logic in routes.py (backend)
         fetch(`${apiBase}/session/end`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: sessionId, reason: "force-unload" }),
+          body: JSON.stringify({ 
+            session_id: sessionId, 
+            reason: "force-unload",
+            ...(agentAlias ? { agent_alias: agentAlias } : {}),
+          }),
           keepalive: true,
         });
       } catch {}
@@ -2468,7 +2490,7 @@ setItems(recommendedItems);
       clearInterval(timer);
       window.removeEventListener("beforeunload", handleUnload);
     };
-  }, [sessionId, visitorId, apiBase]);
+  }, [sessionId, visitorId, apiBase, agentAlias]);
 
   
   const tabs = useMemo(() => {
@@ -2770,6 +2792,7 @@ setItems(recommendedItems);
                   updateLocalVisitorValues(vals);
                   let postOk = false;
                   try {
+                    // NOTE: agentAlias is required for notification logic in routes.py (backend)
                     const resp = await fetch(`${apiBase}/visitor-formfill`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
@@ -2777,6 +2800,7 @@ setItems(recommendedItems);
                         visitor_id: visitorId,
                         values: vals,
                         bot_id: botId || undefined,
+                        ...(agentAlias ? { agent_alias: agentAlias } : {}),
                       }),
                     });
                     postOk = resp.ok;
@@ -2902,8 +2926,21 @@ setItems(recommendedItems);
             </div>
           ) : selected ? (
             <div className="w-full flex-1 flex flex-col">
-              {mode === "docs" ? (
-                <DocIframe doc={selected} />
+              {(mode === "docs" || selected.action === "doc") ? (
+                <div className="bg-[var(--card-bg)] pt-2 pb-2">
+                  <iframe
+                    src={selected.url}
+                    title={selected.title}
+                    style={{
+                      width: '100%',
+                      maxWidth: '540px', // for portrait PDF
+                      height: '800px',
+                      margin: '0 auto',
+                      display: 'block'
+                    }}
+                    frameBorder="0"
+                  />
+                </div>
               ) : (
                 <div className="bg-[var(--card-bg)] pt-2 pb-2">
                   <iframe
@@ -2916,6 +2953,20 @@ setItems(recommendedItems);
                   />
                 </div>
               )}
+              
+              {/* In ask mode, show suggested question button below video iframe, before recommendations */}
+              {mode === "ask" && suggestedQuestion && lastQuestion && (
+                <SuggestedQuestionButton
+                  question={suggestedQuestion}
+                  onSubmit={async (q) => {
+                    // COMMENTED OUT: Form fill no longer required before asking suggested questions
+                    // if (maybeOpenForm({ type: "ask", payload: { text: q } })) return;
+                    await doSend(q);
+                  }}
+                />
+              )}
+              
+              {/* In ask mode, show original recommendations (items) received from the /demo-hal API endpoint */}
               {mode === "ask" && (visibleUnderVideo || []).length > 0 && (
                 <RecommendedSection
                   items={visibleUnderVideo}
@@ -3071,7 +3122,7 @@ setItems(recommendedItems);
             <div className="w-full flex-1 flex flex-col">
               {!lastQuestion && !loading && (
                 <div className="space-y-3">
-                  <div className="text-base font-bold whitespace-pre-line">
+                  <div className="text-base whitespace-pre-line">
                     {responseText}
                   </div>
                   {showIntroVideo && introVideoUrl && (
@@ -3096,7 +3147,7 @@ setItems(recommendedItems);
                 </div>
               )}
               {lastQuestion && (
-                <p className="text-base italic text-center mb-2 text-[var(--helper-fg)]">
+                <p className="text-base font-semibold italic text-center mb-2 text-[var(--mirror-fg)]">
                   "{lastQuestion}"
                   {isSuggestedQuestion && (
                     <span className="ml-2 inline-block px-2 py-0.5 text-xs rounded-full bg-[var(--helper-fg)] text-white">
@@ -3122,7 +3173,7 @@ setItems(recommendedItems);
                       {responseText}
                     </ReactMarkdown>
                   ) : (
-                    <p className="text-base font-bold whitespace-pre-line">
+                    <p className="text-base whitespace-pre-line">
                       {responseText}
                     </p>
                   )
