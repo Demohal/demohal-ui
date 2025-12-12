@@ -141,7 +141,7 @@ function SuggestedQuestionButton({ question, onSubmit }) {
       </p>
       <button
         onClick={() => onSubmit(question)}
-        className="w-full rounded-[0.75rem] px-4 py-3 text-base text-left bg-[var(--card-bg)] border-4 border-[var(--border-default)] hover:border-[var(--send-color)] transition-colors cursor-pointer"
+        className="w-full rounded-[0.75rem] px-4 py-3 text-base text-left bg-[var(--card-bg)] border-2 border-[var(--border-default)] hover:border-[var(--send-color)] transition-colors cursor-pointer"
       >
         <span className="block text-[var(--message-fg)]">{question}</span>
       </button>
