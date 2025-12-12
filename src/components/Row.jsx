@@ -1,4 +1,3 @@
-// Row.jsx — centered version
 import React from "react";
 
 const KIND_CLASS = {
@@ -23,13 +22,14 @@ export default function Row({ item, onPick, kind = "demo" }) {
           cls,
         ].join(" ")
       }
+      style={{ boxShadow: "var(--shadow-elevation)" }}
       title={item.description || item.functions_text || ""}
     >
-      <div className="font-extrabold text-xs sm:text-sm">
+      <div className="font-semibold text-xs sm:text-sm">
         {item.title}
       </div>
       {(item.description || item.functions_text) && (
-        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem] opacity-90">
+        <div className="mt-1 text-[0.7rem] sm:text-[0.75rem]">
           {item.description || item.functions_text}
         </div>
       )}
