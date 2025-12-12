@@ -3,9 +3,9 @@ import React from "react";
 
 const UI = {
   TAB_ACTIVE:
-    "px-2 py-1 sm:px-4 sm:py-1.5 text-xs sm:text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] [box-shadow:var(--shadow-elevation)]",
+    "px-2 py-1 sm:px-4 sm:py-1.5 text-xs sm:text-sm font-medium whitespace-nowrap flex-none transition [color:var(--tab-bg)]",
   TAB_INACTIVE:
-    "px-2 py-1 sm:px-4 sm:py-1.5 text-xs sm:text-sm font-medium whitespace-nowrap flex-none transition rounded-t-[0.75rem] hover:brightness-110",
+    "px-2 py-1 sm:px-4 sm:py-1.5 text-xs sm:text-sm font-medium whitespace-nowrap flex-none transition [color:var(--tab-fg)] hover:underline"
 };
 
 export default function TabsNav({ mode, tabs }) {
@@ -33,17 +33,6 @@ export default function TabsNav({ mode, tabs }) {
               aria-selected={active}
               aria-controls={`panel-${k}`}
               className={active ? UI.TAB_ACTIVE : UI.TAB_INACTIVE}
-              style={
-                active
-                  ? {
-                      background: "var(--card-bg)",
-                      color: "var(--tab-active-fg)",
-                    }
-                  : {
-                      background: "var(--tab-bg)",
-                      color: "var(--tab-fg)",
-                    }
-              }
               type="button"
             >
               {t.label}
